@@ -9,6 +9,7 @@ import cn.hutool.crypto.digest.DigestUtil;
 import cn.iocoder.yudao.framework.common.pojo.PageResult;
 import cn.iocoder.yudao.framework.common.util.http.HttpUtils;
 import cn.iocoder.yudao.framework.common.util.object.BeanUtils;
+import cn.iocoder.yudao.module.infra.api.file.FileUploadRespVO;
 import cn.iocoder.yudao.module.infra.controller.admin.file.vo.file.FileCreateReqVO;
 import cn.iocoder.yudao.module.infra.controller.admin.file.vo.file.FilePageReqVO;
 import cn.iocoder.yudao.module.infra.controller.admin.file.vo.file.FilePresignedUrlRespVO;
@@ -102,6 +103,44 @@ public class FileServiceImpl implements FileService {
                 .setName(name).setPath(path).setUrl(url)
                 .setType(type).setSize((long) content.length));
         return url;
+    }
+
+    @Override
+    @SneakyThrows
+    public FileUploadRespVO createFileDetail(byte[] content, String name, String directory, String type) {
+        // 1.1 处理 name 的合法性，禁止携带目录路径
+        name = FilePathUtils.validateFileName(name);
+
+        // 1.2.1 处理 type 为空的情况
+        if (StrUtil.isEmpty(type)) {
+            type = FileTypeUtils.getMineType(content, name);
+        }
+        // 1.2.2 处理 name 为空的情况
+        if (StrUtil.isEmpty(name)) {
+            name = DigestUtil.sha256Hex(content);
+        }
+        if (StrUtil.isEmpty(FileUtil.extName(name))) {
+            // 如果 name 没有后缀 type，则补充后缀
+            String extension = FileTypeUtils.getExtension(type);
+            if (StrUtil.isNotEmpty(extension)) {
+                name = name + extension;
+            }
+        }
+
+        // 2.1 生成上传的 path，需要保证唯一
+        String path = generateUploadPath(name, directory);
+        // 2.2 上传到文件存储器
+        FileClient client = fileConfigService.getMasterFileClient();
+        Assert.notNull(client, "客户端(master) 不能为空");
+        String url = client.upload(content, path, type);
+
+        // 3. 保存到数据库
+        fileMapper.insert(new FileDO().setConfigId(client.getId())
+                .setName(name).setPath(path).setUrl(url)
+                .setType(type).setSize((long) content.length));
+
+        // 4. 返回完整信息
+        return new FileUploadRespVO(url, path, client.getId());
     }
 
     @VisibleForTesting

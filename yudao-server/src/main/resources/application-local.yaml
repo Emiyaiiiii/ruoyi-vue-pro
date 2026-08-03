@@ -48,7 +48,7 @@ spring:
       primary: master
       datasource:
         master:
-          url: jdbc:mysql://127.0.0.1:3306/ruoyi-vue-pro-jdk8?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&nullCatalogMeansCurrent=true&rewriteBatchedStatements=true # MySQL Connector/J 8.X 连接的示例
+          url: jdbc:mysql://127.0.0.1:23306/ruoyi-vue-pro?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&nullCatalogMeansCurrent=true&rewriteBatchedStatements=true # MySQL Connector/J 8.X 连接的示例
           #          url: jdbc:mysql://127.0.0.1:3306/ruoyi-vue-pro?useSSL=true&allowPublicKeyRetrieval=true&useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true # MySQL Connector/J 5.X 连接的示例
           #          url: jdbc:postgresql://127.0.0.1:5432/ruoyi-vue-pro # PostgreSQL 连接的示例
           #          url: jdbc:oracle:thin:@127.0.0.1:1521:xe # Oracle 连接的示例
@@ -58,7 +58,7 @@ spring:
           #          url: jdbc:postgresql://127.0.0.1:5432/postgres # OpenGauss 连接的示例
           #          url: jdbc:postgresql://127.0.0.1:5866/ruoyi-vue-pro # 瀚高 HighGo 连接的示例
           username: root
-          password: 123456
+          password: 20221qaz@WSX
           #          username: sa # SQL Server 连接的示例
           #          password: Yudao@2024 # SQL Server 连接的示例
           #          username: SYSDBA # DM 连接的示例
@@ -69,9 +69,9 @@ spring:
           #          password: 123456 # 瀚高 HighGo 连接的示例
         slave: # 模拟从库，可根据自己需要修改
           lazy: true # 开启懒加载，保证启动速度
-          url: jdbc:mysql://127.0.0.1:3306/ruoyi-vue-pro-jdk8?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&rewriteBatchedStatements=true&nullCatalogMeansCurrent=true
+          url: jdbc:mysql://127.0.0.1:23306/ruoyi-vue-pro?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&rewriteBatchedStatements=true&nullCatalogMeansCurrent=true
           username: root
-          password: 123456
+          password: 20221qaz@WSX
 #        tdengine: # IoT 数据库（需要 IoT 物联网再开启噢！）
 #          lazy: true # 开启懒加载，保证启动速度
 #          url: jdbc:TAOS-WS://127.0.0.1:6041/ruoyi_vue_pro?varcharAsString=true&enableAutoReconnect=true # 参见：https://t.zsxq.com/qaX9c，开启 TDengine WebSocket 自动重连
@@ -84,9 +84,9 @@ spring:
   # Redis 配置。Redisson 默认的配置足够使用，一般不需要进行调优
   redis:
     host: 127.0.0.1 # 地址
-    port: 6379 # 端口
-    database: 0 # 数据库索引
-#    password: dev # 密码，建议生产环境开启
+    port: 26379 # 端口
+    database: 2 # 数据库索引
+    password: DVADMIN3 # 密码，建议生产环境开启
 
 --- #################### 定时任务相关配置 ####################
 

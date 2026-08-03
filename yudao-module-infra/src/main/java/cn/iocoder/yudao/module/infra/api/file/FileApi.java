@@ -43,6 +43,18 @@ public interface FileApi {
                       String name, String directory, String type);
 
     /**
+     * 保存文件，并返回文件的完整信息（含路径、配置编号）
+     *
+     * @param content 文件内容
+     * @param name 文件名称，允许空
+     * @param directory 目录，允许空
+     * @param type 文件的 MIME 类型，允许空
+     * @return 文件上传结果（含 URL、路径、配置编号）
+     */
+    FileUploadRespVO createFileDetail(@NotEmpty(message = "文件内容不能为空") byte[] content,
+                                      String name, String directory, String type);
+
+    /**
      * 生成文件预签名地址，用于读取
      *
      * @param url 完整的文件访问地址
