@@ -61,6 +61,7 @@ public class DocumentController {
     @Operation(summary = "创建知识库文件")
     @PreAuthorize("@ss.hasPermission('kb:document:create')")
     public CommonResult<Long> createDocument(@Valid @RequestBody DocumentSaveReqVO createReqVO) {
+        validateDocumentManagementAccess(createReqVO.getKbId());
         return success(documentService.createDocument(createReqVO));
     }
 
@@ -70,15 +71,18 @@ public class DocumentController {
     public CommonResult<Long> uploadDocument(
             @RequestParam("file") MultipartFile file,
             @RequestParam("kbId") Long kbId,
+            @RequestParam(value = "folderId", required = false) Long folderId,
             @RequestParam(value = "description", required = false) String description,
             @RequestParam(value = "tags", required = false) String tags) {
-        return success(documentService.uploadAndCreate(file, kbId, description, tags));
+        validateDocumentManagementAccess(kbId);
+        return success(documentService.uploadAndCreate(file, kbId, folderId, description, tags));
     }
 
     @PutMapping("/update")
     @Operation(summary = "更新知识库文件")
     @PreAuthorize("@ss.hasPermission('kb:document:update')")
     public CommonResult<Boolean> updateDocument(@Valid @RequestBody DocumentSaveReqVO updateReqVO) {
+        validateDocumentManagementAccess(updateReqVO.getKbId());
         documentService.updateDocument(updateReqVO);
         return success(true);
     }
@@ -88,6 +92,10 @@ public class DocumentController {
     @Parameter(name = "id", description = "编号", required = true)
     @PreAuthorize("@ss.hasPermission('kb:document:delete')")
     public CommonResult<Boolean> deleteDocument(@RequestParam("id") Long id) {
+        DocumentDO document = documentService.getDocument(id);
+        if (document != null) {
+            validateDocumentManagementAccess(document.getKbId());
+        }
         documentService.deleteDocument(id);
         return success(true);
     }
@@ -97,6 +105,12 @@ public class DocumentController {
     @Operation(summary = "批量删除知识库文件")
                 @PreAuthorize("@ss.hasPermission('kb:document:delete')")
     public CommonResult<Boolean> deleteDocumentList(@RequestParam("ids") List<Long> ids) {
+        for (Long id : ids) {
+            DocumentDO document = documentService.getDocument(id);
+            if (document != null) {
+                validateDocumentManagementAccess(document.getKbId());
+            }
+        }
         documentService.deleteDocumentListByIds(ids);
         return success(true);
     }
@@ -163,4 +177,14 @@ public class DocumentController {
         }
     }
 
+    /**
+     * 文档管理权限校验（创建/上传/编辑/删除）
+     * 只有知识库管理员可操作文档和文件夹
+     */
+    private void validateDocumentManagementAccess(Long kbId) {
+        if (kbId == null) return;
+        if (!libraryService.canManage(kbId)) {
+            throw exception(LIBRARY_PERMISSION_DENIED);
+        }
+    }
 }

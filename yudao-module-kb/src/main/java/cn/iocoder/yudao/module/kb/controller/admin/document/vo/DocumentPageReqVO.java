@@ -16,6 +16,9 @@ public class DocumentPageReqVO extends PageParam {
     @Schema(description = "所属知识库ID", example = "13175")
     private Long kbId;
 
+    @Schema(description = "所属文件夹ID: 0=根目录", example = "0")
+    private Long folderId;
+
     @Schema(description = "文件名称", example = "王五")
     private String fileName;
 

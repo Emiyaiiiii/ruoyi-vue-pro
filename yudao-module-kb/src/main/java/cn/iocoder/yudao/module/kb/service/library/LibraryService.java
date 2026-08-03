@@ -84,4 +84,11 @@ public interface LibraryService {
      */
     List<LibraryDO> getSimpleLibraryList(Integer isProject);
 
+    /**
+     * 检查当前用户是否有该知识库的管理权限（增删改）
+     *
+     * @param kbId 知识库ID
+     * @return true=有管理权限
+     */
+    boolean canManage(Long kbId);
 }

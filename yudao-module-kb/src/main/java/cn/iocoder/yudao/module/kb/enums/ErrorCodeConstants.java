@@ -29,4 +29,9 @@ public interface ErrorCodeConstants {
 
     ErrorCode DOCUMENT_PERMISSION_DENIED = new ErrorCode(12, "无权限查看该知识库文件内容");
 
+    // ========== 文档文件夹 1-010-002-000 ==========
+    ErrorCode FOLDER_NOT_EXISTS = new ErrorCode(13, "文档文件夹不存在");
+    ErrorCode FOLDER_EXITS_CHILDREN = new ErrorCode(14, "文件夹下存在子文件夹，无法删除");
+    ErrorCode FOLDER_NAME_DUPLICATE = new ErrorCode(15, "同层级下已存在同名文件夹");
+
 }

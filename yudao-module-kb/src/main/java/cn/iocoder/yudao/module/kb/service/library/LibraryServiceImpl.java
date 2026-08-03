@@ -2,12 +2,15 @@ package cn.iocoder.yudao.module.kb.service.library;
 
 import cn.hutool.core.collection.CollUtil;
 import cn.iocoder.yudao.framework.security.core.service.SecurityFrameworkService;
+import cn.iocoder.yudao.module.kb.dal.dataobject.category.CategoryDO;
 import cn.iocoder.yudao.module.kb.dal.dataobject.levelconfig.LevelConfigDO;
+import cn.iocoder.yudao.module.kb.dal.dataobject.library.LibraryDO;
 import cn.iocoder.yudao.module.kb.dal.dataobject.sharedept.ShareDeptDO;
+import cn.iocoder.yudao.module.kb.dal.mysql.category.CategoryMapper;
 import cn.iocoder.yudao.module.kb.dal.mysql.levelconfig.LevelConfigMapper;
 import cn.iocoder.yudao.module.kb.dal.mysql.sharedept.ShareDeptMapper;
-import cn.iocoder.yudao.module.kb.dal.mysql.userdept.KbUserDeptMapper;
 import cn.iocoder.yudao.module.kb.service.projectmember.ProjectMemberService;
+import cn.iocoder.yudao.module.kb.service.userdept.KbUserDeptService;
 import cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils;
 import cn.iocoder.yudao.module.system.enums.permission.RoleCodeEnum;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -17,10 +20,10 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import cn.iocoder.yudao.module.kb.controller.admin.library.vo.*;
-import cn.iocoder.yudao.module.kb.dal.dataobject.library.LibraryDO;
 import cn.iocoder.yudao.framework.common.pojo.PageResult;
 import cn.iocoder.yudao.framework.common.pojo.PageParam;
 import cn.iocoder.yudao.framework.common.util.object.BeanUtils;
@@ -46,13 +49,16 @@ public class LibraryServiceImpl implements LibraryService {
     private ShareDeptMapper shareDeptMapper;
 
     @Resource
+    private CategoryMapper categoryMapper;
+
+    @Resource
     private LevelConfigMapper levelConfigMapper;
 
     @Resource
-    private KbUserDeptMapper kbUserDeptMapper;
+    private ProjectMemberService projectMemberService;
 
     @Resource
-    private ProjectMemberService projectMemberService;
+    private KbUserDeptService kbUserDeptService;
 
     @Resource
     private SecurityFrameworkService securityFrameworkService;
@@ -60,6 +66,13 @@ public class LibraryServiceImpl implements LibraryService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Long createLibrary(LibrarySaveReqVO createReqVO) {
+        // 校验权限：非超管用户只能创建自己有操作权限的知识库
+        LevelConfigDO cfg = null;
+        if (createReqVO.getKbLevelId() != null) {
+            cfg = levelConfigMapper.selectById(createReqVO.getKbLevelId());
+        }
+        validateManagementPermission(cfg, createReqVO.getOwnerId());
+
         // 插入
         LibraryDO library = BeanUtils.toBean(createReqVO, LibraryDO.class);
         libraryMapper.insert(library);
@@ -86,8 +99,9 @@ public class LibraryServiceImpl implements LibraryService {
     public void updateLibrary(LibrarySaveReqVO updateReqVO) {
         // 校验存在
         LibraryDO library = validateLibraryExists(updateReqVO.getId());
-        // 校验管理权限
-        validateManagementPermission(library);
+        // 校验管理权限（统一走 validateManagementPermission）
+        LevelConfigDO cfg = levelConfigMapper.selectById(library.getKbLevelId());
+        validateManagementPermission(cfg, library.getOwnerId());
 
         // 更新
         LibraryDO updateObj = BeanUtils.toBean(updateReqVO, LibraryDO.class);
@@ -114,8 +128,9 @@ public class LibraryServiceImpl implements LibraryService {
     public void deleteLibrary(Long id) {
         // 校验存在
         LibraryDO library = validateLibraryExists(id);
-        // 校验管理权限
-        validateManagementPermission(library);
+        // 校验管理权限（统一走 validateManagementPermission）
+        LevelConfigDO cfg = levelConfigMapper.selectById(library.getKbLevelId());
+        validateManagementPermission(cfg, library.getOwnerId());
 
         // 删除关联的共享部门记录
         shareDeptMapper.delete(new LambdaQueryWrapper<ShareDeptDO>()
@@ -133,7 +148,8 @@ public class LibraryServiceImpl implements LibraryService {
         for (Long id : ids) {
             LibraryDO library = libraryMapper.selectById(id);
             if (library != null) {
-                validateManagementPermission(library);
+                LevelConfigDO cfg = levelConfigMapper.selectById(library.getKbLevelId());
+                validateManagementPermission(cfg, library.getOwnerId());
             }
         }
         // 再统一删除关联的共享部门记录和项目成员记录
@@ -147,44 +163,167 @@ public class LibraryServiceImpl implements LibraryService {
     }
 
     /**
-     * 校验知识库管理权限（统一走 kb_user_dept 表）
-     * 个人知识库(visibilityRule=1)：只有所有者本人可以管理
-     * 院级/咨询评估(visibilityRule=2)：该部门管理员(role=1)可以管理
-     * 公司级(visibilityRule=3)：公司部门管理员(role=1)可以管理
+     * 统一的权限校验入口（所有知识库操作都用此函数）
+     * 个人知识库(visibilityRule=1)：仅所有者本人
+     * 院级/咨询评估(visibilityRule=2)：该部门（或其祖先部门）管理员
+     * 公司级(visibilityRule=3)：公司部门管理员
+     * 指定部门(visibilityRule=5)：按 ownerDim 判断，部门归部门管理员，用户归所有者
      */
-    private void validateManagementPermission(LibraryDO library) {
+    private void validateManagementPermission(LevelConfigDO cfg, Long ownerId) {
         Long userId = SecurityFrameworkUtils.getLoginUserId();
         if (userId == null) {
             throw exception(LIBRARY_PERMISSION_DENIED);
         }
 
-        // 超级管理员/租户管理员 → 拥有所有管理权限
+        // 超级管理员/租户管理员 → 拥有所有权限
         if (securityFrameworkService.hasAnyRoles(
                 RoleCodeEnum.SUPER_ADMIN.getCode(),
                 RoleCodeEnum.TENANT_ADMIN.getCode())) {
             return;
         }
 
-        LevelConfigDO cfg = levelConfigMapper.selectById(library.getKbLevelId());
-        if (cfg == null) return; // 配置不存在则不阻止（由 API 层权限控制）
+        // 配置不存在则不做额外校验（由 API 层权限控制兜底）
+        if (cfg == null) return;
 
         Integer rule = cfg.getVisibilityRule();
         if (rule == null) return;
 
-        // 个人知识库 → 只有所有者可以管理
-        if (rule == 1) {
-            if (library.getOwnerId() == null || !library.getOwnerId().equals(userId)) {
-                throw exception(LIBRARY_PERMISSION_DENIED);
-            }
+        switch (rule) {
+            case 1:   // 个人知识库 → 仅所有者本人
+                if (ownerId == null || !ownerId.equals(userId)) {
+                    throw exception(LIBRARY_PERMISSION_DENIED);
+                }
+                break;
+            case 2:   // 院级/咨询评估 → 管理员在 ownerId 或其祖先部门上
+            case 3:   // 公司级
+                if (ownerId == null) {
+                    throw exception(LIBRARY_PERMISSION_DENIED);
+                }
+                // 精确匹配
+                if (kbUserDeptService.isAdmin(userId, ownerId)) break;
+                // 向上查找：管理员在父部门可管理子部门库（如水利院管理员可管理规划处的库）
+                boolean found = false;
+                for (Long ancestorId : kbUserDeptService.getDeptAncestorIds(ownerId)) {
+                    if (kbUserDeptService.isAdmin(userId, ancestorId)) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    throw exception(LIBRARY_PERMISSION_DENIED);
+                }
+                break;
+            case 5:   // 指定部门列表 → 根据 ownerDim 决定
+                if (cfg.getOwnerDim() != null && cfg.getOwnerDim() == 1) {
+                    // 按用户归属 → 仅所有者
+                    if (ownerId == null || !ownerId.equals(userId)) {
+                        throw exception(LIBRARY_PERMISSION_DENIED);
+                    }
+                } else {
+                    // 按部门归属 → 该部门管理员（含祖先部门）
+                    if (ownerId == null) {
+                        throw exception(LIBRARY_PERMISSION_DENIED);
+                    }
+                    // 精确匹配
+                    if (kbUserDeptService.isAdmin(userId, ownerId)) break;
+                    // 向上查找祖先部门管理员
+                    boolean foundDept = false;
+                    for (Long ancestorId : kbUserDeptService.getDeptAncestorIds(ownerId)) {
+                        if (kbUserDeptService.isAdmin(userId, ancestorId)) {
+                            foundDept = true;
+                            break;
+                        }
+                    }
+                    if (!foundDept) {
+                        throw exception(LIBRARY_PERMISSION_DENIED);
+                    }
+                }
+                break;
+        }
+    }
+
+    /**
+     * 可见性过滤：筛选出当前用户有权限看到的知识库
+     * 个人知识库(rule=1)：仅所有者可见
+     * 院级/咨询评估(rule=2)：用户所属部门+祖先部门范围内可见
+     * 公司级(rule=3)：全员可见
+     * 指定部门(rule=5)：共享部门列表中任一部门的成员可见
+     *
+     * 特殊处理：公司级项目库视图（categoryId 对应的分类 visibilityRule=3）时，
+     * 所有 isProject=1 的知识库都可见，聚合下级部门创建的项目库
+     */
+    private List<LibraryDO> filterVisible(List<LibraryDO> allLibs, Long userId, Long categoryId) {
+        if (CollUtil.isEmpty(allLibs)) return allLibs;
+
+        // 超级管理员/租户管理员 → 可见所有知识库
+        if (userId != null && securityFrameworkService.hasAnyRoles(
+                RoleCodeEnum.SUPER_ADMIN.getCode(),
+                RoleCodeEnum.TENANT_ADMIN.getCode())) {
+            return allLibs;
         }
 
-        // 院级/咨询评估/公司级 → 查 kb_user_dept，用户须为该部门管理员(role=1)
-        if (rule == 2 || rule == 3) {
-            if (library.getOwnerId() == null
-                    || !kbUserDeptMapper.isAdmin(userId, library.getOwnerId())) {
-                throw exception(LIBRARY_PERMISSION_DENIED);
-            }
+        // 加载所有层级配置到 Map
+        Map<Long, LevelConfigDO> configMap = levelConfigMapper.selectList()
+                .stream()
+                .collect(Collectors.toMap(LevelConfigDO::getId, Function.identity()));
+
+        // 判断当前视图是否为公司级分类（用于项目库聚合）
+        final boolean isCompanyLevelView = isCompanyLevelProjectView(categoryId, configMap);
+
+        // 预加载用户关联的所有部门ID（系统部门 + kb_user_dept 扩展部门）
+        Set<Long> userDeptIds = kbUserDeptService.getDeptIdsByUserId(userId);
+
+        // 预计算用户可见的部门范围 = 用户所属部门 + 所有祖先部门（三级部门可见其父院创建的库）
+        Set<Long> visibleDeptIds = new HashSet<>(userDeptIds);
+        for (Long deptId : userDeptIds) {
+            visibleDeptIds.addAll(kbUserDeptService.getDeptAncestorIds(deptId));
         }
+
+        return allLibs.stream()
+                .filter(lib -> {
+                    // 公司级项目库视图：聚合所有项目成果库（含下级部门创建的）
+                    if (isCompanyLevelView && lib.getIsProject() != null && lib.getIsProject() == 1) {
+                        return true;
+                    }
+
+                    LevelConfigDO cfg = configMap.get(lib.getKbLevelId());
+                    if (cfg == null) return false;
+
+                    switch (cfg.getVisibilityRule()) {
+                        case 1:   // 个人知识库 → 只有所有者可见
+                            return lib.getOwnerId() != null && lib.getOwnerId().equals(userId);
+
+                        case 2:   // 院级 / 咨询评估 → 用户所属部门+祖先部门范围内可见
+                            return lib.getOwnerId() != null && visibleDeptIds.contains(lib.getOwnerId());
+
+                        case 3:   // 公司知识库 → 全员可见
+                            return true;
+
+                        case 5:   // 指定部门列表 → 用户任一部门在共享列表中
+                            if (CollUtil.isEmpty(userDeptIds)) return false;
+                            return shareDeptMapper.selectCount(
+                                    new LambdaQueryWrapper<ShareDeptDO>()
+                                            .eq(ShareDeptDO::getKbId, lib.getId())
+                                            .in(ShareDeptDO::getDeptId, userDeptIds)
+                            ) > 0;
+
+                        default:
+                            return false;
+                    }
+                })
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 判断当前分类是否为公司级项目库视图
+     * 公司级项目库需要聚合所有下级部门的项目成果库
+     */
+    private boolean isCompanyLevelProjectView(Long categoryId, Map<Long, LevelConfigDO> configMap) {
+        if (categoryId == null) return false;
+        CategoryDO category = categoryMapper.selectById(categoryId);
+        if (category == null || category.getKbLevelId() == null) return false;
+        LevelConfigDO cfg = configMap.get(category.getKbLevelId());
+        return cfg != null && cfg.getVisibilityRule() != null && cfg.getVisibilityRule() == 3;
     }
 
     private LibraryDO validateLibraryExists(Long id) {
@@ -202,7 +341,19 @@ public class LibraryServiceImpl implements LibraryService {
 
     @Override
     public PageResult<LibraryDO> getLibraryPage(LibraryPageReqVO pageReqVO) {
-        return libraryMapper.selectPage(pageReqVO);
+        // 先查分页
+        PageResult<LibraryDO> pageResult = libraryMapper.selectPage(pageReqVO);
+
+        // 可见性过滤：非超管/租户管理员只能看到自己有权限的知识库
+        Long userId = SecurityFrameworkUtils.getLoginUserId();
+        if (userId != null && !securityFrameworkService.hasAnyRoles(
+                RoleCodeEnum.SUPER_ADMIN.getCode(),
+                RoleCodeEnum.TENANT_ADMIN.getCode())) {
+            List<LibraryDO> visible = filterVisible(pageResult.getList(), userId, pageReqVO.getCategoryId());
+            pageResult.setList(visible);
+        }
+
+        return pageResult;
     }
 
     @Override
@@ -211,6 +362,13 @@ public class LibraryServiceImpl implements LibraryService {
         if (library == null) {
             throw exception(LIBRARY_NOT_EXISTS);
         }
+        // 只有个人知识库（rule=1）才能设置公开
+        LevelConfigDO cfg = levelConfigMapper.selectById(library.getKbLevelId());
+        if (cfg == null || cfg.getVisibilityRule() == null || cfg.getVisibilityRule() != 1) {
+            throw exception(LIBRARY_PERMISSION_DENIED);
+        }
+        // 统一走 validateManagementPermission 校验所有者权限
+        validateManagementPermission(cfg, library.getOwnerId());
         library.setIsPublic(library.getIsPublic() != null && library.getIsPublic() == 1 ? 0 : 1);
         libraryMapper.updateById(library);
     }
@@ -227,7 +385,27 @@ public class LibraryServiceImpl implements LibraryService {
 
     @Override
     public List<LibraryDO> getSimpleLibraryList(Integer isProject) {
-        return libraryMapper.selectSimpleList(isProject);
+        Long userId = SecurityFrameworkUtils.getLoginUserId();
+        List<LibraryDO> list = libraryMapper.selectSimpleList(isProject);
+        if (userId != null && !securityFrameworkService.hasAnyRoles(
+                RoleCodeEnum.SUPER_ADMIN.getCode(),
+                RoleCodeEnum.TENANT_ADMIN.getCode())) {
+            list = filterVisible(list, userId, null);
+        }
+        return list;
     }
 
+    @Override
+    public boolean canManage(Long kbId) {
+        if (kbId == null) return false;
+        LibraryDO library = libraryMapper.selectById(kbId);
+        if (library == null) return false;
+        LevelConfigDO cfg = levelConfigMapper.selectById(library.getKbLevelId());
+        try {
+            validateManagementPermission(cfg, library.getOwnerId());
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
 }

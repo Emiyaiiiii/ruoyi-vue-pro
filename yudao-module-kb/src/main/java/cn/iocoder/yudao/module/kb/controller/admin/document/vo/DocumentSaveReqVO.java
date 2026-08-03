@@ -16,6 +16,9 @@ public class DocumentSaveReqVO {
     @NotNull(message = "所属知识库ID不能为空")
     private Long kbId;
 
+    @Schema(description = "所属文件夹ID: 0=根目录", example = "0")
+    private Long folderId;
+
     @Schema(description = "文件名称", requiredMode = Schema.RequiredMode.REQUIRED, example = "王五")
     @NotEmpty(message = "文件名称不能为空")
     private String fileName;

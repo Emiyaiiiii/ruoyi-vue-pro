@@ -113,6 +113,11 @@ public class DocumentServiceImpl implements DocumentService {
 
     @Override
     public Long uploadAndCreate(MultipartFile file, Long kbId, String description, String tags) {
+        return uploadAndCreate(file, kbId, null, description, tags);
+    }
+
+    @Override
+    public Long uploadAndCreate(MultipartFile file, Long kbId, Long folderId, String description, String tags) {
         // 1. 校验知识库存在
         LibraryDO library = libraryMapper.selectById(kbId);
         if (library == null) {
@@ -133,6 +138,7 @@ public class DocumentServiceImpl implements DocumentService {
         // 3. 创建文档记录
         DocumentDO document = new DocumentDO();
         document.setKbId(kbId);
+        document.setFolderId(folderId != null ? folderId : 0L);
         document.setFileName(fileName);
         document.setFileUrl(uploadResp.getUrl());
         document.setFilePath(uploadResp.getPath());

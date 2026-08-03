@@ -56,4 +56,15 @@ public interface KbUserDeptMapper extends BaseMapperX<KbUserDeptDO> {
                 .eq(KbUserDeptDO::getDeptId, deptId));
     }
 
+    /**
+     * 获取用户作为管理员的所有部门ID
+     */
+    default Set<Long> selectAdminDeptIdsByUserId(Long userId) {
+        return selectList(new LambdaQueryWrapperX<KbUserDeptDO>()
+                .eq(KbUserDeptDO::getUserId, userId)
+                .eq(KbUserDeptDO::getRole, 1))
+                .stream()
+                .map(KbUserDeptDO::getDeptId)
+                .collect(Collectors.toSet());
+    }
 }

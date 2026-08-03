@@ -1,9 +1,13 @@
 package cn.iocoder.yudao.module.kb.service.category;
 
+import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.iocoder.yudao.framework.common.util.json.JsonUtils;
+import cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils;
 import cn.iocoder.yudao.module.kb.dal.dataobject.levelconfig.LevelConfigDO;
+import cn.iocoder.yudao.module.kb.dal.dataobject.userdept.KbUserDeptDO;
 import cn.iocoder.yudao.module.kb.dal.mysql.levelconfig.LevelConfigMapper;
+import cn.iocoder.yudao.module.kb.service.userdept.KbUserDeptService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.validation.annotation.Validated;
@@ -34,15 +38,37 @@ public class CategoryServiceImpl implements CategoryService {
 
     private final CategoryMapper categoryMapper;
     private final LevelConfigMapper levelConfigMapper;
+    private final KbUserDeptService kbUserDeptService;
 
     @Override
     public List<CategoryDO> listCategoriesForUser(Long userDeptId) {
+        // 获取当前用户的所有部门ID（支持一人多院）
+        Set<Long> userDeptIds;
+        if (userDeptId != null) {
+            // 显式传了部门ID → 仅该部门
+            userDeptIds = Collections.singleton(userDeptId);
+        } else {
+            // 自动从当前登录用户获取
+            Long userId = SecurityFrameworkUtils.getLoginUserId();
+            if (userId != null) {
+                userDeptIds = kbUserDeptService.getDeptIdsByUserId(userId);
+            } else {
+                userDeptIds = Collections.emptySet();
+            }
+        }
+
         List<CategoryDO> all = categoryMapper.selectList();
 
         // 加载层级配置
         Map<Long, LevelConfigDO> configMap = levelConfigMapper.selectList()
                 .stream()
                 .collect(Collectors.toMap(LevelConfigDO::getId, Function.identity()));
+
+        // 预计算用户可见的部门范围 = 用户所属部门 + 所有祖先部门
+        Set<Long> visibleDeptIds = new HashSet<>(userDeptIds);
+        for (Long deptId : userDeptIds) {
+            visibleDeptIds.addAll(kbUserDeptService.getDeptAncestorIds(deptId));
+        }
 
         return all.stream()
                 .filter(cat -> {
@@ -53,9 +79,9 @@ public class CategoryServiceImpl implements CategoryService {
                     // dept_scope 为空 → 所有人都能看到这个分类
                     if (StrUtil.isBlank(deptScope)) return true;
 
-                    // dept_scope 有值 → 只有列表里的部门能看到
+                    // dept_scope 有值 → 用户任一部门（含祖先部门）在允许列表里即可
                     List<Long> allowDeptIds = JsonUtils.parseArray(deptScope, Long.class);
-                    return allowDeptIds.contains(userDeptId);
+                    return allowDeptIds.stream().anyMatch(visibleDeptIds::contains);
                 })
                 .collect(Collectors.toList());
     }

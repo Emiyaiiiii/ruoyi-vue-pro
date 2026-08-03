@@ -3,6 +3,8 @@ package cn.iocoder.yudao.module.kb.service.userdept;
 import cn.iocoder.yudao.module.kb.controller.admin.userdept.vo.DeptMemberRespVO;
 import cn.iocoder.yudao.module.kb.dal.dataobject.userdept.KbUserDeptDO;
 import cn.iocoder.yudao.module.kb.dal.mysql.userdept.KbUserDeptMapper;
+import cn.iocoder.yudao.module.system.api.dept.DeptApi;
+import cn.iocoder.yudao.module.system.api.dept.dto.DeptRespDTO;
 import cn.iocoder.yudao.module.system.api.user.AdminUserApi;
 import cn.iocoder.yudao.module.system.api.user.dto.AdminUserRespDTO;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -26,6 +28,7 @@ public class KbUserDeptServiceImpl implements KbUserDeptService {
 
     private final KbUserDeptMapper kbUserDeptMapper;
     private final AdminUserApi adminUserApi;
+    private final DeptApi deptApi;
 
     @Override
     public Long addMember(Long userId, Long deptId) {
@@ -52,12 +55,28 @@ public class KbUserDeptServiceImpl implements KbUserDeptService {
         if (existing != null) {
             existing.setRole(role);
             kbUserDeptMapper.updateById(existing);
+        } else {
+            // 系统部门成员无 kb_user_dept 记录时，直接创建（如设为管理员）
+            KbUserDeptDO record = KbUserDeptDO.builder()
+                    .userId(userId)
+                    .deptId(deptId)
+                    .role(role)
+                    .build();
+            kbUserDeptMapper.insert(record);
         }
     }
 
     @Override
     public Set<Long> getDeptIdsByUserId(Long userId) {
-        return kbUserDeptMapper.selectDeptIdsByUserId(userId);
+        Set<Long> deptIds = new HashSet<>();
+        // 1. 系统部门（system_user.dept_id）
+        AdminUserRespDTO user = adminUserApi.getUser(userId);
+        if (user != null && user.getDeptId() != null) {
+            deptIds.add(user.getDeptId());
+        }
+        // 2. 扩展部门（kb_user_dept 补充配置）
+        deptIds.addAll(kbUserDeptMapper.selectDeptIdsByUserId(userId));
+        return deptIds;
     }
 
     @Override
@@ -68,6 +87,25 @@ public class KbUserDeptServiceImpl implements KbUserDeptService {
     @Override
     public boolean isMember(Long userId, Long deptId) {
         return kbUserDeptMapper.isMember(userId, deptId);
+    }
+
+    @Override
+    public Set<Long> getDeptAncestorIds(Long deptId) {
+        Set<Long> ancestors = new LinkedHashSet<>();
+        Long currentId = deptId;
+        int maxDepth = 20; // 防止部门循环引用导致死循环
+        while (currentId != null && currentId != 0 && maxDepth-- > 0) {
+            DeptRespDTO dept = deptApi.getDept(currentId);
+            if (dept == null) break; // 部门不存在于系统中则停止，不加入结果集
+            ancestors.add(currentId);
+            currentId = dept.getParentId();
+        }
+        return ancestors;
+    }
+
+    @Override
+    public Set<Long> getAdminDeptIds(Long userId) {
+        return kbUserDeptMapper.selectAdminDeptIdsByUserId(userId);
     }
 
     @Override

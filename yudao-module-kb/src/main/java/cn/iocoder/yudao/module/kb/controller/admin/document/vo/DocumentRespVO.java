@@ -20,6 +20,10 @@ public class DocumentRespVO {
     @ExcelProperty("所属知识库ID")
     private Long kbId;
 
+    @Schema(description = "所属文件夹ID: 0=根目录", example = "0")
+    @ExcelProperty("所属文件夹ID")
+    private Long folderId;
+
     @Schema(description = "文件名称", requiredMode = Schema.RequiredMode.REQUIRED, example = "王五")
     @ExcelProperty("文件名称")
     private String fileName;

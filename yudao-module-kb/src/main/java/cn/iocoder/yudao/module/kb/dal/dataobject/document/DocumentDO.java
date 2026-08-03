@@ -31,6 +31,10 @@ public class DocumentDO extends BaseDO {
      */
     private Long kbId;
     /**
+     * 所属文件夹ID: 0=根目录
+     */
+    private Long folderId;
+    /**
      * 文件名称
      */
     private String fileName;

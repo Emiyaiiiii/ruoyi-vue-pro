@@ -20,6 +20,7 @@ public interface DocumentMapper extends BaseMapperX<DocumentDO> {
     default PageResult<DocumentDO> selectPage(DocumentPageReqVO reqVO) {
         return selectPage(reqVO, new LambdaQueryWrapperX<DocumentDO>()
                 .eqIfPresent(DocumentDO::getKbId, reqVO.getKbId())
+                .eqIfPresent(DocumentDO::getFolderId, reqVO.getFolderId())
                 .likeIfPresent(DocumentDO::getFileName, reqVO.getFileName())
                 .eqIfPresent(DocumentDO::getFileUrl, reqVO.getFileUrl())
                 .eqIfPresent(DocumentDO::getFileType, reqVO.getFileType())

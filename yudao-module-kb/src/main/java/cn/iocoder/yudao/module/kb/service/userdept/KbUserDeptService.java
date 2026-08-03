@@ -49,8 +49,18 @@ public interface KbUserDeptService {
     boolean isMember(Long userId, Long deptId);
 
     /**
+     * 获取部门的所有祖先部门ID（含自身，不含根节点0）
+     * 例如：规划处 → [规划处, 水利院, 公司总部]
+     */
+    Set<Long> getDeptAncestorIds(Long deptId);
+
+    /**
      * 获取部门下所有关联用户（合并系统用户 + kb_user_dept 角色）
      */
     List<DeptMemberRespVO> getByDeptId(Long deptId);
 
+    /**
+     * 获取用户作为管理员的所有部门ID
+     */
+    Set<Long> getAdminDeptIds(Long userId);
 }

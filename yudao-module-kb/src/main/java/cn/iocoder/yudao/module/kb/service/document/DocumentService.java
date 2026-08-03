@@ -71,4 +71,16 @@ public interface DocumentService {
      */
     Long uploadAndCreate(MultipartFile file, Long kbId, String description, String tags);
 
+    /**
+     * 上传文件到指定文件夹并创建知识库文档记录
+     *
+     * @param file 上传的文件
+     * @param kbId 所属知识库ID
+     * @param folderId 所属文件夹ID（可选）
+     * @param description 文件描述（可选）
+     * @param tags 标签（可选）
+     * @return 文档ID
+     */
+    Long uploadAndCreate(MultipartFile file, Long kbId, Long folderId, String description, String tags);
+
 }

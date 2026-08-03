@@ -20,6 +20,9 @@ import cn.iocoder.yudao.framework.common.pojo.CommonResult;
 import cn.iocoder.yudao.framework.common.util.object.BeanUtils;
 import static cn.iocoder.yudao.framework.common.pojo.CommonResult.success;
 
+import static cn.iocoder.yudao.framework.common.exception.util.ServiceExceptionUtil.exception;
+import static cn.iocoder.yudao.module.kb.enums.ErrorCodeConstants.*;
+
 import cn.iocoder.yudao.framework.excel.core.util.ExcelUtils;
 
 import cn.iocoder.yudao.framework.apilog.core.annotation.ApiAccessLog;
@@ -82,10 +85,10 @@ public class LibraryController {
     }
 
     @GetMapping("/page")
-    @Operation(summary = "获得知识库分页（管理后台：返回全部，由权限串控制）")
+    @Operation(summary = "获得知识库分页")
     @PreAuthorize("@ss.hasPermission('kb:library:query')")
     public CommonResult<PageResult<LibraryRespVO>> getLibraryPage(@Valid LibraryPageReqVO pageReqVO) {
-        // 管理后台分页查询，不做可见性过滤（管理员通过权限串控制访问范围）
+        // 分页查询，Service 层会根据用户角色做可见性过滤（非超管只能看到自己有权限的知识库）
         PageResult<LibraryDO> pageResult = libraryService.getLibraryPage(pageReqVO);
         return success(BeanUtils.toBean(pageResult, LibraryRespVO.class));
     }
@@ -138,4 +141,11 @@ public class LibraryController {
         return success(BeanUtils.toBean(pageResult, LibraryRespVO.class));
     }
 
+    @GetMapping("/can-manage")
+    @Operation(summary = "检查当前用户是否有该知识库的管理权限")
+    @Parameter(name = "kbId", description = "知识库ID", required = true)
+    @PreAuthorize("@ss.hasPermission('kb:library:query')")
+    public CommonResult<Boolean> canManage(@RequestParam("kbId") Long kbId) {
+        return success(libraryService.canManage(kbId));
+    }
 }
