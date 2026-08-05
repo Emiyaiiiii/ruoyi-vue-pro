@@ -38,12 +38,13 @@ public interface LibraryMapper extends BaseMapperX<LibraryDO> {
     }
 
     /**
-     * 查询广场公开知识库分页
+     * 查询广场公开知识库分页（isPublic=1 的所有知识库，不限制分类）
      */
-    default PageResult<LibraryDO> selectPublicPage(PageParam pageParam) {
+    default PageResult<LibraryDO> selectPublicPage(PageParam pageParam, String name) {
         return selectPage(pageParam, new LambdaQueryWrapperX<LibraryDO>()
                 .eq(LibraryDO::getIsPublic, 1)
                 .eq(LibraryDO::getStatus, 0)
+                .likeIfPresent(LibraryDO::getName, name)
                 .orderByDesc(LibraryDO::getId));
     }
 

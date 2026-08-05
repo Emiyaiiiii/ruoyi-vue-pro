@@ -5,6 +5,7 @@ import cn.iocoder.yudao.framework.common.pojo.CommonResult;
 import cn.iocoder.yudao.module.system.controller.admin.permission.vo.permission.PermissionAssignRoleDataScopeReqVO;
 import cn.iocoder.yudao.module.system.controller.admin.permission.vo.permission.PermissionAssignRoleMenuReqVO;
 import cn.iocoder.yudao.module.system.controller.admin.permission.vo.permission.PermissionAssignUserRoleReqVO;
+import cn.iocoder.yudao.module.system.controller.admin.permission.vo.permission.PermissionBatchAssignUserRoleReqVO;
 import cn.iocoder.yudao.module.system.service.permission.PermissionService;
 import cn.iocoder.yudao.module.system.service.tenant.TenantService;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -71,6 +72,14 @@ public class PermissionController {
     @PreAuthorize("@ss.hasPermission('system:permission:assign-user-role')")
     public CommonResult<Boolean> assignUserRole(@Validated @RequestBody PermissionAssignUserRoleReqVO reqVO) {
         permissionService.assignUserRole(reqVO.getUserId(), reqVO.getRoleIds());
+        return success(true);
+    }
+
+    @Operation(summary = "批量赋予用户角色")
+    @PostMapping("/batch-assign-user-role")
+    @PreAuthorize("@ss.hasPermission('system:permission:assign-user-role')")
+    public CommonResult<Boolean> batchAssignUserRole(@Validated @RequestBody PermissionBatchAssignUserRoleReqVO reqVO) {
+        permissionService.batchAssignUserRole(reqVO.getUserIds(), reqVO.getRoleIds());
         return success(true);
     }
 

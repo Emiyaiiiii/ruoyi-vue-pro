@@ -227,6 +227,13 @@ public class PermissionServiceImpl implements PermissionService {
         }
     }
 
+    @DSTransactional
+    public void batchAssignUserRole(List<Long> userIds, Set<Long> roleIds) {
+        for (Long userId : userIds) {
+            assignUserRole(userId, roleIds);
+        }
+    }
+
     @Override
     @CacheEvict(value = RedisKeyConstants.USER_ROLE_ID_LIST, key = "#userId")
     public void processUserDeleted(Long userId) {

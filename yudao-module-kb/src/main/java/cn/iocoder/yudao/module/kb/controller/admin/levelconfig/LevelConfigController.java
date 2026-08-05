@@ -90,7 +90,6 @@ public class LevelConfigController {
 
     @GetMapping("/simple-list")
     @Operation(summary = "获得知识库层级配置精简列表（用于下拉选择）")
-    @PreAuthorize("@ss.hasPermission('kb:level-config:query')")
     public CommonResult<List<LevelConfigSimpleVO>> getSimpleLevelConfigList() {
         List<LevelConfigDO> list = levelConfigService.getSimpleLevelConfigList();
         return success(BeanUtils.toBean(list, LevelConfigSimpleVO.class));

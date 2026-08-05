@@ -1,5 +1,7 @@
 package cn.iocoder.yudao.module.kb.service.userdept;
 
+import cn.iocoder.yudao.framework.common.pojo.PageResult;
+import cn.iocoder.yudao.module.kb.controller.admin.userdept.vo.DeptMemberPageReqVO;
 import cn.iocoder.yudao.module.kb.controller.admin.userdept.vo.DeptMemberRespVO;
 import cn.iocoder.yudao.module.kb.dal.dataobject.userdept.KbUserDeptDO;
 
@@ -58,6 +60,14 @@ public interface KbUserDeptService {
      * 获取部门下所有关联用户（合并系统用户 + kb_user_dept 角色）
      */
     List<DeptMemberRespVO> getByDeptId(Long deptId);
+
+    /**
+     * 分页获取部门成员（支持包含子部门）
+     *
+     * @param reqVO 分页请求参数（deptId, includeChildren, pageNo, pageSize）
+     * @return 分页结果
+     */
+    PageResult<DeptMemberRespVO> getDeptMemberPage(DeptMemberPageReqVO reqVO);
 
     /**
      * 获取用户作为管理员的所有部门ID

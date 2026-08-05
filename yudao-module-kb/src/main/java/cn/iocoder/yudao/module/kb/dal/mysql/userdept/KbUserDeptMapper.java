@@ -4,7 +4,11 @@ import cn.iocoder.yudao.framework.mybatis.core.mapper.BaseMapperX;
 import cn.iocoder.yudao.framework.mybatis.core.query.LambdaQueryWrapperX;
 import cn.iocoder.yudao.module.kb.dal.dataobject.userdept.KbUserDeptDO;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
 
 import java.util.List;
 import java.util.Set;
@@ -67,4 +71,37 @@ public interface KbUserDeptMapper extends BaseMapperX<KbUserDeptDO> {
                 .map(KbUserDeptDO::getDeptId)
                 .collect(Collectors.toSet());
     }
+
+    /**
+     * 分页查询指定部门的用户（数据库级分页）
+     * 数据来源合并两个部分：
+     * 1. system_user.dept_id 属于目标部门（系统主部门）
+     * 2. kb_user_dept.dept_id 属于目标部门（KB 补充分配）
+     *
+     * @param page    分页参数
+     * @param deptIds 部门ID集合
+     * @return 分页结果
+     */
+    @Select({
+            "<script>",
+            "SELECT DISTINCT u.id, u.nickname, u.dept_id",
+            "FROM system_user u",
+            "LEFT JOIN kb_user_dept k ON u.id = k.user_id AND k.dept_id IN",
+            "<foreach collection='deptIds' item='deptId' open='(' separator=',' close=')'>",
+            "#{deptId}",
+            "</foreach>",
+            "WHERE u.deleted = 0",
+            "AND (u.dept_id IN",
+            "<foreach collection='deptIds' item='deptId' open='(' separator=',' close=')'>",
+            "#{deptId}",
+            "</foreach>",
+            "OR k.user_id IS NOT NULL)",
+            "ORDER BY u.id DESC",
+            "</script>"
+    })
+    IPage<SystemUserSimpleVO> selectSystemUserPageByDeptIds(
+            Page<SystemUserSimpleVO> page,
+            @Param("deptIds") Set<Long> deptIds
+    );
+
 }

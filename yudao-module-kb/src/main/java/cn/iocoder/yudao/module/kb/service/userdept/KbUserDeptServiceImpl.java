@@ -1,13 +1,18 @@
 package cn.iocoder.yudao.module.kb.service.userdept;
 
+import cn.iocoder.yudao.framework.common.pojo.PageResult;
+import cn.iocoder.yudao.module.kb.controller.admin.userdept.vo.DeptMemberPageReqVO;
 import cn.iocoder.yudao.module.kb.controller.admin.userdept.vo.DeptMemberRespVO;
 import cn.iocoder.yudao.module.kb.dal.dataobject.userdept.KbUserDeptDO;
 import cn.iocoder.yudao.module.kb.dal.mysql.userdept.KbUserDeptMapper;
+import cn.iocoder.yudao.module.kb.dal.mysql.userdept.SystemUserSimpleVO;
 import cn.iocoder.yudao.module.system.api.dept.DeptApi;
 import cn.iocoder.yudao.module.system.api.dept.dto.DeptRespDTO;
 import cn.iocoder.yudao.module.system.api.user.AdminUserApi;
 import cn.iocoder.yudao.module.system.api.user.dto.AdminUserRespDTO;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.validation.annotation.Validated;
@@ -138,6 +143,67 @@ public class KbUserDeptServiceImpl implements KbUserDeptService {
             }
             return vo;
         }).collect(Collectors.toList());
+    }
+
+    @Override
+    public PageResult<DeptMemberRespVO> getDeptMemberPage(DeptMemberPageReqVO reqVO) {
+        // 1. 计算目标部门ID集合（是否包含子部门）
+        Set<Long> targetDeptIds = new HashSet<>();
+        targetDeptIds.add(reqVO.getDeptId());
+        Map<Long, String> deptNameMap = new HashMap<>();
+        // 获取当前部门名称
+        DeptRespDTO currentDept = deptApi.getDept(reqVO.getDeptId());
+        if (currentDept != null) {
+            deptNameMap.put(currentDept.getId(), currentDept.getName());
+        }
+        if (Boolean.TRUE.equals(reqVO.getIncludeChildren())) {
+            List<DeptRespDTO> childDepts = deptApi.getChildDeptList(reqVO.getDeptId());
+            if (childDepts != null) {
+                childDepts.forEach(d -> {
+                    targetDeptIds.add(d.getId());
+                    deptNameMap.put(d.getId(), d.getName());
+                });
+            }
+        }
+
+        // 2. 数据库级分页查询 system_user 表中这些部门下的用户
+        Page<SystemUserSimpleVO> page = new Page<>(reqVO.getPageNo(), reqVO.getPageSize());
+        IPage<SystemUserSimpleVO> userPage = kbUserDeptMapper.selectSystemUserPageByDeptIds(page, targetDeptIds);
+        
+        if (userPage.getRecords() == null || userPage.getRecords().isEmpty()) {
+            return new PageResult<>(Collections.emptyList(), 0L);
+        }
+
+        // 3. 查询当前页用户对应的 kb_user_dept 角色记录
+        Set<Long> userIds = userPage.getRecords().stream()
+                .map(SystemUserSimpleVO::getId)
+                .collect(Collectors.toSet());
+        List<KbUserDeptDO> userDeptList = kbUserDeptMapper.selectList(
+                new LambdaQueryWrapper<KbUserDeptDO>()
+                        .in(KbUserDeptDO::getUserId, userIds)
+                        .in(KbUserDeptDO::getDeptId, targetDeptIds));
+        Map<Long, KbUserDeptDO> userDeptMap = userDeptList.stream()
+                .collect(Collectors.toMap(KbUserDeptDO::getUserId, item -> item, (a, b) -> a));
+
+        // 4. 合并：系统用户为基础，叠加 kb_user_dept 的角色信息
+        List<DeptMemberRespVO> pageList = userPage.getRecords().stream().map(sysUser -> {
+            DeptMemberRespVO vo = new DeptMemberRespVO();
+            vo.setUserId(sysUser.getId());
+            vo.setDeptId(sysUser.getDeptId());
+            vo.setDeptName(deptNameMap.getOrDefault(sysUser.getDeptId(), ""));
+            vo.setNickname(sysUser.getNickname());
+            vo.setRole(0); // 默认为成员
+
+            KbUserDeptDO userDept = userDeptMap.get(sysUser.getId());
+            if (userDept != null) {
+                vo.setId(userDept.getId());
+                vo.setRole(userDept.getRole());
+                vo.setCreateTime(userDept.getCreateTime());
+            }
+            return vo;
+        }).collect(Collectors.toList());
+
+        return new PageResult<>(pageList, userPage.getTotal());
     }
 
     /**

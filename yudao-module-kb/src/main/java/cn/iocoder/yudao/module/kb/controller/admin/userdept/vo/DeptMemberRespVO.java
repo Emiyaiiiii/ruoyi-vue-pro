@@ -24,6 +24,9 @@ public class DeptMemberRespVO {
     @Schema(description = "部门ID", requiredMode = Schema.RequiredMode.REQUIRED, example = "100")
     private Long deptId;
 
+    @Schema(description = "部门名称（包含子部门时显示用户所属部门）", example = "规划处")
+    private String deptName;
+
     @Schema(description = "用户昵称（来自系统用户表）", example = "张三")
     private String nickname;
 

@@ -3,6 +3,7 @@ package cn.iocoder.yudao.module.system.service.permission;
 import cn.iocoder.yudao.framework.common.biz.system.permission.dto.DeptDataPermissionRespDTO;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.Set;
 
 import static java.util.Collections.singleton;
@@ -92,6 +93,14 @@ public interface PermissionService {
      * @param roleIds 角色编号集合
      */
     void assignUserRole(Long userId, Set<Long> roleIds);
+
+    /**
+     * 批量设置用户角色
+     *
+     * @param userIds 用户编号列表
+     * @param roleIds 角色编号集合
+     */
+    void batchAssignUserRole(List<Long> userIds, Set<Long> roleIds);
 
     /**
      * 处理用户删除时，删除关联授权数据

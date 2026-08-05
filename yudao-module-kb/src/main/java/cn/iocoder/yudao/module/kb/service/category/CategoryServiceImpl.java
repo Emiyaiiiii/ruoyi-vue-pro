@@ -3,7 +3,9 @@ package cn.iocoder.yudao.module.kb.service.category;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.iocoder.yudao.framework.common.util.json.JsonUtils;
+import cn.iocoder.yudao.framework.security.core.service.SecurityFrameworkService;
 import cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils;
+import cn.iocoder.yudao.module.system.enums.permission.RoleCodeEnum;
 import cn.iocoder.yudao.module.kb.dal.dataobject.levelconfig.LevelConfigDO;
 import cn.iocoder.yudao.module.kb.dal.dataobject.userdept.KbUserDeptDO;
 import cn.iocoder.yudao.module.kb.dal.mysql.levelconfig.LevelConfigMapper;
@@ -39,6 +41,7 @@ public class CategoryServiceImpl implements CategoryService {
     private final CategoryMapper categoryMapper;
     private final LevelConfigMapper levelConfigMapper;
     private final KbUserDeptService kbUserDeptService;
+    private final SecurityFrameworkService securityFrameworkService;
 
     @Override
     public List<CategoryDO> listCategoriesForUser(Long userDeptId) {
@@ -58,6 +61,13 @@ public class CategoryServiceImpl implements CategoryService {
         }
 
         List<CategoryDO> all = categoryMapper.selectList();
+
+        // 超级管理员/租户管理员 → 跳过 deptScope 过滤，可见所有分类
+        if (securityFrameworkService.hasAnyRoles(
+                RoleCodeEnum.SUPER_ADMIN.getCode(),
+                RoleCodeEnum.TENANT_ADMIN.getCode())) {
+            return all;
+        }
 
         // 加载层级配置
         Map<Long, LevelConfigDO> configMap = levelConfigMapper.selectList()
@@ -80,7 +90,13 @@ public class CategoryServiceImpl implements CategoryService {
                     if (StrUtil.isBlank(deptScope)) return true;
 
                     // dept_scope 有值 → 用户任一部门（含祖先部门）在允许列表里即可
-                    List<Long> allowDeptIds = JsonUtils.parseArray(deptScope, Long.class);
+                    // 兼容两种格式：JSON 数组 "[1,2]" 或纯数字 "123"
+                    List<Long> allowDeptIds;
+                    if (deptScope.trim().startsWith("[")) {
+                        allowDeptIds = JsonUtils.parseArray(deptScope, Long.class);
+                    } else {
+                        allowDeptIds = Collections.singletonList(Long.parseLong(deptScope.trim()));
+                    }
                     return allowDeptIds.stream().anyMatch(visibleDeptIds::contains);
                 })
                 .collect(Collectors.toList());

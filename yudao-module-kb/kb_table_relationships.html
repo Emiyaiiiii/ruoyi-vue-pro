@@ -1,0 +1,192 @@
+<style>
+:root {
+  color-scheme: light;
+  --surface: #F7F7F8;
+  --surface-muted: #EFEFF2;
+  --text: #171717;
+  --text-muted: #52525B;
+  --border: rgba(23, 23, 23, 0.12);
+  --brand: #4B3FE3;
+  --brand-soft: #F2F7FF;
+  --brand-soft-strong: #E5EAFF;
+  --brand-text: #1A1759;
+  --brand-on: #FFFFFF;
+  --chart-series-1: #3C2ECA;
+  --chart-series-2: #A9AEFF;
+  --chart-series-3: #6F6FFF;
+  --chart-series-4: #22A5F7;
+  --chart-other: #D3D4DA;
+  --accent: #27D2BF;
+  --accent-2: #F87454;
+  --accent-soft: #EAFBF8;
+  --accent-text: #0F766E;
+  --success: #1DC981;
+  --warning: #EFAA17;
+  --danger: #E8463A;
+  --radius: 8px;
+  --radius-card: 12px;
+  --radius-full: 999px;
+  --spacer-4: 4px;
+  --spacer-8: 8px;
+  --spacer-12: 12px;
+  --spacer-16: 16px;
+  --spacer-20: 20px;
+  --spacer-24: 24px;
+  --font-sans: "SF Pro Text", "PingFang SC", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-metric: "Inter", "SF Pro Text", "PingFang SC", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-strong: 600;
+  --text-caption: 12px/18px;
+  --text-body: 14px/20px;
+  --text-title: 16px/24px;
+  --text-code: 13px/20px;
+}
+:root[data-widget-theme="dark"] {
+  color-scheme: dark;
+  --surface: #171717;
+  --surface-muted: #262626;
+  --text: #E5E5E5;
+  --text-muted: #A1A1AA;
+  --border: rgba(229, 229, 229, 0.12);
+  --brand: #6054F1;
+  --brand-soft: #1A1759;
+  --brand-soft-strong: #3C2ECA;
+  --brand-text: #CFD8FF;
+  --chart-series-1: #4B3FE3;
+}
+.t { fill: var(--text); font: var(--weight-regular) var(--text-body) var(--font-sans); }
+.th { fill: var(--text); font: var(--weight-medium) var(--text-body) var(--font-sans); }
+.ts { fill: var(--text-muted); font: var(--weight-regular) var(--text-caption) var(--font-sans); }
+.tc { fill: var(--text-muted); font: var(--weight-medium) var(--text-code) var(--font-mono); }
+.arr { stroke: var(--text-muted); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; fill: none; }
+.arr-brand { stroke: var(--brand); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; fill: none; }
+.arr-light { stroke: var(--border); stroke-width: 1.2; stroke-linecap: round; stroke-linejoin: round; fill: none; stroke-dasharray: 5 4; }
+g.c-neutral > rect, rect.c-neutral { fill: var(--surface); stroke: var(--border); }
+g.c-brand > rect, rect.c-brand { fill: var(--brand-soft); stroke: var(--brand); }
+.c-brand > .th, .c-brand > .t { fill: var(--brand-text); }
+.c-brand > .ts { fill: var(--brand); }
+g.c-accent > rect, rect.c-accent { fill: var(--accent-soft); stroke: var(--accent); }
+.c-accent > .th, .c-accent > .t { fill: var(--accent-text); }
+.c-accent > .ts { fill: var(--accent); }
+</style>
+
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 620" width="100%" height="auto">
+  <defs>
+    <marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
+      <path d="M1 1 L7 4 L1 7 Z" fill="var(--text-muted)"/>
+    </marker>
+    <marker id="arrow-brand" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
+      <path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/>
+    </marker>
+    <marker id="arrow-light" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
+      <path d="M1 1 L7 4 L1 7 Z" fill="var(--border)"/>
+    </marker>
+  </defs>
+
+  <!-- Title -->
+  <text x="360" y="28" text-anchor="middle" class="th" font-weight="600">知识库模块 — 表关系图</text>
+
+  <!-- === Layer 1: Config (y=55) === -->
+  <g class="c-brand">
+    <rect x="250" y="50" width="220" height="60" rx="8"/>
+    <text x="360" y="75" text-anchor="middle" class="th">kb_level_config</text>
+    <text x="360" y="95" text-anchor="middle" class="ts">层级配置 · visibilityRule / ownerDim / deptScope</text>
+  </g>
+
+  <!-- === Layer 2: Structure (y=150) === -->
+  <g class="c-neutral">
+    <rect x="80" y="150" width="200" height="60" rx="8"/>
+    <text x="180" y="175" text-anchor="middle" class="th">kb_category</text>
+    <text x="180" y="195" text-anchor="middle" class="ts">分类 · kb_level_id / parent_id</text>
+  </g>
+  <g class="c-neutral">
+    <rect x="440" y="150" width="200" height="60" rx="8"/>
+    <text x="540" y="175" text-anchor="middle" class="th">kb_user_dept</text>
+    <text x="540" y="195" text-anchor="middle" class="ts">用户-部门 · userId / deptId / role</text>
+  </g>
+
+  <!-- === Layer 3: Core (y=260) === -->
+  <g class="c-brand">
+    <rect x="220" y="260" width="280" height="70" rx="10"/>
+    <text x="360" y="287" text-anchor="middle" class="th">kb_library</text>
+    <text x="360" y="310" text-anchor="middle" class="ts">知识库 · category_id / kb_level_id / owner_id / isProject / isPublic</text>
+  </g>
+
+  <!-- === Layer 4: Associations (y=380) === -->
+  <g class="c-neutral">
+    <rect x="50" y="380" width="180" height="55" rx="8"/>
+    <text x="140" y="403" text-anchor="middle" class="th">kb_share_dept</text>
+    <text x="140" y="421" text-anchor="middle" class="ts">共享部门 · kb_id / dept_id</text>
+  </g>
+  <g class="c-neutral">
+    <rect x="270" y="380" width="180" height="55" rx="8"/>
+    <text x="360" y="403" text-anchor="middle" class="th">kb_project_member</text>
+    <text x="360" y="421" text-anchor="middle" class="ts">项目成员 · kb_id / user_id</text>
+  </g>
+  <g class="c-neutral">
+    <rect x="490" y="380" width="180" height="55" rx="8"/>
+    <text x="580" y="403" text-anchor="middle" class="th">kb_follow</text>
+    <text x="580" y="421" text-anchor="middle" class="ts">关注 · kb_id / user_id</text>
+  </g>
+
+  <!-- === Layer 5: Content (y=480) === -->
+  <g class="c-neutral">
+    <rect x="130" y="480" width="180" height="55" rx="8"/>
+    <text x="220" y="503" text-anchor="middle" class="th">kb_folder</text>
+    <text x="220" y="521" text-anchor="middle" class="ts">文件夹 · kb_id / parent_id</text>
+  </g>
+  <g class="c-neutral">
+    <rect x="410" y="480" width="180" height="55" rx="8"/>
+    <text x="500" y="503" text-anchor="middle" class="th">kb_document</text>
+    <text x="500" y="521" text-anchor="middle" class="ts">文档 · kb_id / folder_id</text>
+  </g>
+
+  <!-- === Connectors === -->
+  <!-- level_config → category -->
+  <path d="M 310 110 L 310 130 L 180 130 L 180 150" class="arr-brand" marker-end="url(#arrow-brand)"/>
+  <text x="305" y="120" class="ts" text-anchor="end">kb_level_id</text>
+
+  <!-- level_config → library -->
+  <path d="M 360 110 L 360 260" class="arr-brand" marker-end="url(#arrow-brand)"/>
+  <text x="370" y="190" class="ts">kb_level_id</text>
+
+  <!-- category → library -->
+  <path d="M 220 210 L 220 235 L 290 235 L 290 260" class="arr" marker-end="url(#arrow)"/>
+  <text x="235" y="248" class="ts">category_id</text>
+
+  <!-- library → share_dept -->
+  <path d="M 250 330 L 250 355 L 140 355 L 140 380" class="arr" marker-end="url(#arrow)"/>
+  <text x="155" y="368" class="ts">kb_id</text>
+
+  <!-- library → project_member -->
+  <path d="M 360 330 L 360 380" class="arr" marker-end="url(#arrow)"/>
+  <text x="370" y="358" class="ts">kb_id</text>
+
+  <!-- library → follow -->
+  <path d="M 470 330 L 470 355 L 580 355 L 580 380" class="arr" marker-end="url(#arrow)"/>
+  <text x="565" y="368" class="ts">kb_id</text>
+
+  <!-- library → folder -->
+  <path d="M 330 330 L 330 355 L 220 355 L 220 480" class="arr" marker-end="url(#arrow)"/>
+  <text x="190" y="420" class="ts">kb_id</text>
+
+  <!-- library → document -->
+  <path d="M 410 330 L 410 405 L 500 405 L 500 480" class="arr" marker-end="url(#arrow)"/>
+  <text x="510" y="445" class="ts">kb_id</text>
+
+  <!-- folder → document -->
+  <path d="M 310 507 L 410 507" class="arr-light" marker-end="url(#arrow-light)"/>
+  <text x="360" y="500" class="ts" text-anchor="middle">folder_id</text>
+
+  <!-- Legend -->
+  <rect x="50" y="570" width="12" height="12" rx="3" fill="var(--brand-soft)" stroke="var(--brand)" stroke-width="1.5"/>
+  <text x="68" y="581" class="ts">核心表</text>
+  <rect x="150" y="570" width="12" height="12" rx="3" fill="var(--surface)" stroke="var(--border)" stroke-width="1.5"/>
+  <text x="168" y="581" class="ts">关联表</text>
+  <line x1="270" y1="576" x2="300" y2="576" stroke="var(--brand)" stroke-width="1.8" marker-end="url(#arrow-brand)"/>
+  <text x="306" y="581" class="ts">主外键引用</text>
+  <line x1="410" y1="576" x2="440" y2="576" stroke="var(--text-muted)" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="446" y="581" class="ts">普通关联</text>
+</svg>

@@ -1,7 +1,9 @@
 package cn.iocoder.yudao.module.kb.controller.admin.userdept;
 
 import cn.iocoder.yudao.framework.common.pojo.CommonResult;
+import cn.iocoder.yudao.framework.common.pojo.PageResult;
 import cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils;
+import cn.iocoder.yudao.module.kb.controller.admin.userdept.vo.DeptMemberPageReqVO;
 import cn.iocoder.yudao.module.kb.controller.admin.userdept.vo.DeptMemberRespVO;
 import cn.iocoder.yudao.module.kb.service.userdept.KbUserDeptService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -83,6 +85,13 @@ public class KbUserDeptController {
     @PreAuthorize("@ss.hasPermission('kb:user-dept:query')")
     public CommonResult<List<DeptMemberRespVO>> listByDept(@RequestParam("deptId") Long deptId) {
         return success(kbUserDeptService.getByDeptId(deptId));
+    }
+
+    @GetMapping("/page")
+    @Operation(summary = "分页获取部门成员（支持包含子部门）")
+    @PreAuthorize("@ss.hasPermission('kb:user-dept:query')")
+    public CommonResult<PageResult<DeptMemberRespVO>> getDeptMemberPage(@Validated DeptMemberPageReqVO reqVO) {
+        return success(kbUserDeptService.getDeptMemberPage(reqVO));
     }
 
     @GetMapping("/my-admin-depts")
