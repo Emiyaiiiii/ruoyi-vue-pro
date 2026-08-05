@@ -22,7 +22,38 @@ public interface LibraryMapper extends BaseMapperX<LibraryDO> {
 
 
     default PageResult<LibraryDO> selectPage(LibraryPageReqVO reqVO) {
-        return selectPage(reqVO, new LambdaQueryWrapperX<LibraryDO>()
+        return selectPage(reqVO, buildBaseWrapper(reqVO));
+    }
+
+    /**
+     * 带可见性过滤的分页查询（将可见性条件下推到 SQL，避免先分页再过滤导致数据丢失）
+     * <p>
+     * 可见性条件由 VisibilityRuleEngine 生成，每个 Handler 贡献一个 SQL 条件片段，
+     * 最终以 OR 组合添加到 WHERE 子句。
+     *
+     * @param reqVO      分页查询参数
+     * @param conditions SQL 可见性条件列表（由 VisibilityRuleEngine.buildSqlConditions 生成）
+     */
+    default PageResult<LibraryDO> selectPageWithVisibility(
+            LibraryPageReqVO reqVO,
+            List<String> conditions) {
+
+        LambdaQueryWrapperX<LibraryDO> wrapper = buildBaseWrapper(reqVO);
+
+        // 将 OR 条件组合并添加到 wrapper
+        if (conditions != null && !conditions.isEmpty()) {
+            String combined = String.join(" OR ", conditions);
+            wrapper.apply("(" + combined + ")");
+        }
+
+        return selectPage(reqVO, wrapper);
+    }
+
+    /**
+     * 构建基础查询条件（不含可见性过滤）
+     */
+    default LambdaQueryWrapperX<LibraryDO> buildBaseWrapper(LibraryPageReqVO reqVO) {
+        return new LambdaQueryWrapperX<LibraryDO>()
                 .likeIfPresent(LibraryDO::getName, reqVO.getName())
                 .eqIfPresent(LibraryDO::getCategoryId, reqVO.getCategoryId())
                 .eqIfPresent(LibraryDO::getKbLevelId, reqVO.getKbLevelId())
@@ -34,7 +65,7 @@ public interface LibraryMapper extends BaseMapperX<LibraryDO> {
                 .eqIfPresent(LibraryDO::getIsPublic, reqVO.getIsPublic())
                 .eqIfPresent(LibraryDO::getIsProject, reqVO.getIsProject())
                 .betweenIfPresent(LibraryDO::getCreateTime, reqVO.getCreateTime())
-                .orderByDesc(LibraryDO::getId));
+                .orderByDesc(LibraryDO::getId);
     }
 
     /**
