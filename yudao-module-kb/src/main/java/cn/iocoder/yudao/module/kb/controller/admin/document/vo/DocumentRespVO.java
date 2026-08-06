@@ -68,6 +68,12 @@ public class DocumentRespVO {
     @ExcelProperty("状态: 0=正常, 1=禁用")
     private Integer status;
 
+    @Schema(description = "向量处理任务ID")
+    private String vectorTaskId;
+
+    @Schema(description = "向量处理状态：0-未处理 1-处理中 2-已完成 3-失败 4-提交失败 5-超时")
+    private Integer vectorStatus;
+
     @Schema(description = "创建时间")
     @ExcelProperty("创建时间")
     private LocalDateTime createTime;

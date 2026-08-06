@@ -143,6 +143,12 @@
 <!--            <version>${revision}</version>-->
 <!--        </dependency>-->
 
+        <!-- WebSocket 模块（向量任务状态推送需要） -->
+        <dependency>
+            <groupId>cn.iocoder.boot</groupId>
+            <artifactId>yudao-spring-boot-starter-websocket</artifactId>
+        </dependency>
+
         <!-- spring boot 配置所需依赖 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

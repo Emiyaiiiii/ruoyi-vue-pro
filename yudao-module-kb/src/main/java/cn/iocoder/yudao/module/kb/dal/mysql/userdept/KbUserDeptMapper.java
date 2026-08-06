@@ -85,7 +85,7 @@ public interface KbUserDeptMapper extends BaseMapperX<KbUserDeptDO> {
     @Select({
             "<script>",
             "SELECT DISTINCT u.id, u.nickname, u.dept_id",
-            "FROM system_user u",
+            "FROM system_users u",
             "LEFT JOIN kb_user_dept k ON u.id = k.user_id AND k.dept_id IN",
             "<foreach collection='deptIds' item='deptId' open='(' separator=',' close=')'>",
             "#{deptId}",

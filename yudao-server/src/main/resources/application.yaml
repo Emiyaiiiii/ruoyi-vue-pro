@@ -351,4 +351,16 @@ yudao:
     message-bus:
       type: redis # 消息总线的类型
 
+--- #################### 知识库相关配置 ####################
+kb:
+  vector:
+    python-service-url: http://localhost:8100
+    task-timeout-minutes: 30
+    # 通信超时配置
+    connect-timeout-ms: 5000
+    read-timeout-ms: 10000
+    # 重试配置
+    max-retries: 3
+    retry-delay-ms: 1000
+
 debug: false

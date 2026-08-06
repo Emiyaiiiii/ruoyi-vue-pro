@@ -78,6 +78,13 @@ public class DocumentDO extends BaseDO {
      * 状态: 0=正常, 1=禁用
      */
     private Integer status;
-
+    /**
+     * 向量处理任务ID（关联 kb_vector_task.task_id）
+     */
+    private String vectorTaskId;
+    /**
+     * 向量处理状态：0-未处理 1-处理中 2-已完成 3-失败 4-提交失败 5-超时
+     */
+    private Integer vectorStatus;
 
 }

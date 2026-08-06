@@ -34,4 +34,9 @@ public interface ErrorCodeConstants {
     ErrorCode FOLDER_EXITS_CHILDREN = new ErrorCode(14, "文件夹下存在子文件夹，无法删除");
     ErrorCode FOLDER_NAME_DUPLICATE = new ErrorCode(15, "同层级下已存在同名文件夹");
 
+    // ========== 向量处理任务 1-010-003-000 ==========
+    ErrorCode VECTOR_TASK_NOT_EXISTS = new ErrorCode(16, "向量处理任务不存在");
+    ErrorCode VECTOR_TASK_SUBMIT_FAILED = new ErrorCode(17, "向量处理任务提交失败");
+    ErrorCode VECTOR_TASK_CANCEL_FAILED = new ErrorCode(18, "向量处理任务取消失败");
+    ErrorCode VECTOR_TASK_ALREADY_FINISHED = new ErrorCode(19, "向量处理任务已结束，无法取消");
 }

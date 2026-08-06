@@ -3,8 +3,11 @@ package cn.iocoder.yudao.module.kb.service.document;
 import cn.iocoder.yudao.module.kb.dal.mysql.library.LibraryMapper;
 import cn.iocoder.yudao.module.infra.api.file.FileApi;
 import cn.iocoder.yudao.module.infra.api.file.FileUploadRespVO;
+import cn.iocoder.yudao.module.kb.controller.admin.vectortask.vo.VectorTaskSubmitReqVO;
+import cn.iocoder.yudao.module.kb.service.vectortask.VectorTaskService;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.StrUtil;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import javax.annotation.Resource;
@@ -30,6 +33,7 @@ import static cn.iocoder.yudao.module.kb.enums.ErrorCodeConstants.*;
  */
 @Service
 @Validated
+@Slf4j
 public class DocumentServiceImpl implements DocumentService {
 
     @Resource
@@ -40,6 +44,9 @@ public class DocumentServiceImpl implements DocumentService {
 
     @Resource
     private FileApi fileApi;
+
+    @Resource
+    private VectorTaskService vectorTaskService;
 
     @Override
     public Long createDocument(DocumentSaveReqVO createReqVO) {
@@ -154,6 +161,20 @@ public class DocumentServiceImpl implements DocumentService {
 
         // 4. 更新知识库的文档数量
         libraryMapper.updateDocCount(kbId, 1);
+
+        // 5. 自动触发向量处理任务
+        try {
+            VectorTaskSubmitReqVO taskReqVO = new VectorTaskSubmitReqVO();
+            taskReqVO.setDocId(document.getId());
+            taskReqVO.setKbId(kbId);
+            taskReqVO.setFileUrl(uploadResp.getUrl());
+            taskReqVO.setFileType(document.getFileType());
+            vectorTaskService.submitTask(taskReqVO);
+            log.info("[uploadAndCreate] 已触发向量处理任务: docId={}, taskId={}", document.getId());
+        } catch (Exception e) {
+            log.error("[uploadAndCreate] 触发向量处理任务失败: docId={}", document.getId(), e);
+            // 不抛出异常，避免影响文件上传主流程
+        }
 
         return document.getId();
     }
