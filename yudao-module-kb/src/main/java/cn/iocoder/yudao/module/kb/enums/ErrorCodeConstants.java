@@ -39,4 +39,11 @@ public interface ErrorCodeConstants {
     ErrorCode VECTOR_TASK_SUBMIT_FAILED = new ErrorCode(17, "向量处理任务提交失败");
     ErrorCode VECTOR_TASK_CANCEL_FAILED = new ErrorCode(18, "向量处理任务取消失败");
     ErrorCode VECTOR_TASK_ALREADY_FINISHED = new ErrorCode(19, "向量处理任务已结束，无法取消");
+
+    // ========== 大模型配置 1-010-004-000 ==========
+    ErrorCode MODEL_CONFIG_NOT_EXISTS = new ErrorCode(20, "大模型配置不存在");
+    ErrorCode MODEL_CONFIG_UID_EXISTS = new ErrorCode(21, "模型UID已存在");
+    ErrorCode MODEL_CONFIG_ALREADY_ACTIVE = new ErrorCode(22, "该配置已激活");
+    ErrorCode MODEL_CONFIG_ALREADY_INACTIVE = new ErrorCode(23, "该配置已停用");
+    ErrorCode MODEL_CONFIG_BATCH_ACTION_INVALID = new ErrorCode(24, "不支持的批量操作类型");
 }
