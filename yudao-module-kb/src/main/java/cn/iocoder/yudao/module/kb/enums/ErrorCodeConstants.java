@@ -46,4 +46,19 @@ public interface ErrorCodeConstants {
     ErrorCode MODEL_CONFIG_ALREADY_ACTIVE = new ErrorCode(22, "该配置已激活");
     ErrorCode MODEL_CONFIG_ALREADY_INACTIVE = new ErrorCode(23, "该配置已停用");
     ErrorCode MODEL_CONFIG_BATCH_ACTION_INVALID = new ErrorCode(24, "不支持的批量操作类型");
+
+    // ========== 切片方法 1-010-005-000 ==========
+    ErrorCode CHUNK_METHOD_NOT_EXISTS = new ErrorCode(25, "切片方法不存在");
+    ErrorCode CHUNK_METHOD_CODE_EXISTS = new ErrorCode(26, "方法代码已存在");
+    ErrorCode CHUNK_METHOD_DEFAULT_DELETE = new ErrorCode(27, "不能删除默认切片方法，请先设置其他方法为默认");
+    ErrorCode CHUNK_METHOD_IN_USE = new ErrorCode(28, "该切片方法正在被配置使用，无法删除");
+
+    // ========== RAG系统配置 1-010-006-000 ==========
+    ErrorCode RAG_CONFIG_NOT_EXISTS = new ErrorCode(29, "RAG配置不存在");
+    ErrorCode RAG_CONFIG_KEY_EXISTS = new ErrorCode(30, "该模块下配置键名已存在");
+    ErrorCode RAG_CONFIG_VALUE_TYPE_ERROR = new ErrorCode(31, "配置值类型不匹配");
+    ErrorCode RAG_CONFIG_MODULE_REQUIRED = new ErrorCode(32, "所属模块不能为空");
+    ErrorCode RAG_CONFIG_KEY_REQUIRED = new ErrorCode(33, "配置键名不能为空");
+    ErrorCode RAG_CONFIG_VALUE_REQUIRED = new ErrorCode(34, "配置值不能为空");
+    ErrorCode RAG_CONFIG_VALUE_TYPE_REQUIRED = new ErrorCode(35, "值类型不能为空");
 }
