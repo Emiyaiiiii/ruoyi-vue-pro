@@ -61,4 +61,14 @@ public interface ErrorCodeConstants {
     ErrorCode RAG_CONFIG_KEY_REQUIRED = new ErrorCode(33, "配置键名不能为空");
     ErrorCode RAG_CONFIG_VALUE_REQUIRED = new ErrorCode(34, "配置值不能为空");
     ErrorCode RAG_CONFIG_VALUE_TYPE_REQUIRED = new ErrorCode(35, "值类型不能为空");
+
+    // ========== 新闻管理 1-010-007-000 ==========
+    ErrorCode NEWS_SOURCE_NOT_EXISTS = new ErrorCode(36, "新闻数据源不存在");
+    ErrorCode NEWS_RECORD_NOT_EXISTS = new ErrorCode(37, "新闻记录不存在");
+    ErrorCode NEWS_SYNC_LOG_NOT_EXISTS = new ErrorCode(38, "新闻同步日志不存在");
+    ErrorCode NEWS_SOURCE_DB_CONNECT_FAILED = new ErrorCode(39, "外部数据库连接失败，请检查连接配置");
+    ErrorCode NEWS_SOURCE_DB_TABLE_NOT_FOUND = new ErrorCode(40, "外部表不存在，请检查表名和字段映射配置");
+    ErrorCode NEWS_SOURCE_FIELD_INVALID = new ErrorCode(41, "字段映射配置无效，请检查必填字段(ID/标题/内容)");
+    ErrorCode NEWS_SYNC_FAILED = new ErrorCode(42, "新闻数据同步失败");
+    ErrorCode NEWS_PARSE_NOT_IMPLEMENTED = new ErrorCode(43, "新闻解析功能暂未实现，敬请期待");
 }
