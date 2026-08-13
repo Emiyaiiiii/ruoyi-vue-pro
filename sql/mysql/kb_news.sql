@@ -32,6 +32,7 @@ CREATE TABLE `kb_news_source` (
     -- 同步配置
     `sync_enabled` BIT(1) NOT NULL DEFAULT b'1' COMMENT '是否启用同步: 0=停用, 1=启用',
     `sync_interval` INT DEFAULT 3600 COMMENT '同步间隔(秒)',
+    `db_dept` BIGINT DEFAULT NULL COMMENT '所属部门ID',
     `last_sync_time` DATETIME DEFAULT NULL COMMENT '上次同步时间',
     -- 统计字段
     `total_records` INT NOT NULL DEFAULT 0 COMMENT '同步总记录数',
@@ -70,6 +71,11 @@ CREATE TABLE `kb_news_record` (
     -- 错误追踪
     `error_message` TEXT DEFAULT NULL COMMENT '错误信息',
     `retry_count` INT NOT NULL DEFAULT 0 COMMENT '重试次数',
+    -- 关联文档信息（同步时回写）
+    `doc_id` BIGINT DEFAULT NULL COMMENT '关联文档ID',
+    `kb_id` BIGINT DEFAULT NULL COMMENT '关联知识库ID',
+    `file_url` VARCHAR(500) DEFAULT NULL COMMENT '文件访问URL',
+    `file_type` VARCHAR(20) DEFAULT NULL COMMENT '文件类型',
     -- 时间戳
     `last_processed_at` DATETIME DEFAULT NULL COMMENT '上次处理时间',
     `processed_at` DATETIME DEFAULT NULL COMMENT '处理完成时间',
@@ -224,3 +230,16 @@ VALUES ('新闻数据同步 Job', 1, 'newsSyncJob', NULL, '0 0 * * * ?', 3, 6000
 --
 -- 同步完成后，「新闻数据同步 Job」会在每小时整点自动执行，
 -- 也可以在管理后台点击「执行一次」手动触发。
+
+
+-- ============================================================
+-- 7. 增量升级：为已存在的 kb_news_source 表添加 db_dept 字段
+-- ============================================================
+-- 如果表已存在，执行此语句添加所属部门字段（先执行，若字段已存在则报错可忽略）
+ALTER TABLE `kb_news_source` ADD COLUMN `db_dept` BIGINT DEFAULT NULL COMMENT '所属部门ID' AFTER `sync_interval`;
+
+-- 为 kb_news_record 添加关联文档字段
+ALTER TABLE `kb_news_record` ADD COLUMN `doc_id` BIGINT DEFAULT NULL COMMENT '关联文档ID' AFTER `retry_count`;
+ALTER TABLE `kb_news_record` ADD COLUMN `kb_id` BIGINT DEFAULT NULL COMMENT '关联知识库ID' AFTER `doc_id`;
+ALTER TABLE `kb_news_record` ADD COLUMN `file_url` VARCHAR(500) DEFAULT NULL COMMENT '文件访问URL' AFTER `kb_id`;
+ALTER TABLE `kb_news_record` ADD COLUMN `file_type` VARCHAR(20) DEFAULT NULL COMMENT '文件类型' AFTER `file_url`;

@@ -75,6 +75,12 @@ public class NewsSourceRespVO {
     @ExcelProperty("同步间隔")
     private Integer syncInterval;
 
+    @Schema(description = "所属部门ID", example = "101")
+    private Long dbDept;
+
+    @Schema(description = "所属部门名称", example = "云河信息科技有限公司")
+    private String deptName;
+
     @Schema(description = "上次同步时间")
     @ExcelProperty("上次同步")
     private LocalDateTime lastSyncTime;

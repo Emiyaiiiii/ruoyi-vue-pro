@@ -75,6 +75,20 @@ public class NewsRecordRespVO {
     @ExcelProperty("重试")
     private Integer retryCount;
 
+    // ========== 关联文档信息（同步时回写） ==========
+
+    @Schema(description = "关联文档ID", example = "1001")
+    private Long docId;
+
+    @Schema(description = "关联知识库ID", example = "10")
+    private Long kbId;
+
+    @Schema(description = "文件访问URL", example = "http://file.example.com/doc/xxx.txt")
+    private String fileUrl;
+
+    @Schema(description = "文件类型", example = "txt")
+    private String fileType;
+
     // ========== 时间戳 ==========
 
     @Schema(description = "上次处理时间")

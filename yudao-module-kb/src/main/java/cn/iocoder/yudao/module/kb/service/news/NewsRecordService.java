@@ -42,4 +42,20 @@ public interface NewsRecordService {
      * 获取全局统计信息
      */
     Map<String, Long> getStats();
+
+    /**
+     * 单条解析：触发向量处理任务
+     *
+     * @param id 新闻记录ID
+     * @return 任务提交结果提示
+     */
+    String parseRecord(Long id);
+
+    /**
+     * 批量解析：批量触发向量处理任务
+     *
+     * @param ids 新闻记录ID列表
+     * @return 任务提交结果提示
+     */
+    String batchParse(List<Long> ids);
 }

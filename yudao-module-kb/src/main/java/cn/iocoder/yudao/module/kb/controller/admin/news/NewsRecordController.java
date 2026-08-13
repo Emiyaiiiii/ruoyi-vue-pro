@@ -104,20 +104,43 @@ public class NewsRecordController {
         return success(newsRecordService.getStats());
     }
 
-    // ========== 解析接口 — 暂未实现 ==========
+    // ========== 解析接口 ==========
 
     @PostMapping("/parse")
-    @Operation(summary = "单条解析（暂未实现）")
+    @Operation(summary = "单条解析：触发向量处理任务")
     @PreAuthorize("@ss.hasPermission('kb:news-record:batch')")
     public CommonResult<Map<String, Object>> parse(@RequestBody Map<String, Object> body) {
-        return success(buildNotImplementedResponse());
+        Long id = body.get("id") != null ? Long.valueOf(body.get("id").toString()) : null;
+        if (id == null) {
+            Map<String, Object> err = new LinkedHashMap<>();
+            err.put("message", "参数 id 不能为空");
+            return success(err);
+        }
+        String msg = newsRecordService.parseRecord(id);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("message", msg);
+        return success(result);
     }
 
     @PostMapping("/batch-parse")
-    @Operation(summary = "批量解析（暂未实现）")
+    @Operation(summary = "批量解析：批量触发向量处理任务")
     @PreAuthorize("@ss.hasPermission('kb:news-record:batch')")
     public CommonResult<Map<String, Object>> batchParse(@RequestBody Map<String, Object> body) {
-        return success(buildNotImplementedResponse());
+        @SuppressWarnings("unchecked")
+        List<Integer> idList = (List<Integer>) body.get("ids");
+        if (idList == null || idList.isEmpty()) {
+            Map<String, Object> err = new LinkedHashMap<>();
+            err.put("message", "参数 ids 不能为空");
+            return success(err);
+        }
+        List<Long> ids = new ArrayList<>();
+        for (Integer i : idList) {
+            ids.add(i.longValue());
+        }
+        String msg = newsRecordService.batchParse(ids);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("message", msg);
+        return success(result);
     }
 
     // ==================== 私有辅助 ====================
@@ -126,12 +149,5 @@ public class NewsRecordController {
         NewsRecordRespVO vo = BeanUtils.toBean(record, NewsRecordRespVO.class);
         vo.setStatusDisplay(record.getStatusDisplay());
         return vo;
-    }
-
-    private Map<String, Object> buildNotImplementedResponse() {
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("message", "新闻解析功能暂未实现，敬请期待");
-        result.put("notImplemented", true);
-        return result;
     }
 }

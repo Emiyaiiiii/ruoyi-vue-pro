@@ -19,6 +19,8 @@ import static cn.iocoder.yudao.framework.common.pojo.CommonResult.success;
 import cn.iocoder.yudao.module.kb.controller.admin.news.vo.*;
 import cn.iocoder.yudao.module.kb.dal.dataobject.news.NewsSourceDO;
 import cn.iocoder.yudao.module.kb.service.news.NewsSourceService;
+import cn.iocoder.yudao.module.system.api.dept.DeptApi;
+import cn.iocoder.yudao.module.system.api.dept.dto.DeptRespDTO;
 
 @Tag(name = "管理后台 - 新闻数据源")
 @RestController
@@ -28,6 +30,9 @@ public class NewsSourceController {
 
     @Resource
     private NewsSourceService newsSourceService;
+
+    @Resource
+    private DeptApi deptApi;
 
     @PostMapping("/create")
     @Operation(summary = "创建新闻数据源")
@@ -111,8 +116,13 @@ public class NewsSourceController {
 
     private NewsSourceRespVO convertToRespVO(NewsSourceDO source) {
         NewsSourceRespVO vo = BeanUtils.toBean(source, NewsSourceRespVO.class);
-        // 密码不返回
-        // 密码字段不在 RespVO 中，BeanUtils 自动跳过，无需手动隐藏
+        // 填充部门名称
+        if (source.getDbDept() != null) {
+            DeptRespDTO dept = deptApi.getDept(source.getDbDept());
+            if (dept != null) {
+                vo.setDeptName(dept.getName());
+            }
+        }
         return vo;
     }
 }

@@ -116,6 +116,11 @@ public class NewsSourceDO extends BaseDO {
     private Integer syncInterval;
 
     /**
+     * 所属部门ID
+     */
+    private Long dbDept;
+
+    /**
      * 上次同步时间
      */
     private LocalDateTime lastSyncTime;

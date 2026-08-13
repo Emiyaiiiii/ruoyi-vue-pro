@@ -17,6 +17,15 @@ import cn.iocoder.yudao.module.kb.controller.admin.document.vo.*;
 @Mapper
 public interface DocumentMapper extends BaseMapperX<DocumentDO> {
 
+    /**
+     * 按知识库ID + 文件名查找文档（用于去重）
+     */
+    default DocumentDO selectByKbIdAndFileName(Long kbId, String fileName) {
+        return selectOne(new LambdaQueryWrapperX<DocumentDO>()
+                .eq(DocumentDO::getKbId, kbId)
+                .eq(DocumentDO::getFileName, fileName));
+    }
+
     default PageResult<DocumentDO> selectPage(DocumentPageReqVO reqVO) {
         return selectPage(reqVO, new LambdaQueryWrapperX<DocumentDO>()
                 .eqIfPresent(DocumentDO::getKbId, reqVO.getKbId())

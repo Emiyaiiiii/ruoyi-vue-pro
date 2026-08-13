@@ -77,4 +77,7 @@ public class NewsSourceSaveReqVO {
     @Schema(description = "同步间隔(秒)", example = "3600")
     private Integer syncInterval;
 
+    @Schema(description = "所属部门ID", example = "101")
+    private Long dbDept;
+
 }

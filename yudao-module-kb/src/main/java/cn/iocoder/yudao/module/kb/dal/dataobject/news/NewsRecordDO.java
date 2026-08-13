@@ -95,6 +95,28 @@ public class NewsRecordDO extends BaseDO {
      */
     private Integer retryCount;
 
+    // ========== 关联文档信息（同步时回写） ==========
+
+    /**
+     * 关联文档ID
+     */
+    private Long docId;
+
+    /**
+     * 关联知识库ID
+     */
+    private Long kbId;
+
+    /**
+     * 文件访问URL
+     */
+    private String fileUrl;
+
+    /**
+     * 文件类型
+     */
+    private String fileType;
+
     // ========== 时间戳 ==========
 
     /**
