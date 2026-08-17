@@ -32,5 +32,5 @@ public class VectorTaskSubmitReqVO {
     private Integer chunkOverlap;
 
     @Schema(description = "Embedding模型", example = "text-embedding-3-small")
-    private String embeddingModel;
+    private String embeddingModel; 
 }

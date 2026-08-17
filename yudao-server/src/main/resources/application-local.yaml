@@ -283,3 +283,30 @@ justauth:
     type: REDIS
     prefix: 'social_auth_state:' # 缓存前缀，目前只对 Redis 缓存生效，默认 JUSTAUTH::STATE::
     timeout: 24h # 超时时长，目前只对 Redis 缓存生效，默认 3 分钟
+
+--- #################### 知识库相关配置 ####################
+yudao:
+  kb:
+    vector:
+      python-service-url: http://localhost:8100
+      task-timeout-minutes: 30
+      # 通信超时配置
+      connect-timeout-ms: 5000
+      read-timeout-ms: 10000
+      # 重试配置
+      max-retries: 3
+      retry-delay-ms: 1000
+
+--- #################### QwenPaw 智能体服务配置 ####################
+yudao:
+  ai:
+    qwenpaw:
+      # QwenPaw 服务地址（Docker 默认端口 8088）
+      base-url: http://127.0.0.1:8088
+      # 是否启用鉴权（QwenPaw 默认关闭）
+      auth-enabled: false
+      # 默认模型
+      default-model: qwen3-coder-flash
+      # 超时配置
+      connect-timeout: 3000
+      read-timeout: 30000
