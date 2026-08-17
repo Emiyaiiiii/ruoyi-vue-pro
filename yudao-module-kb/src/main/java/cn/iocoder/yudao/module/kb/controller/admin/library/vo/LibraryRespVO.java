@@ -60,6 +60,13 @@ public class LibraryRespVO {
     @ExcelProperty("创建时间")
     private LocalDateTime createTime;
 
+    @Schema(description = "创建人")
+    @ExcelProperty("创建人")
+    private String creator;
+
+    @Schema(description = "自定义字段值(key=字段key, value=字段值字符串；成员多选为 JSON 数组字符串)")
+    private Map<String, String> extValues;
+
     @Schema(description = "共享部门ID列表")
     private List<Long> shareDeptIds;
 

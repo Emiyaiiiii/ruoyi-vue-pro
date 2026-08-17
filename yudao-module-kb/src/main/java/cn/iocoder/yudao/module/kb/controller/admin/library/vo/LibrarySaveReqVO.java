@@ -47,4 +47,7 @@ public class LibrarySaveReqVO {
     @Schema(description = "是否项目成果库: 0=否, 1=是")
     private Integer isProject;
 
+    @Schema(description = "自定义字段值(key=字段key, value=字段值字符串；成员多选为 JSON 数组字符串)")
+    private Map<String, String> extValues;
+
 }

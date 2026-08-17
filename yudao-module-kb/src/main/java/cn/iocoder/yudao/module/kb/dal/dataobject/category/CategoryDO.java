@@ -48,6 +48,10 @@ public class CategoryDO extends BaseDO {
      * 状态: 0=启用, 1=禁用
      */
     private Integer status;
+    /**
+     * 表头配置(JSON): 该分类下文件列表的动态表头，如 [{"key":"name","label":"名称","visible":true},...]
+     */
+    private String columnConfig;
 
 
 }

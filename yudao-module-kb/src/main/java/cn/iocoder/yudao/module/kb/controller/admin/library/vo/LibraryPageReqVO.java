@@ -43,6 +43,12 @@ public class LibraryPageReqVO extends PageParam {
     @Schema(description = "是否项目成果库: 0=否, 1=是", example = "0")
     private Integer isProject;
 
+    @Schema(description = "排序字段：name / docCount / createTime", example = "createTime")
+    private String sortField;
+
+    @Schema(description = "排序方式：ascending=升序, descending=降序", example = "descending")
+    private String sortOrder;
+
     @Schema(description = "创建时间")
     @DateTimeFormat(pattern = FORMAT_YEAR_MONTH_DAY_HOUR_MINUTE_SECOND)
     private LocalDateTime[] createTime;

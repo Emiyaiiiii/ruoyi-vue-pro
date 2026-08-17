@@ -12,6 +12,7 @@ import javax.validation.constraints.*;
 import javax.validation.*;
 import javax.servlet.http.*;
 import java.util.*;
+import java.util.stream.Collectors;
 import java.io.IOException;
 
 import cn.iocoder.yudao.framework.common.pojo.PageParam;
@@ -31,6 +32,7 @@ import static cn.iocoder.yudao.framework.apilog.core.enums.OperateTypeEnum.*;
 import cn.iocoder.yudao.module.kb.controller.admin.library.vo.*;
 import cn.iocoder.yudao.module.kb.dal.dataobject.library.LibraryDO;
 import cn.iocoder.yudao.module.kb.service.library.LibraryService;
+import cn.iocoder.yudao.module.kb.service.libraryext.LibraryExtService;
 import cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils;
 
 @Tag(name = "管理后台 - 知识库")
@@ -41,6 +43,9 @@ public class LibraryController {
 
     @Resource
     private LibraryService libraryService;
+
+    @Resource
+    private LibraryExtService libraryExtService;
 
     @PostMapping("/create")
     @Operation(summary = "创建知识库")
@@ -81,7 +86,9 @@ public class LibraryController {
     @PreAuthorize("@ss.hasPermission('kb:library:query')")
     public CommonResult<LibraryRespVO> getLibrary(@RequestParam("id") Long id) {
         LibraryDO library = libraryService.getLibrary(id);
-        return success(BeanUtils.toBean(library, LibraryRespVO.class));
+        LibraryRespVO respVO = BeanUtils.toBean(library, LibraryRespVO.class);
+        respVO.setExtValues(libraryExtService.getExtValues(id));
+        return success(respVO);
     }
 
     @GetMapping("/page")
@@ -90,7 +97,12 @@ public class LibraryController {
     public CommonResult<PageResult<LibraryRespVO>> getLibraryPage(@Valid LibraryPageReqVO pageReqVO) {
         // 分页查询，Service 层会根据用户角色做可见性过滤（非超管只能看到自己有权限的知识库）
         PageResult<LibraryDO> pageResult = libraryService.getLibraryPage(pageReqVO);
-        return success(BeanUtils.toBean(pageResult, LibraryRespVO.class));
+        PageResult<LibraryRespVO> result = BeanUtils.toBean(pageResult, LibraryRespVO.class);
+        // 附带自定义字段值
+        List<Long> kbIds = result.getList().stream().map(LibraryRespVO::getId).collect(Collectors.toList());
+        Map<Long, Map<String, String>> extMap = libraryExtService.getExtValuesMap(kbIds);
+        result.getList().forEach(vo -> vo.setExtValues(extMap.get(vo.getId())));
+        return success(result);
     }
 
     @GetMapping("/export-excel")
