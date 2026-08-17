@@ -3,7 +3,7 @@ package cn.iocoder.yudao.module.mes.controller.admin.dv.checkplan.vo.machinery;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
-import javax.validation.constraints.NotNull;
+import jakarta.validation.constraints.NotNull;
 
 @Schema(description = "管理后台 - MES 点检保养方案设备新增 Request VO")
 @Data

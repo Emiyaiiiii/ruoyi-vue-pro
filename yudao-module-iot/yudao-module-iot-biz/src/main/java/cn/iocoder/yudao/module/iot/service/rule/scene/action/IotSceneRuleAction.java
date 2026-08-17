@@ -4,7 +4,7 @@ import cn.iocoder.yudao.module.iot.core.mq.message.IotDeviceMessage;
 import cn.iocoder.yudao.module.iot.dal.dataobject.rule.IotSceneRuleDO;
 import cn.iocoder.yudao.module.iot.enums.rule.IotSceneRuleActionTypeEnum;
 
-import javax.annotation.Nullable;
+import jakarta.annotation.Nullable;
 
 /**
  * IoT 场景联动的执行器接口

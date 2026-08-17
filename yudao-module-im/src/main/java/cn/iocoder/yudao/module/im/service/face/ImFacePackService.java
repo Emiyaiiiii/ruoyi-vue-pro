@@ -5,7 +5,7 @@ import cn.iocoder.yudao.module.im.controller.admin.manager.face.vo.pack.ImFacePa
 import cn.iocoder.yudao.module.im.controller.admin.manager.face.vo.pack.ImFacePackSaveReqVO;
 import cn.iocoder.yudao.module.im.dal.dataobject.face.ImFacePackDO;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 import java.util.List;
 
 /**

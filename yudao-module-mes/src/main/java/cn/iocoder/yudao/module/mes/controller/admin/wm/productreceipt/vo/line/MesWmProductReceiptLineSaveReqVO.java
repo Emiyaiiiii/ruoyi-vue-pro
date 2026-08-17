@@ -3,8 +3,8 @@ package cn.iocoder.yudao.module.mes.controller.admin.wm.productreceipt.vo.line;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
-import javax.validation.constraints.NotNull;
-import javax.validation.constraints.Positive;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import java.math.BigDecimal;
 
 @Schema(description = "管理后台 - MES 产品入库单行新增/修改 Request VO")

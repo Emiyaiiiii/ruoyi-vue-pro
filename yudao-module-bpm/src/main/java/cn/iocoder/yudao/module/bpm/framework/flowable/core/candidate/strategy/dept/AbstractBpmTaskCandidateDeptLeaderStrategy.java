@@ -8,7 +8,7 @@ import cn.iocoder.yudao.module.system.api.dept.dto.DeptRespDTO;
 import cn.iocoder.yudao.module.system.api.user.AdminUserApi;
 import cn.iocoder.yudao.module.system.api.user.dto.AdminUserRespDTO;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;

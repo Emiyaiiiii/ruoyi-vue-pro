@@ -6,7 +6,7 @@ import cn.iocoder.yudao.module.erp.controller.admin.purchase.vo.order.ErpPurchas
 import cn.iocoder.yudao.module.erp.dal.dataobject.purchase.ErpPurchaseOrderDO;
 import cn.iocoder.yudao.module.erp.dal.dataobject.purchase.ErpPurchaseOrderItemDO;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.List;

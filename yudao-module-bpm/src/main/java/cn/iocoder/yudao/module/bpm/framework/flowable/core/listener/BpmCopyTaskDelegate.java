@@ -9,7 +9,7 @@ import org.flowable.engine.delegate.DelegateExecution;
 import org.flowable.engine.delegate.JavaDelegate;
 import org.springframework.stereotype.Component;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 import java.util.Set;
 
 import static cn.iocoder.yudao.module.bpm.framework.flowable.core.listener.BpmCopyTaskDelegate.BEAN_NAME;

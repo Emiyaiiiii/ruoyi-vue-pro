@@ -6,7 +6,7 @@ import cn.iocoder.yudao.module.mes.controller.admin.pro.andon.vo.record.MesProAn
 import cn.iocoder.yudao.module.mes.controller.admin.pro.andon.vo.record.MesProAndonRecordUpdateReqVO;
 import cn.iocoder.yudao.module.mes.dal.dataobject.pro.andon.MesProAndonRecordDO;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 
 /**
  * MES 安灯呼叫记录 Service 接口

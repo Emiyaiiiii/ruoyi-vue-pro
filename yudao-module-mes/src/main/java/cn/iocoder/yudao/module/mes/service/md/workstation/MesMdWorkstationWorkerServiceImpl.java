@@ -9,7 +9,7 @@ import cn.iocoder.yudao.module.system.api.dept.PostApi;
 import org.springframework.stereotype.Service;
 import org.springframework.validation.annotation.Validated;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 import java.util.Collections;
 import java.util.List;
 

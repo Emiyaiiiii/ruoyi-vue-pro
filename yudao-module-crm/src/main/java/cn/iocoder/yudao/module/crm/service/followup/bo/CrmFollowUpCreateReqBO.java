@@ -6,8 +6,8 @@ import cn.iocoder.yudao.module.crm.enums.DictTypeConstants;
 import cn.iocoder.yudao.module.crm.enums.common.CrmBizTypeEnum;
 import lombok.Data;
 
-import javax.validation.constraints.NotEmpty;
-import javax.validation.constraints.NotNull;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
 import java.time.LocalDateTime;
 import java.util.List;
 

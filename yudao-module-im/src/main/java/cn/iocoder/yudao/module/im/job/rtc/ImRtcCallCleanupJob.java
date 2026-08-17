@@ -9,7 +9,7 @@ import cn.iocoder.yudao.module.im.service.rtc.ImRtcCallService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 
 /**
  * 僵尸通话清理 Job：兜底 LiveKit Webhook 丢失 / 客户端异常关闭等未调 leave 的场景

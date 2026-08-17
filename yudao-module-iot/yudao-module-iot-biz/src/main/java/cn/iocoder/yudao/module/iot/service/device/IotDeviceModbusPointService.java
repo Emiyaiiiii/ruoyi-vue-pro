@@ -5,7 +5,7 @@ import cn.iocoder.yudao.module.iot.controller.admin.device.vo.modbus.IotDeviceMo
 import cn.iocoder.yudao.module.iot.controller.admin.device.vo.modbus.IotDeviceModbusPointSaveReqVO;
 import cn.iocoder.yudao.module.iot.dal.dataobject.device.IotDeviceModbusPointDO;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;

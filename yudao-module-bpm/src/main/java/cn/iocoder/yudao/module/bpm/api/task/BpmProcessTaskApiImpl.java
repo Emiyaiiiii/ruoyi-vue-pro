@@ -4,7 +4,7 @@ import cn.iocoder.yudao.module.bpm.service.task.BpmTaskService;
 import org.springframework.stereotype.Service;
 import org.springframework.validation.annotation.Validated;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 
 /**
  * 流程任务 Api 实现类

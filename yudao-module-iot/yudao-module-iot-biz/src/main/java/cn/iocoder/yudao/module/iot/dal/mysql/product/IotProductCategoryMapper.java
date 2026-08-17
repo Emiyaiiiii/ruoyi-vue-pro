@@ -7,7 +7,7 @@ import cn.iocoder.yudao.module.iot.controller.admin.product.vo.category.IotProdu
 import cn.iocoder.yudao.module.iot.dal.dataobject.product.IotProductCategoryDO;
 import org.apache.ibatis.annotations.Mapper;
 
-import javax.annotation.Nullable;
+import jakarta.annotation.Nullable;
 import java.time.LocalDateTime;
 import java.util.List;
 

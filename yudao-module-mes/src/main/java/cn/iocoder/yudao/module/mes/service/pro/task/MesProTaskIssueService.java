@@ -5,7 +5,7 @@ import cn.iocoder.yudao.module.mes.controller.admin.pro.task.vo.MesProTaskIssueP
 import cn.iocoder.yudao.module.mes.controller.admin.pro.task.vo.MesProTaskIssueSaveReqVO;
 import cn.iocoder.yudao.module.mes.dal.dataobject.pro.task.MesProTaskIssueDO;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 import java.util.List;
 
 /**

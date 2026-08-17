@@ -5,7 +5,7 @@ import cn.iocoder.yudao.module.mes.controller.admin.wm.productreceipt.vo.MesWmPr
 import cn.iocoder.yudao.module.mes.controller.admin.wm.productreceipt.vo.MesWmProductReceiptSaveReqVO;
 import cn.iocoder.yudao.module.mes.dal.dataobject.wm.productreceipt.MesWmProductReceiptDO;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 
 /**
  * MES 产品收货单 Service 接口

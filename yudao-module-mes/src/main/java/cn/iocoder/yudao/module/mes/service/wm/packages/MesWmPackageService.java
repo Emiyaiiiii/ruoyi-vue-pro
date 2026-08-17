@@ -5,7 +5,7 @@ import cn.iocoder.yudao.module.mes.controller.admin.wm.packages.vo.MesWmPackageP
 import cn.iocoder.yudao.module.mes.controller.admin.wm.packages.vo.MesWmPackageSaveReqVO;
 import cn.iocoder.yudao.module.mes.dal.dataobject.wm.packages.MesWmPackageDO;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 import java.util.List;
 
 /**

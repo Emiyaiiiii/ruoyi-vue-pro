@@ -14,7 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 import java.math.BigDecimal;
 
 import static cn.iocoder.yudao.framework.test.core.util.AssertUtils.assertServiceException;

@@ -11,7 +11,8 @@ import io.swagger.v3.oas.models.media.StringSchema;
 import io.swagger.v3.oas.models.parameters.Parameter;
 import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
-import org.springdoc.core.*;
+import org.springdoc.core.models.GroupedOpenApi;
+import org.springdoc.core.properties.SpringDocConfigProperties;
 import org.springdoc.core.customizers.OpenApiBuilderCustomizer;
 import org.springdoc.core.customizers.OperationCustomizer;
 import org.springdoc.core.customizers.ServerBaseUrlCustomizer;
@@ -86,22 +87,6 @@ public class YudaoSwaggerAutoConfiguration {
                 .in(SecurityScheme.In.HEADER); // token 所在位置
         securitySchemes.put(HttpHeaders.AUTHORIZATION, securityScheme);
         return securitySchemes;
-    }
-
-    /**
-     * 自定义 OpenAPI 处理器
-     */
-    @Bean
-    @Primary // 目的：以我们创建的 OpenAPIService Bean 为主，避免一键改包后，启动报错！
-    public OpenAPIService openApiBuilder(Optional<OpenAPI> openAPI,
-                                         SecurityService securityParser,
-                                         SpringDocConfigProperties springDocConfigProperties,
-                                         PropertyResolverUtils propertyResolverUtils,
-                                         Optional<List<OpenApiBuilderCustomizer>> openApiBuilderCustomizers,
-                                         Optional<List<ServerBaseUrlCustomizer>> serverBaseUrlCustomizers,
-                                         Optional<JavadocProvider> javadocProvider) {
-        return new OpenAPIService(openAPI, securityParser, springDocConfigProperties,
-                propertyResolverUtils, openApiBuilderCustomizers, serverBaseUrlCustomizers, javadocProvider);
     }
 
     // ========== 分组 OpenAPI 配置 ==========

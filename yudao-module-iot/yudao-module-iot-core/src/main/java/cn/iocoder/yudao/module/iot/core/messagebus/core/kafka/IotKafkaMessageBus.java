@@ -18,7 +18,7 @@ import org.springframework.kafka.listener.AcknowledgingMessageListener;
 import org.springframework.kafka.listener.ConcurrentMessageListenerContainer;
 import org.springframework.kafka.listener.ContainerProperties;
 
-import javax.annotation.PreDestroy;
+import jakarta.annotation.PreDestroy;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.HashMap;

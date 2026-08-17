@@ -3,8 +3,8 @@ package cn.iocoder.yudao.module.mes.controller.admin.wm.outsourceissue.vo;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
-import javax.validation.constraints.NotEmpty;
-import javax.validation.constraints.NotNull;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
 import java.time.LocalDateTime;
 
 @Schema(description = "管理后台 - MES 外协发料单新增/修改 Request VO")

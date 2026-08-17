@@ -4,7 +4,7 @@ import cn.iocoder.yudao.module.iot.controller.admin.device.vo.modbus.IotDeviceMo
 import cn.iocoder.yudao.module.iot.core.biz.dto.IotModbusDeviceConfigListReqDTO;
 import cn.iocoder.yudao.module.iot.dal.dataobject.device.IotDeviceModbusConfigDO;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 import java.util.List;
 
 /**

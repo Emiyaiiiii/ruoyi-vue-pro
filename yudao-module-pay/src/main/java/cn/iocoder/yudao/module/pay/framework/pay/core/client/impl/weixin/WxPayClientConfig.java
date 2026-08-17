@@ -4,8 +4,8 @@ import cn.iocoder.yudao.framework.common.util.validation.ValidationUtils;
 import cn.iocoder.yudao.module.pay.framework.pay.core.client.PayClientConfig;
 import lombok.Data;
 
-import javax.validation.Validator;
-import javax.validation.constraints.NotBlank;
+import jakarta.validation.Validator;
+import jakarta.validation.constraints.NotBlank;
 
 /**
  * 微信支付的 PayClientConfig 实现类

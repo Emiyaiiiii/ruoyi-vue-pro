@@ -3,7 +3,7 @@ package cn.iocoder.yudao.module.im.controller.admin.group.vo;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
-import javax.validation.constraints.NotNull;
+import jakarta.validation.constraints.NotNull;
 
 /**
  * 管理后台 - 群消息置顶 / 取消置顶 Request VO

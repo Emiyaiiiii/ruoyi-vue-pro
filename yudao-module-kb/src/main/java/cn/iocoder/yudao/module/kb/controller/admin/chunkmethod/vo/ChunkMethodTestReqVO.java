@@ -2,7 +2,7 @@ package cn.iocoder.yudao.module.kb.controller.admin.chunkmethod.vo;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.*;
-import javax.validation.constraints.*;
+import jakarta.validation.constraints.*;
 
 @Schema(description = "管理后台 - 切片方法测试 Request VO")
 @Data

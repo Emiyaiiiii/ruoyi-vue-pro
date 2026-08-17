@@ -5,7 +5,7 @@ import cn.iocoder.yudao.module.im.controller.admin.face.vo.useritem.ImFaceUserIt
 import cn.iocoder.yudao.module.im.controller.admin.manager.face.vo.useritem.ImFaceUserItemManagerPageReqVO;
 import cn.iocoder.yudao.module.im.dal.dataobject.face.ImFaceUserItemDO;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 import java.util.List;
 
 /**

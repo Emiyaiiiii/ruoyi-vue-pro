@@ -5,7 +5,7 @@ import cn.iocoder.yudao.module.mes.controller.admin.wm.miscissue.vo.MesWmMiscIss
 import cn.iocoder.yudao.module.mes.controller.admin.wm.miscissue.vo.MesWmMiscIssueSaveReqVO;
 import cn.iocoder.yudao.module.mes.dal.dataobject.wm.miscissue.MesWmMiscIssueDO;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 
 /**
  * MES 杂项出库单 Service 接口

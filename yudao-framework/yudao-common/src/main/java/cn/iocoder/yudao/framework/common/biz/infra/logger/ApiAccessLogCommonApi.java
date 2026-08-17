@@ -3,7 +3,7 @@ package cn.iocoder.yudao.framework.common.biz.infra.logger;
 import cn.iocoder.yudao.framework.common.biz.infra.logger.dto.ApiAccessLogCreateReqDTO;
 import org.springframework.scheduling.annotation.Async;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 
 /**
  * API 访问日志的 API 接口

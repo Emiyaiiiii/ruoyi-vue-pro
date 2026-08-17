@@ -3,7 +3,7 @@ package cn.iocoder.yudao.module.mes.controller.admin.pro.route.vo.productbom;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
-import javax.validation.constraints.NotNull;
+import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
 
 @Schema(description = "管理后台 - MES 工艺路线产品 BOM 新增/修改 Request VO")

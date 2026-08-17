@@ -1,6 +1,6 @@
 package cn.iocoder.yudao.module.kb.service.chunkmethod;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 import cn.iocoder.yudao.module.kb.controller.admin.chunkmethod.vo.*;
 import cn.iocoder.yudao.module.kb.dal.dataobject.chunkmethod.ChunkMethodDO;
 import cn.iocoder.yudao.framework.common.pojo.PageResult;

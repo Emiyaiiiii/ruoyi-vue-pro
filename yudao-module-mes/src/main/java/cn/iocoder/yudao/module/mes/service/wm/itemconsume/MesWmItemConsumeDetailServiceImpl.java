@@ -5,7 +5,7 @@ import cn.iocoder.yudao.module.mes.dal.mysql.wm.itemconsume.MesWmItemConsumeDeta
 import org.springframework.stereotype.Service;
 import org.springframework.validation.annotation.Validated;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 import java.util.List;
 
 /**

@@ -5,7 +5,7 @@ import cn.iocoder.yudao.module.bpm.controller.admin.task.vo.instance.BpmProcessI
 import cn.iocoder.yudao.module.bpm.dal.dataobject.task.BpmProcessInstanceCopyDO;
 import org.flowable.bpmn.model.FlowNode;
 
-import javax.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotEmpty;
 import java.util.Collection;
 
 /**

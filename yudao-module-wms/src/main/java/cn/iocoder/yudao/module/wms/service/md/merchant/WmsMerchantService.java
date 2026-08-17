@@ -6,7 +6,7 @@ import cn.iocoder.yudao.module.wms.controller.admin.md.merchant.vo.WmsMerchantPa
 import cn.iocoder.yudao.module.wms.controller.admin.md.merchant.vo.WmsMerchantSaveReqVO;
 import cn.iocoder.yudao.module.wms.dal.dataobject.md.merchant.WmsMerchantDO;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;

@@ -3,8 +3,8 @@ package cn.iocoder.yudao.module.im.controller.admin.group.vo;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
-import javax.validation.constraints.Min;
-import javax.validation.constraints.NotNull;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
 
 @Schema(description = "管理后台 - 成员禁言 Request VO")
 @Data

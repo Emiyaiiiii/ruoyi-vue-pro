@@ -5,7 +5,7 @@ import cn.iocoder.yudao.module.promotion.service.point.PointActivityService;
 import org.springframework.stereotype.Service;
 import org.springframework.validation.annotation.Validated;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 
 /**
  * 积分商城活动 Api 接口实现类

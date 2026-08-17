@@ -5,7 +5,7 @@ import cn.iocoder.yudao.module.mes.controller.admin.wm.miscreceipt.vo.MesWmMiscR
 import cn.iocoder.yudao.module.mes.controller.admin.wm.miscreceipt.vo.MesWmMiscReceiptSaveReqVO;
 import cn.iocoder.yudao.module.mes.dal.dataobject.wm.miscreceipt.MesWmMiscReceiptDO;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 
 /**
  * MES 杂项入库单 Service 接口

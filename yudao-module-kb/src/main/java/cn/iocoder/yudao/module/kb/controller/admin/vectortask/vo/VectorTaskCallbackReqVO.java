@@ -3,7 +3,7 @@ package cn.iocoder.yudao.module.kb.controller.admin.vectortask.vo;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
-import javax.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotEmpty;
 
 @Schema(description = "管理后台 - 向量处理任务状态回调 Request VO（内部使用）")
 @Data

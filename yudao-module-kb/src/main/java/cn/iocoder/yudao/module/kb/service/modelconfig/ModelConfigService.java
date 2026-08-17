@@ -1,6 +1,6 @@
 package cn.iocoder.yudao.module.kb.service.modelconfig;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 import cn.iocoder.yudao.module.kb.controller.admin.modelconfig.vo.*;
 import cn.iocoder.yudao.module.kb.dal.dataobject.modelconfig.ModelConfigDO;
 import cn.iocoder.yudao.framework.common.pojo.PageResult;

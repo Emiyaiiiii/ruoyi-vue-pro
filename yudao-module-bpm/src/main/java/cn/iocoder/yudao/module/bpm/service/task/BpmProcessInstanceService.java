@@ -6,7 +6,7 @@ import cn.iocoder.yudao.module.bpm.controller.admin.task.vo.instance.*;
 import org.flowable.engine.history.HistoricProcessInstance;
 import org.flowable.engine.runtime.ProcessInstance;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;

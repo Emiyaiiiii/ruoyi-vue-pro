@@ -2,8 +2,8 @@ package cn.iocoder.yudao.module.iot.gateway.protocol.udp;
 
 import lombok.Data;
 
-import javax.validation.constraints.Min;
-import javax.validation.constraints.NotNull;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
 
 /**
  * IoT UDP 协议配置

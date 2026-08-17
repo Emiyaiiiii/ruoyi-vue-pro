@@ -3,7 +3,7 @@ package cn.iocoder.yudao.module.promotion.api.coupon;
 import cn.iocoder.yudao.module.promotion.api.coupon.dto.CouponRespDTO;
 import cn.iocoder.yudao.module.promotion.api.coupon.dto.CouponUseReqDTO;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 import java.util.List;
 import java.util.Map;
 

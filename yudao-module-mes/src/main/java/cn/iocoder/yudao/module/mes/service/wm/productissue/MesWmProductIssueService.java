@@ -5,7 +5,7 @@ import cn.iocoder.yudao.module.mes.controller.admin.wm.productissue.vo.MesWmProd
 import cn.iocoder.yudao.module.mes.controller.admin.wm.productissue.vo.MesWmProductIssueSaveReqVO;
 import cn.iocoder.yudao.module.mes.dal.dataobject.wm.productissue.MesWmProductIssueDO;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 
 /**
  * MES 领料出库单 Service 接口

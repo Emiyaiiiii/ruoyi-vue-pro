@@ -6,7 +6,7 @@ import cn.iocoder.yudao.module.erp.controller.admin.sale.vo.order.ErpSaleOrderSa
 import cn.iocoder.yudao.module.erp.dal.dataobject.sale.ErpSaleOrderDO;
 import cn.iocoder.yudao.module.erp.dal.dataobject.sale.ErpSaleOrderItemDO;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.List;

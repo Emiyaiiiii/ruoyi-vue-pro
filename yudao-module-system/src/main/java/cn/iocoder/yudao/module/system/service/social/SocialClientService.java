@@ -14,7 +14,7 @@ import me.chanjar.weixin.common.bean.WxJsapiSignature;
 import me.chanjar.weixin.common.bean.subscribemsg.TemplateInfo;
 import me.zhyd.oauth.model.AuthUser;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 import java.util.List;
 
 /**

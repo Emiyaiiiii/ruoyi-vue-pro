@@ -1,7 +1,7 @@
 package cn.iocoder.yudao.module.kb.service.levelconfig;
 
 import java.util.*;
-import javax.validation.*;
+import jakarta.validation.*;
 import cn.iocoder.yudao.module.kb.controller.admin.levelconfig.vo.*;
 import cn.iocoder.yudao.module.kb.dal.dataobject.levelconfig.LevelConfigDO;
 import cn.iocoder.yudao.framework.common.pojo.PageResult;

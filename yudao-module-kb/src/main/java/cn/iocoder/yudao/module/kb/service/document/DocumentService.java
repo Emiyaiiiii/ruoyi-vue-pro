@@ -1,7 +1,7 @@
 package cn.iocoder.yudao.module.kb.service.document;
 
 import java.util.*;
-import javax.validation.*;
+import jakarta.validation.*;
 import cn.iocoder.yudao.module.kb.controller.admin.document.vo.*;
 import cn.iocoder.yudao.module.kb.dal.dataobject.document.DocumentDO;
 import cn.iocoder.yudao.framework.common.pojo.PageResult;

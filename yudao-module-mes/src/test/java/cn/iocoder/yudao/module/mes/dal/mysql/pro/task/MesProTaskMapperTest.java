@@ -9,7 +9,7 @@ import cn.iocoder.yudao.module.mes.dal.dataobject.pro.task.MesProTaskDO;
 import cn.iocoder.yudao.module.mes.dal.mysql.pro.route.MesProRouteProcessMapper;
 import org.junit.jupiter.api.Test;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 import java.math.BigDecimal;
 import java.util.function.Consumer;
 

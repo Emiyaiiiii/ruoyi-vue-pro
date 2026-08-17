@@ -5,7 +5,7 @@ import cn.iocoder.yudao.module.wms.controller.admin.order.receipt.vo.order.WmsRe
 import cn.iocoder.yudao.module.wms.controller.admin.order.receipt.vo.order.WmsReceiptOrderSaveReqVO;
 import cn.iocoder.yudao.module.wms.dal.dataobject.order.receipt.WmsReceiptOrderDO;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 
 /**
  * WMS 入库单 Service 接口

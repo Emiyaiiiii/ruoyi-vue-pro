@@ -15,7 +15,7 @@ import org.apache.rocketmq.common.message.MessageExt;
 import org.apache.rocketmq.spring.autoconfigure.RocketMQProperties;
 import org.apache.rocketmq.spring.core.RocketMQTemplate;
 
-import javax.annotation.PreDestroy;
+import jakarta.annotation.PreDestroy;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;

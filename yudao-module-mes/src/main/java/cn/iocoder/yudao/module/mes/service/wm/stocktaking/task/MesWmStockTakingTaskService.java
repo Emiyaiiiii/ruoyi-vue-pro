@@ -5,7 +5,7 @@ import cn.iocoder.yudao.module.mes.controller.admin.wm.stocktaking.task.vo.MesWm
 import cn.iocoder.yudao.module.mes.controller.admin.wm.stocktaking.task.vo.MesWmStockTakingTaskSaveReqVO;
 import cn.iocoder.yudao.module.mes.dal.dataobject.wm.stocktaking.task.MesWmStockTakingTaskDO;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 
 /**
  * MES 盘点任务 Service 接口

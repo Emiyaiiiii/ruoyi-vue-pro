@@ -5,7 +5,7 @@ import cn.iocoder.yudao.module.im.controller.admin.manager.channel.vo.material.I
 import cn.iocoder.yudao.module.im.controller.admin.manager.channel.vo.material.ImChannelMaterialSaveReqVO;
 import cn.iocoder.yudao.module.im.dal.dataobject.channel.ImChannelMaterialDO;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;

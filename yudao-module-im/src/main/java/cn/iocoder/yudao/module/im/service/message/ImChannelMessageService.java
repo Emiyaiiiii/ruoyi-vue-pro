@@ -5,7 +5,7 @@ import cn.iocoder.yudao.module.im.controller.admin.manager.message.vo.channel.Im
 import cn.iocoder.yudao.module.im.controller.admin.manager.message.vo.channel.ImChannelMessageSendReqVO;
 import cn.iocoder.yudao.module.im.dal.dataobject.message.ImChannelMessageDO;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;

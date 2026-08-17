@@ -225,7 +225,7 @@ public class InvocableHandlerMethod extends HandlerMethod {
         return new AsyncResultMethodParameter(returnValue);
     }
 
-    private class AsyncResultMethodParameter extends HandlerMethodParameter {
+    private class AsyncResultMethodParameter extends MethodParameter {
 
         @Nullable
         private final Object returnValue;
@@ -233,7 +233,7 @@ public class InvocableHandlerMethod extends HandlerMethod {
         private final ResolvableType returnType;
 
         public AsyncResultMethodParameter(@Nullable Object returnValue) {
-            super(-1);
+            super(getBridgedMethod(), -1);
             this.returnValue = returnValue;
             this.returnType = ResolvableType.forType(super.getGenericParameterType()).getGeneric();
         }

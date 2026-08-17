@@ -5,7 +5,7 @@ import cn.iocoder.yudao.module.im.controller.admin.group.vo.request.ImGroupReque
 import cn.iocoder.yudao.module.im.controller.admin.manager.group.vo.ImGroupRequestManagerPageReqVO;
 import cn.iocoder.yudao.module.im.dal.dataobject.group.ImGroupRequestDO;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 import java.util.Collection;
 import java.util.List;
 

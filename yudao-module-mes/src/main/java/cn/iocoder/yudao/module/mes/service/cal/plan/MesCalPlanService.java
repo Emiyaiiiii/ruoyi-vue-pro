@@ -5,7 +5,7 @@ import cn.iocoder.yudao.module.mes.controller.admin.cal.plan.vo.MesCalPlanPageRe
 import cn.iocoder.yudao.module.mes.controller.admin.cal.plan.vo.MesCalPlanSaveReqVO;
 import cn.iocoder.yudao.module.mes.dal.dataobject.cal.plan.MesCalPlanDO;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;

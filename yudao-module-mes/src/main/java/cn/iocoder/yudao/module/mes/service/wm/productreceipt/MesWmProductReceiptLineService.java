@@ -5,7 +5,7 @@ import cn.iocoder.yudao.module.mes.controller.admin.wm.productreceipt.vo.line.Me
 import cn.iocoder.yudao.module.mes.controller.admin.wm.productreceipt.vo.line.MesWmProductReceiptLineSaveReqVO;
 import cn.iocoder.yudao.module.mes.dal.dataobject.wm.productreceipt.MesWmProductReceiptLineDO;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 import java.util.List;
 
 /**

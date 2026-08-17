@@ -15,7 +15,7 @@ import lombok.ToString;
 import me.chanjar.weixin.common.api.WxConsts;
 import me.chanjar.weixin.mp.builder.kefu.NewsBuilder;
 
-import javax.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotEmpty;
 import java.io.Serializable;
 import java.util.List;
 

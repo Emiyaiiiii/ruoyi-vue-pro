@@ -6,7 +6,7 @@ import cn.iocoder.yudao.module.system.service.oauth2.OAuth2TokenService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 
 /**
  * 物理删除过期 N 天的令牌的 Job

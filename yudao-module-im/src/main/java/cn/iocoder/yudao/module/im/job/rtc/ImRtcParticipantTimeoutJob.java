@@ -9,7 +9,7 @@ import cn.iocoder.yudao.module.im.service.rtc.ImRtcCallService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 
 /**
  * 振铃超时 Job：扫 INVITING 超过阈值的参与者，单人粒度标 NO_ANSWER + 推 RTC_CALL(REJECT) 让前端 banner 收敛

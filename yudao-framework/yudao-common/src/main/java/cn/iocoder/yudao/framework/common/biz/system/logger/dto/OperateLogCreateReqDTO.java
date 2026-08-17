@@ -3,8 +3,8 @@ package cn.iocoder.yudao.framework.common.biz.system.logger.dto;
 import cn.iocoder.yudao.framework.common.enums.UserTypeEnum;
 import lombok.Data;
 
-import javax.validation.constraints.NotEmpty;
-import javax.validation.constraints.NotNull;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
 
 /**
  * 系统操作日志 Create Request DTO

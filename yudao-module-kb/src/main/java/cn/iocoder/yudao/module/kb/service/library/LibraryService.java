@@ -1,7 +1,7 @@
 package cn.iocoder.yudao.module.kb.service.library;
 
 import java.util.*;
-import javax.validation.*;
+import jakarta.validation.*;
 import cn.iocoder.yudao.module.kb.controller.admin.library.vo.*;
 import cn.iocoder.yudao.module.kb.dal.dataobject.library.LibraryDO;
 import cn.iocoder.yudao.framework.common.pojo.PageResult;

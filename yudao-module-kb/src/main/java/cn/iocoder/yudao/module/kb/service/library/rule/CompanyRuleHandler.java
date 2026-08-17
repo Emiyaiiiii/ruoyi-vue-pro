@@ -6,7 +6,7 @@ import cn.iocoder.yudao.module.kb.service.userdept.KbUserDeptService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 
 /**
  * rule=3 公司级知识库规则处理器

@@ -1,7 +1,7 @@
 package cn.iocoder.yudao.module.kb.service.category;
 
 import java.util.*;
-import javax.validation.*;
+import jakarta.validation.*;
 import cn.iocoder.yudao.module.kb.controller.admin.category.vo.*;
 import cn.iocoder.yudao.module.kb.dal.dataobject.category.CategoryDO;
 import cn.iocoder.yudao.framework.common.pojo.PageResult;

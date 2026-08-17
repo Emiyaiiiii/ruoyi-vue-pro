@@ -9,7 +9,7 @@ import com.mzt.logapi.starter.annotation.LogRecord;
 import org.springframework.stereotype.Service;
 import org.springframework.validation.annotation.Validated;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 import java.util.Objects;
 
 import static cn.iocoder.yudao.module.crm.enums.LogRecordConstants.*;

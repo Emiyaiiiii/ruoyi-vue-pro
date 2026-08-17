@@ -4,7 +4,7 @@ import cn.iocoder.yudao.module.mes.dal.redis.RedisKeyConstants;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Repository;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 import java.time.Duration;
 
 /**

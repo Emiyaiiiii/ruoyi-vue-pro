@@ -5,7 +5,7 @@ import cn.iocoder.yudao.module.mes.controller.admin.wm.transfer.vo.MesWmTransfer
 import cn.iocoder.yudao.module.mes.controller.admin.wm.transfer.vo.MesWmTransferSaveReqVO;
 import cn.iocoder.yudao.module.mes.dal.dataobject.wm.transfer.MesWmTransferDO;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 
 /**
  * MES 转移单 Service 接口

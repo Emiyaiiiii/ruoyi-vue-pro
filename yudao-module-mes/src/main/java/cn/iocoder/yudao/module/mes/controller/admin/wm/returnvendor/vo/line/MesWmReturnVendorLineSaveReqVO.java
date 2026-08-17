@@ -3,8 +3,8 @@ package cn.iocoder.yudao.module.mes.controller.admin.wm.returnvendor.vo.line;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
-import javax.validation.constraints.DecimalMin;
-import javax.validation.constraints.NotNull;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
 
 @Schema(description = "管理后台 - MES 供应商退货单行 Save Request VO")

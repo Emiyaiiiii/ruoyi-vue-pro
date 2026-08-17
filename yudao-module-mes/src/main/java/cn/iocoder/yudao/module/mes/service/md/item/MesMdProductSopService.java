@@ -5,7 +5,7 @@ import cn.iocoder.yudao.module.mes.controller.admin.md.item.vo.sop.MesMdProductS
 import cn.iocoder.yudao.module.mes.controller.admin.md.item.vo.sop.MesMdProductSopSaveReqVO;
 import cn.iocoder.yudao.module.mes.dal.dataobject.md.item.MesMdProductSopDO;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 import java.util.List;
 
 /**

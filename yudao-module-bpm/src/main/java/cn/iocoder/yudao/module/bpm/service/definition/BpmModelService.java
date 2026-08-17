@@ -6,7 +6,7 @@ import cn.iocoder.yudao.module.bpm.controller.admin.definition.vo.model.simple.B
 import org.flowable.bpmn.model.BpmnModel;
 import org.flowable.engine.repository.Model;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 import java.util.List;
 
 /**

@@ -5,7 +5,7 @@ import cn.iocoder.yudao.module.mes.controller.admin.qc.template.vo.indicator.Mes
 import cn.iocoder.yudao.module.mes.controller.admin.qc.template.vo.indicator.MesQcTemplateIndicatorSaveReqVO;
 import cn.iocoder.yudao.module.mes.dal.dataobject.qc.template.MesQcTemplateIndicatorDO;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 
 import java.util.List;
 

@@ -3,7 +3,7 @@ package cn.iocoder.yudao.module.mes.controller.admin.pro.route.vo;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
-import javax.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotBlank;
 
 @Schema(description = "管理后台 - MES 工艺路线新增/修改 Request VO")
 @Data

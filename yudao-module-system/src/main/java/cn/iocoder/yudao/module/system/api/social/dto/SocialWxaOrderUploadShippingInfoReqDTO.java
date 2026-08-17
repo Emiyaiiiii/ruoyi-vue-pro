@@ -2,8 +2,8 @@ package cn.iocoder.yudao.module.system.api.social.dto;
 
 import lombok.Data;
 
-import javax.validation.constraints.NotEmpty;
-import javax.validation.constraints.NotNull;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
 
 /**
  * 小程序订单上传购物详情

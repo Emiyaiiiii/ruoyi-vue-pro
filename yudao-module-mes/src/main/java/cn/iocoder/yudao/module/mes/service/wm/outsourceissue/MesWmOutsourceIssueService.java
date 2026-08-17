@@ -5,7 +5,7 @@ import cn.iocoder.yudao.module.mes.controller.admin.wm.outsourceissue.vo.MesWmOu
 import cn.iocoder.yudao.module.mes.controller.admin.wm.outsourceissue.vo.MesWmOutsourceIssueSaveReqVO;
 import cn.iocoder.yudao.module.mes.dal.dataobject.wm.outsourceissue.MesWmOutsourceIssueDO;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 
 /**
  * MES 外协发料单 Service 接口

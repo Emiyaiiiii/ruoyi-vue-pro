@@ -6,7 +6,7 @@ import cn.iocoder.yudao.module.crm.controller.admin.clue.vo.CrmClueSaveReqVO;
 import cn.iocoder.yudao.module.crm.controller.admin.clue.vo.CrmClueTransferReqVO;
 import cn.iocoder.yudao.module.crm.dal.dataobject.clue.CrmClueDO;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 import java.time.LocalDateTime;
 
 /**

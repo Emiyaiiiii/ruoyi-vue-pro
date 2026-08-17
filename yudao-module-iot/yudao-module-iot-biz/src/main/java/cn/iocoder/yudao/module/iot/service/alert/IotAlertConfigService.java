@@ -5,7 +5,7 @@ import cn.iocoder.yudao.module.iot.controller.admin.alert.vo.config.IotAlertConf
 import cn.iocoder.yudao.module.iot.controller.admin.alert.vo.config.IotAlertConfigSaveReqVO;
 import cn.iocoder.yudao.module.iot.dal.dataobject.alert.IotAlertConfigDO;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 import java.util.List;
 
 /**

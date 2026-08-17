@@ -6,7 +6,7 @@ import cn.iocoder.yudao.module.iot.dal.dataobject.device.IotDevicePropertyDO;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Repository;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 import java.util.Collections;
 import java.util.Map;
 

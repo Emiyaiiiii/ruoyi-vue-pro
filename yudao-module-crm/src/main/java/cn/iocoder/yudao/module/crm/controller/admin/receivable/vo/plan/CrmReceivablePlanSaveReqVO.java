@@ -3,7 +3,7 @@ package cn.iocoder.yudao.module.crm.controller.admin.receivable.vo.plan;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
-import javax.validation.constraints.NotNull;
+import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 

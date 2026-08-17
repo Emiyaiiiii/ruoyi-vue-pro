@@ -5,7 +5,7 @@ import cn.iocoder.yudao.module.mes.controller.admin.wm.barcode.vo.config.MesWmBa
 import cn.iocoder.yudao.module.mes.controller.admin.wm.barcode.vo.config.MesWmBarcodeConfigSaveReqVO;
 import cn.iocoder.yudao.module.mes.dal.dataobject.wm.barcode.MesWmBarcodeConfigDO;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 
 /**
  * MES 条码配置 Service 接口

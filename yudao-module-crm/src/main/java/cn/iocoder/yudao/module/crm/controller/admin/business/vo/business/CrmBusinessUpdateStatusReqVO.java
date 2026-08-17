@@ -5,8 +5,8 @@ import cn.iocoder.yudao.module.crm.enums.business.CrmBusinessEndStatusEnum;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
-import javax.validation.constraints.AssertTrue;
-import javax.validation.constraints.NotNull;
+import jakarta.validation.constraints.AssertTrue;
+import jakarta.validation.constraints.NotNull;
 
 @Schema(description = "管理后台 - CRM 商机更新状态 Request VO")
 @Data

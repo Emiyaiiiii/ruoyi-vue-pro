@@ -2,7 +2,7 @@ package cn.iocoder.yudao.module.kb.service.news;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 
 import cn.iocoder.yudao.module.kb.controller.admin.news.vo.*;
 import cn.iocoder.yudao.module.kb.dal.dataobject.news.NewsSyncLogDO;

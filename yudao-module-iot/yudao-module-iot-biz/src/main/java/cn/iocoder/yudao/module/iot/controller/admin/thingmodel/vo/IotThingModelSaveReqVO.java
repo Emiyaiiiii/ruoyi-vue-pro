@@ -8,9 +8,9 @@ import cn.iocoder.yudao.module.iot.enums.thingmodel.IotThingModelTypeEnum;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
-import javax.validation.Valid;
-import javax.validation.constraints.NotEmpty;
-import javax.validation.constraints.NotNull;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
 
 @Schema(description = "管理后台 - IoT 产品物模型新增/修改 Request VO")
 @Data

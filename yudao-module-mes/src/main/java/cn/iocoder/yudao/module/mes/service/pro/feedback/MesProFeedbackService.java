@@ -5,7 +5,7 @@ import cn.iocoder.yudao.module.mes.controller.admin.pro.feedback.vo.MesProFeedba
 import cn.iocoder.yudao.module.mes.controller.admin.pro.feedback.vo.MesProFeedbackSaveReqVO;
 import cn.iocoder.yudao.module.mes.dal.dataobject.pro.feedback.MesProFeedbackDO;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 import java.math.BigDecimal;
 
 /**

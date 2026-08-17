@@ -5,7 +5,7 @@ import cn.iocoder.yudao.module.mes.controller.admin.pro.workorder.vo.MesProWorkO
 import cn.iocoder.yudao.module.mes.controller.admin.pro.workorder.vo.MesProWorkOrderSaveReqVO;
 import cn.iocoder.yudao.module.mes.dal.dataobject.pro.workorder.MesProWorkOrderDO;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.List;

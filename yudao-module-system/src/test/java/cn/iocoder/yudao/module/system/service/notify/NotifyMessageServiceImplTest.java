@@ -12,7 +12,7 @@ import cn.iocoder.yudao.module.system.dal.mysql.notify.NotifyMessageMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.annotation.Import;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;

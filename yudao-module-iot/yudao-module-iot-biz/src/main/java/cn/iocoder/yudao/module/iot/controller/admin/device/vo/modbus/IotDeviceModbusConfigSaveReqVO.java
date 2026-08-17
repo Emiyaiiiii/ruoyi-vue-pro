@@ -6,7 +6,7 @@ import cn.iocoder.yudao.module.iot.core.enums.modbus.IotModbusModeEnum;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
-import javax.validation.constraints.NotNull;
+import jakarta.validation.constraints.NotNull;
 
 @Schema(description = "管理后台 - IoT 设备 Modbus 连接配置新增/修改 Request VO")
 @Data

@@ -5,7 +5,7 @@ import cn.iocoder.yudao.module.mes.controller.admin.tm.tool.vo.MesTmToolPageReqV
 import cn.iocoder.yudao.module.mes.controller.admin.tm.tool.vo.MesTmToolSaveReqVO;
 import cn.iocoder.yudao.module.mes.dal.dataobject.tm.tool.MesTmToolDO;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;

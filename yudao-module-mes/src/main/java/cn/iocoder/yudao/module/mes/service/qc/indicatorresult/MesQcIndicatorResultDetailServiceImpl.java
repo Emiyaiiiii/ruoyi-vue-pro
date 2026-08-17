@@ -6,7 +6,7 @@ import cn.iocoder.yudao.module.mes.dal.mysql.qc.indicatorresult.MesQcIndicatorRe
 import org.springframework.stereotype.Service;
 import org.springframework.validation.annotation.Validated;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 import java.util.List;
 
 /**

@@ -5,7 +5,7 @@ import cn.iocoder.yudao.module.mes.controller.admin.wm.arrivalnotice.vo.MesWmArr
 import cn.iocoder.yudao.module.mes.controller.admin.wm.arrivalnotice.vo.MesWmArrivalNoticeSaveReqVO;
 import cn.iocoder.yudao.module.mes.dal.dataobject.wm.arrivalnotice.MesWmArrivalNoticeDO;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.List;

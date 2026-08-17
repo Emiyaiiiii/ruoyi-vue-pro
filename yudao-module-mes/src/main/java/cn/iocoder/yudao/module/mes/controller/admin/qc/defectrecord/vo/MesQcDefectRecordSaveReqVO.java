@@ -6,8 +6,8 @@ import cn.iocoder.yudao.module.mes.enums.qc.MesQcTypeEnum;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
-import javax.validation.constraints.NotEmpty;
-import javax.validation.constraints.NotNull;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
 
 @Schema(description = "管理后台 - MES 质检缺陷记录新增/修改 Request VO")
 @Data

@@ -6,7 +6,7 @@ import cn.iocoder.yudao.module.pay.enums.demo.PayDemoWithdrawTypeEnum;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
-import javax.validation.constraints.*;
+import jakarta.validation.constraints.*;
 
 @Schema(description = "管理后台 - 示例提现单创建 Request VO")
 @Data

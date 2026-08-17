@@ -11,7 +11,7 @@ import org.flowable.engine.runtime.ProcessInstance;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 
 /**
  * BPM HTTP 回调触发器

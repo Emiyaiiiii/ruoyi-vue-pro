@@ -6,7 +6,7 @@ import cn.iocoder.yudao.module.bpm.controller.admin.definition.vo.model.BpmModel
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Repository;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 import java.time.Duration;
 import java.time.LocalDateTime;
 

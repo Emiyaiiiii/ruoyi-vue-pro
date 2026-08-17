@@ -1,7 +1,7 @@
 package cn.iocoder.yudao.module.kb.service.folder;
 
 import java.util.*;
-import javax.validation.*;
+import jakarta.validation.*;
 import cn.iocoder.yudao.module.kb.controller.admin.folder.vo.*;
 import cn.iocoder.yudao.module.kb.dal.dataobject.folder.FolderDO;
 

@@ -4,8 +4,8 @@ import cn.iocoder.yudao.module.bpm.controller.admin.definition.vo.model.simple.B
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
-import javax.validation.Valid;
-import javax.validation.constraints.NotEmpty;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotEmpty;
 
 @Schema(description = "管理后台 - 流程模型的保存 Request VO")
 @Data

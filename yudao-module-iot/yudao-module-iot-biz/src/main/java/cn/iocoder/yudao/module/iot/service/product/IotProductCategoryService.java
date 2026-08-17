@@ -5,8 +5,8 @@ import cn.iocoder.yudao.module.iot.controller.admin.product.vo.category.IotProdu
 import cn.iocoder.yudao.module.iot.controller.admin.product.vo.category.IotProductCategorySaveReqVO;
 import cn.iocoder.yudao.module.iot.dal.dataobject.product.IotProductCategoryDO;
 
-import javax.annotation.Nullable;
-import javax.validation.Valid;
+import jakarta.annotation.Nullable;
+import jakarta.validation.Valid;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;

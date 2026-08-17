@@ -15,8 +15,8 @@ import cn.iocoder.yudao.module.iot.service.device.property.IotDevicePropertyServ
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-import javax.annotation.PostConstruct;
-import javax.annotation.Resource;
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.Resource;
 import java.time.LocalDateTime;
 import java.util.Objects;
 

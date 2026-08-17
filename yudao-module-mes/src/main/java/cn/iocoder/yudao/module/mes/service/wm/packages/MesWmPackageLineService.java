@@ -5,7 +5,7 @@ import cn.iocoder.yudao.module.mes.controller.admin.wm.packages.vo.line.MesWmPac
 import cn.iocoder.yudao.module.mes.controller.admin.wm.packages.vo.line.MesWmPackageLineSaveReqVO;
 import cn.iocoder.yudao.module.mes.dal.dataobject.wm.packages.MesWmPackageLineDO;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 
 /**
  * MES 装箱明细 Service 接口

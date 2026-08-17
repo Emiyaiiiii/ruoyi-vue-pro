@@ -5,7 +5,7 @@ import cn.iocoder.yudao.module.iot.controller.admin.rule.vo.data.sink.IotDataSin
 import cn.iocoder.yudao.module.iot.controller.admin.rule.vo.data.sink.IotDataSinkSaveReqVO;
 import cn.iocoder.yudao.module.iot.dal.dataobject.rule.IotDataSinkDO;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 import java.util.Collection;
 import java.util.List;
 

@@ -13,7 +13,7 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer;
 import org.springframework.amqp.rabbit.listener.api.ChannelAwareMessageListener;
 
-import javax.annotation.PreDestroy;
+import jakarta.annotation.PreDestroy;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;

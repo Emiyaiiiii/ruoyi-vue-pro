@@ -5,7 +5,7 @@ import cn.iocoder.yudao.module.mes.controller.admin.pro.andon.vo.config.MesProAn
 import cn.iocoder.yudao.module.mes.controller.admin.pro.andon.vo.config.MesProAndonConfigSaveReqVO;
 import cn.iocoder.yudao.module.mes.dal.dataobject.pro.andon.MesProAndonConfigDO;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 import java.util.List;
 
 /**

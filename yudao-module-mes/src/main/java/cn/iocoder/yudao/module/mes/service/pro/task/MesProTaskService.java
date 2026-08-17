@@ -5,7 +5,7 @@ import cn.iocoder.yudao.module.mes.controller.admin.pro.task.vo.MesProTaskPageRe
 import cn.iocoder.yudao.module.mes.controller.admin.pro.task.vo.MesProTaskSaveReqVO;
 import cn.iocoder.yudao.module.mes.dal.dataobject.pro.task.MesProTaskDO;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.List;

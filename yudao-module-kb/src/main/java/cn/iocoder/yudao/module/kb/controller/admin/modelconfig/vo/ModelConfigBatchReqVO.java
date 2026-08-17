@@ -2,7 +2,7 @@ package cn.iocoder.yudao.module.kb.controller.admin.modelconfig.vo;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.*;
-import javax.validation.constraints.*;
+import jakarta.validation.constraints.*;
 import java.util.List;
 
 @Schema(description = "管理后台 - 大模型配置批量操作 Request VO")

@@ -15,7 +15,7 @@ import cn.iocoder.yudao.module.mes.service.qc.template.MesQcTemplateIndicatorSer
 import org.springframework.stereotype.Service;
 import org.springframework.validation.annotation.Validated;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;

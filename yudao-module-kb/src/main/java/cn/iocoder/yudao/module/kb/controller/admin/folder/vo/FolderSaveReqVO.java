@@ -3,7 +3,7 @@ package cn.iocoder.yudao.module.kb.controller.admin.folder.vo;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.*;
 import java.util.*;
-import javax.validation.constraints.*;
+import jakarta.validation.constraints.*;
 
 @Schema(description = "管理后台 - 文档文件夹新增/修改 Request VO")
 @Data

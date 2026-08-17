@@ -4,7 +4,7 @@ import cn.iocoder.yudao.module.iot.dal.redis.RedisKeyConstants;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Repository;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 
 /**
  * 设备关联的网关 serverId 的 Redis DAO

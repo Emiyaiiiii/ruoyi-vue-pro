@@ -1,7 +1,7 @@
 package cn.iocoder.yudao.module.kb.service.sharedept;
 
 import java.util.*;
-import javax.validation.*;
+import jakarta.validation.*;
 import cn.iocoder.yudao.module.kb.controller.admin.sharedept.vo.*;
 import cn.iocoder.yudao.module.kb.dal.dataobject.sharedept.ShareDeptDO;
 import cn.iocoder.yudao.framework.common.pojo.PageResult;

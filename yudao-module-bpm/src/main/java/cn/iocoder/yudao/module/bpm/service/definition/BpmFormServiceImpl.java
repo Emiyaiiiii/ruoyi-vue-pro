@@ -14,7 +14,7 @@ import cn.iocoder.yudao.module.bpm.service.definition.dto.BpmFormFieldRespDTO;
 import org.springframework.stereotype.Service;
 import org.springframework.validation.annotation.Validated;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 import java.util.*;
 
 import static cn.iocoder.yudao.framework.common.exception.util.ServiceExceptionUtil.exception;

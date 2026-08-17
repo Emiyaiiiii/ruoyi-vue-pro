@@ -5,7 +5,7 @@ import cn.iocoder.yudao.module.bpm.controller.admin.definition.vo.expression.Bpm
 import cn.iocoder.yudao.module.bpm.controller.admin.definition.vo.expression.BpmProcessExpressionSaveReqVO;
 import cn.iocoder.yudao.module.bpm.dal.dataobject.definition.BpmProcessExpressionDO;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 
 /**
  * BPM 流程表达式 Service 接口

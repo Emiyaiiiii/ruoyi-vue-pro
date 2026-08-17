@@ -5,7 +5,7 @@ import cn.iocoder.yudao.module.mes.controller.admin.wm.returnvendor.vo.MesWmRetu
 import cn.iocoder.yudao.module.mes.controller.admin.wm.returnvendor.vo.MesWmReturnVendorSaveReqVO;
 import cn.iocoder.yudao.module.mes.dal.dataobject.wm.returnvendor.MesWmReturnVendorDO;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 
 /**
  * MES 供应商退货单 Service 接口

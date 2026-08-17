@@ -10,7 +10,7 @@ import cn.iocoder.yudao.module.mes.service.md.autocode.strategy.MesMdAutoCodeCon
 import cn.iocoder.yudao.module.mes.service.md.autocode.strategy.MesMdAutoCodePartStrategy;
 import org.springframework.stereotype.Component;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 import java.time.Duration;
 import java.time.LocalDateTime;
 

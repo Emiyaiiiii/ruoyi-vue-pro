@@ -7,7 +7,7 @@ import cn.iocoder.yudao.module.promotion.controller.admin.point.vo.activity.Poin
 import cn.iocoder.yudao.module.promotion.dal.dataobject.point.PointActivityDO;
 import cn.iocoder.yudao.module.promotion.dal.dataobject.point.PointProductDO;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 import java.util.Collection;
 import java.util.List;
 

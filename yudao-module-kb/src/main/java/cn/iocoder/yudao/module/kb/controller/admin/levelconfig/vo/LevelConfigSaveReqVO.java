@@ -3,7 +3,7 @@ package cn.iocoder.yudao.module.kb.controller.admin.levelconfig.vo;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.*;
 import java.util.*;
-import javax.validation.constraints.*;
+import jakarta.validation.constraints.*;
 
 @Schema(description = "管理后台 - 知识库层级配置新增/修改 Request VO")
 @Data

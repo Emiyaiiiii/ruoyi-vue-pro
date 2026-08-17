@@ -22,7 +22,7 @@ import com.google.common.annotations.VisibleForTesting;
 import lombok.SneakyThrows;
 import org.springframework.stereotype.Service;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 import java.util.List;
 
 import static cn.hutool.core.date.DatePattern.PURE_DATE_PATTERN;
