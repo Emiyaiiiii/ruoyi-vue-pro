@@ -28,7 +28,7 @@
         <mybatis-plus-join.version>1.5.7</mybatis-plus-join.version>
         <dynamic-datasource.version>4.5.0</dynamic-datasource.version>
         <easy-trans.version>3.1.5</easy-trans.version>
-        <redisson.version>3.27.0</redisson.version>
+        <redisson.version>3.25.2</redisson.version>
         <dm8.jdbc.version>8.1.3.140</dm8.jdbc.version>
         <kingbase.jdbc.version>9.0.1.jre7</kingbase.jdbc.version>
         <opengauss.jdbc.version>7.0.0-RC3-og</opengauss.jdbc.version>
@@ -74,7 +74,7 @@
         <californium.version>3.14.0</californium.version>
         <j2mod.version>3.3.0</j2mod.version>
         <httpclient5.version>5.4.2</httpclient5.version>
-        <httpcore5.version>5.3.3</httpcore5.version>
+        <httpcore5.version>5.4.2</httpcore5.version>
         <!-- 三方云服务相关 -->
         <awssdk.version>2.46.17</awssdk.version>
         <justauth.version>1.16.7</justauth.version>

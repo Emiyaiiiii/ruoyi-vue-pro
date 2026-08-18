@@ -62,9 +62,21 @@ public class QwenPawClient {
      * <p>Spring Boot 3.x 下使用 {@code JdkClientHttpRequestFactory}（基于 JDK 11+
      * 内置的 {@code java.net.http.HttpClient}），原生支持 PATCH 方法，无需额外依赖。
      */
+    /**
+     * PATCH 专用 RestTemplate，使用 HttpClient5（基于 HttpComponentsClientHttpRequestFactory），
+     * 避免 JdkClientHttpRequestFactory 在 PATCH 时被 uvicorn 返回 400 Invalid HTTP request received。
+     */
     private static final RestTemplate patchRestTemplate;
     static {
-        patchRestTemplate = new RestTemplate(new org.springframework.http.client.JdkClientHttpRequestFactory());
+        // 连接超时 10 秒，读取超时 30 秒
+        org.apache.hc.client5.http.config.RequestConfig requestConfig = org.apache.hc.client5.http.config.RequestConfig.custom()
+                .setConnectionRequestTimeout(org.apache.hc.core5.util.Timeout.ofSeconds(10))
+                .setResponseTimeout(org.apache.hc.core5.util.Timeout.ofSeconds(30))
+                .build();
+        org.apache.hc.client5.http.impl.classic.CloseableHttpClient httpClient = org.apache.hc.client5.http.impl.classic.HttpClients.custom()
+                .setDefaultRequestConfig(requestConfig)
+                .build();
+        patchRestTemplate = new RestTemplate(new org.springframework.http.client.HttpComponentsClientHttpRequestFactory(httpClient));
     }
 
     // ==================== 智能体生命周期 ====================
@@ -907,14 +919,20 @@ public class QwenPawClient {
 
     private String patchJson(String path, String json) {
         HttpHeaders headers = buildHeaders();
+        // QwenPaw 后端基于 uvicorn，Spring 的 JdkClientHttpRequestFactory 会被 uvicorn 拒绝（400 Invalid HTTP request received），
+        // 而 patchRestTemplate 已配置为 HttpComponentsClientHttpRequestFactory（基于 HttpClient5），uvicorn 兼容。
         headers.setContentType(MediaType.APPLICATION_JSON);
+        if (json != null && !json.isEmpty()) {
+            byte[] bodyBytes = json.getBytes(StandardCharsets.UTF_8);
+            headers.setContentLength(bodyBytes.length);
+        }
         HttpEntity<String> entity = new HttpEntity<>(json, headers);
         try {
             ResponseEntity<String> response = patchRestTemplate.exchange(
                     url(path), HttpMethod.PATCH, entity, String.class);
             return response.getBody();
         } catch (ResourceAccessException | HttpStatusCodeException e) {
-            log.warn("[patchJson] QwenPaw 连接失败，path={}", path, e);
+            log.warn("[patchJson] QwenPaw 连接失败，path={}, body={}", path, json, e);
             throw new ServiceException(QWENPAW_CONNECT_FAILED);
         }
     }

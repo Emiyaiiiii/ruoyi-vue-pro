@@ -80,6 +80,9 @@
                     <artifactId>maven-compiler-plugin</artifactId>
                     <version>${maven-compiler-plugin.version}</version>
                     <configuration>
+                        <!-- Spring Boot 3.x / Spring Framework 6.x 默认不保留方法参数名，会导致缓存 SpEL
+                             表达式（如 #clientId）解析失败，因此显式启用 -parameters -->
+                        <parameters>true</parameters>
                         <annotationProcessorPaths>
                             <path>
                                 <groupId>org.springframework.boot</groupId>
