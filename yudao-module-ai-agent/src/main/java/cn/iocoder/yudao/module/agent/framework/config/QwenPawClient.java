@@ -21,11 +21,13 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.function.Consumer;
 
 import static cn.iocoder.yudao.framework.common.exception.util.ServiceExceptionUtil.exception;
 import static cn.iocoder.yudao.module.agent.enums.ErrorCodeConstants.QWENPAW_AGENT_NOT_FOUND;
 import static cn.iocoder.yudao.module.agent.enums.ErrorCodeConstants.QWENPAW_CONNECT_FAILED;
+import static cn.iocoder.yudao.module.agent.enums.ErrorCodeConstants.QWENPAW_MCP_CONNECTING;
 
 /**
  * QwenPaw HTTP 客户端
@@ -44,12 +46,14 @@ public class QwenPawClient {
 
     private static final String API_AGENTS = "/api/agents";
     private static final String API_MODELS = "/api/models";
-    private static final String API_CHATS = "/api/chats";
+    private static final String API_CHATS = "/chats";
     private static final String API_TOOLS = "/tools";
     private static final String API_MCP = "/mcp";
     private static final String API_SKILLS = "/skills";
     private static final String API_SKILLS_POOL = "/api/skills/pool";
     private static final String API_CONSOLE_CHAT_STOP = "/console/chat/stop";
+    private static final String API_CONSOLE_UPLOAD = "/api/console/upload";
+    private static final String API_FILES_PREVIEW = "/api/files/preview";
 
     @Resource
     private QwenPawProperties properties;
@@ -296,6 +300,33 @@ public class QwenPawClient {
     }
 
     /**
+     * 判断智能体在 QwenPaw 侧是否已注册指定 client_key 的 MCP
+     *
+     * <p>对应 QwenPaw {@code GET /api/agents/{agentId}/mcp} 列表查询，匹配 client_key。
+     * 仅用于"启停 MCP 启用"等场景的"client 是否存在"兜底校验，失败时返回 false 让上层走重建路径。
+     */
+    public boolean existsAgentMcp(String agentId, String clientKey) {
+        if (agentId == null || agentId.isEmpty() || clientKey == null || clientKey.isEmpty()) {
+            return false;
+        }
+        try {
+            List<Map<String, Object>> mcps = listAgentMcps(agentId);
+            for (Map<String, Object> mcp : mcps) {
+                Object key = mcp.get("client_key");
+                if (key == null) {
+                    key = mcp.get("clientKey");
+                }
+                if (key != null && clientKey.equals(String.valueOf(key))) {
+                    return true;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("[existsAgentMcp] 查询失败，agentId={}, clientKey={}", agentId, clientKey, e);
+        }
+        return false;
+    }
+
+    /**
      * 列出智能体某个 MCP client 的可用工具（含白名单启用状态）
      *
      * <p>对应 QwenPaw {@code GET /api/agents/{agentId}/mcp/tools/{clientKey}}，
@@ -304,17 +335,38 @@ public class QwenPawClient {
     @SuppressWarnings("unchecked")
     public List<Map<String, Object>> listMcpTools(String agentId, String clientKey) {
         String path = API_AGENTS + "/" + encode(agentId) + API_MCP + "/tools/" + encode(clientKey);
-        ResponseEntity<String> resp = get(path);
-        try {
-            Object value = objectMapper.readValue(resp.getBody(), Object.class);
-            if (value instanceof List) {
-                return toMapList(value);
+        // MCP 为懒连接，首个请求往往处于 connecting 态，短暂重试几次以等待连接完成
+        int maxAttempts = 5;
+        for (int attempt = 1; ; attempt++) {
+            try {
+                ResponseEntity<String> resp = get(path);
+                try {
+                    Object value = objectMapper.readValue(resp.getBody(), Object.class);
+                    if (value instanceof List) {
+                        return toMapList(value);
+                    }
+                } catch (Exception e) {
+                    log.warn("[listMcpTools] 响应解析失败，agentId={}, clientKey={}, 响应={}",
+                            agentId, clientKey, resp.getBody());
+                }
+                return new ArrayList<>();
+            } catch (HttpStatusCodeException e) {
+                // QwenPaw 侧 MCP 仍在连接中 -> 短暂等待后续试；非 5xx 保留下游异常原义
+                if (!e.getStatusCode().is5xxServerError()) {
+                    throw e;
+                }
+                if (attempt < maxAttempts) {
+                    try {
+                        Thread.sleep(1000L);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw new ServiceException(QWENPAW_MCP_CONNECTING);
+                    }
+                    continue;
+                }
+                throw new ServiceException(QWENPAW_MCP_CONNECTING);
             }
-        } catch (Exception e) {
-            log.warn("[listMcpTools] 响应解析失败，agentId={}, clientKey={}, 响应={}",
-                    agentId, clientKey, resp.getBody());
         }
-        return new ArrayList<>();
     }
 
     /**
@@ -397,6 +449,9 @@ public class QwenPawClient {
     /**
      * 注册 MCP client 到指定智能体
      *
+     * <p>QwenPaw 期望的请求体结构：{@code {client_key, client: {name, transport, url, command, ...}}}
+     *
+     * @param name           MCP 客户端显示名称（必填）
      * @param transport      stdio / streamable_http / sse
      * @param url            远程地址（streamable_http/sse 必填）
      * @param command        stdio 启动命令
@@ -404,26 +459,29 @@ public class QwenPawClient {
      * @param headersJson    JSON 对象，远程鉴权头
      * @param toolsJson      JSON 数组，工具白名单（null 表示全部）
      */
-    public void registerMcp(String agentId, String clientKey, String transport, String url,
+    public void registerMcp(String agentId, String clientKey, String name, String transport, String url,
                             String command, String commandArgs, String headersJson, String toolsJson) {
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("client_key", clientKey);
-        body.put("transport", transport);
+        Map<String, Object> client = new LinkedHashMap<>();
+        client.put("name", name != null ? name : clientKey);
+        client.put("transport", transport != null ? transport : "stdio");
         if (url != null && !url.isEmpty()) {
-            body.put("url", url);
+            client.put("url", url);
         }
         if (command != null && !command.isEmpty()) {
-            body.put("command", command);
+            client.put("command", command);
         }
         if (commandArgs != null && !commandArgs.isEmpty()) {
-            body.put("args", parseJsonArray(commandArgs));
+            client.put("args", parseJsonArray(commandArgs));
         }
         if (headersJson != null && !headersJson.isEmpty()) {
-            body.put("headers", parseJsonObject(headersJson));
+            client.put("headers", parseJsonObject(headersJson));
         }
         if (toolsJson != null && !toolsJson.isEmpty()) {
-            body.put("tools", parseJsonArray(toolsJson));
+            client.put("tools", parseJsonArray(toolsJson));
         }
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("client_key", clientKey);
+        body.put("client", client);
         postJson(API_AGENTS + "/" + encode(agentId) + "/mcp", toJson(body));
     }
 
@@ -736,6 +794,9 @@ public class QwenPawClient {
     }
 
     // ==================== 会话管理 ====================
+    // 注：QwenPaw 是会话/消息的 source of truth。Java 端只做按智能体的代理透传，
+    //     不再维护本地 session/message 表，也不再做 user_id 过滤。
+    //     前端 URL 用 agentId + chatId 唯一定位一个会话。
 
     /**
      * 列出指定智能体的所有会话
@@ -762,6 +823,42 @@ public class QwenPawClient {
             log.warn("[listChatsForAgent] 响应解析失败，agentId={}, 响应={}", agentId, resp.getBody());
         }
         return new ArrayList<>();
+    }
+
+    /**
+     * 在 QwenPaw 预创建会话，返回 chatId（UUID）
+     *
+     * <p>Java 端不再持久化任何会话字段；前端拿到 chatId 后直接作为 URL 参数。
+     *
+     * <p>三元组 <b>(session_id, user_id, channel)</b> 会写入 ChatSpec 并被 QwenPaw 用于
+     * <code>get_or_create_chat</code> 查重。预创建和后续发问必须传入完全相同的三元组，
+     * QwenPaw 才能命中预创建的 chat、复用 chat.id 作为 <code>task_tracker.run_key</code> 续接。
+     * session_id 由 Java 端自动生成 UUID，user_id 取芋道用户名，channel 固定为 "console"。
+     *
+     * @param agentId  QwenPaw 智能体 ID
+     * @param userId   芋道用户名（字符串），用于三元组，<b>不参与权限过滤</b>
+     * @param name     会话名（首次可传 "新对话"）
+     * @return QwenPaw ChatSpec 字典（含 id/name/session_id/user_id/channel/...）
+     */
+    public Map<String, Object> createChat(String agentId, String userId, String name) {
+        String path = API_AGENTS + "/" + encode(agentId) + API_CHATS;
+        String sessionId = UUID.randomUUID().toString();
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("session_id", sessionId);
+        body.put("user_id", userId);
+        body.put("name", name == null || name.isEmpty() ? "新对话" : name);
+        body.put("channel", "console");
+        try {
+            String json = objectMapper.writeValueAsString(body);
+            String respBody = postJson(path, json);
+            Object value = objectMapper.readValue(respBody, Object.class);
+            if (value instanceof Map) {
+                return (Map<String, Object>) value;
+            }
+        } catch (Exception e) {
+            log.warn("[createChat] 创建 QwenPaw 会话失败，agentId={}, userId={}", agentId, userId, e);
+        }
+        return new LinkedHashMap<>();
     }
 
     /**
@@ -816,14 +913,17 @@ public class QwenPawClient {
     }
 
     // ==================== 对话 ====================
+    // 对话请求必须携带三元组 (session_id, user_id, channel)，与 createChat 时一致，
+    // QwenPaw 才能通过 get_or_create_chat 命中已有会话，避免重复创建。
 
     /**
-     * 同步对话（SSE 流式版本后续补齐）
+     * 同步对话（仅供调试，SSE 流式版本为主）
      *
-     * @param sessionId QwenPaw session id，可传 null 自动新建
+     * @param chatId    QwenPaw chat id（UUID），首次可传 null/空 让 QwenPaw 自动开新会话
+     * @param userId    芋道用户 ID（字符串），必须与预创建时一致
+     * @param sessionId 会话唯一标识（UUID），必须与 {@link #createChat} 时一致
      */
-    public String chat(String agentId, String sessionId, String message) {
-        // 构造 QwenPaw AgentRequest 格式
+    public String chat(String agentId, String chatId, String userId, String sessionId, String message) {
         Map<String, Object> textContent = new LinkedHashMap<>();
         textContent.put("type", "text");
         textContent.put("text", message);
@@ -835,8 +935,11 @@ public class QwenPawClient {
 
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("input", java.util.Collections.singletonList(inputMessage));
-        if (sessionId != null && !sessionId.isEmpty()) {
-            body.put("session_id", sessionId);
+        body.put("session_id", sessionId);
+        body.put("user_id", userId);
+        body.put("channel", "console");
+        if (chatId != null && !chatId.isEmpty()) {
+            body.put("chat_id", chatId);
         }
         body.put("stream", false);
         String resp = postJson(API_AGENTS + "/" + encode(agentId) + "/console/chat", toJson(body));
@@ -849,26 +952,88 @@ public class QwenPawClient {
      * <p>向 /console/chat 发起流式请求，逐行读取 SSE 的 data 块，通过 {@code onChunk} 回调转发。
      * 每收到一个 data 行回调一次，收到 {@code [DONE]} 结束。
      *
-     * @param sessionId QwenPaw session id，可传 null 自动新建
-     * @param onChunk   data 增量回调（原始 data 行内容，未做 JSON 解析）
+     * <p>三元组 <b>(session_id, user_id, channel)</b> 必须与 {@link #createChat} 时一致，
+     * QwenPaw 才能通过 <code>get_or_create_chat</code> 命中预创建的 chat，
+     * 再用 <code>chat.id</code> 作为 <code>task_tracker.run_key</code> 续接正在运行的流。
+     *
+     * @param chatId  QwenPaw chat id（UUID），首次可传 null/空 让 QwenPaw 自动开新会话
+     * @param userId  芋道用户 ID（字符串），必须与预创建时一致
+     * @param sessionId 会话唯一标识（UUID），必须与 {@link #createChat} 时一致
+     * @param onChunk data 增量回调（原始 data 行内容，未做 JSON 解析）
      */
-    public void chatStream(String agentId, String sessionId, String message, Consumer<String> onChunk) {
-        // 构造 QwenPaw AgentRequest 格式
-        // input: [{role: "user", content: [{type: "text", text: "..."}], type: "message"}]
+    public void chatStream(String agentId, String chatId, String userId, String sessionId, String message, Consumer<String> onChunk) {
+        List<Map<String, Object>> contentItems = new ArrayList<>();
         Map<String, Object> textContent = new LinkedHashMap<>();
         textContent.put("type", "text");
         textContent.put("text", message);
+        contentItems.add(textContent);
+        chatStream(agentId, chatId, userId, sessionId, contentItems, onChunk);
+    }
 
+    /**
+     * SSE 流式对话（支持附件 content 数组）
+     *
+     * <p>与 {@link #chatStream(String, String, String, String, String, Consumer)} 等价，
+     * 但允许自定义 content 项数组（如 {@code [{type:"text",text:"..."}, {type:"image",image_url:"..."}]}），
+     * 对应 QwenPaw 官网上传文件后发送的 content 结构，用于"上传文件对话"。
+     *
+     * @param contentItems 用户消息的 content 项数组（text/image/file/video/audio 等）
+     */
+    public void chatStream(String agentId, String chatId, String userId, String sessionId,
+                           List<Map<String, Object>> contentItems, Consumer<String> onChunk) {
         Map<String, Object> inputMessage = new LinkedHashMap<>();
         inputMessage.put("role", "user");
-        inputMessage.put("content", java.util.Collections.singletonList(textContent));
+        inputMessage.put("content", contentItems == null || contentItems.isEmpty()
+                ? java.util.Collections.singletonList(new LinkedHashMap<String, Object>() {{
+                    put("type", "text");
+                    put("text", "");
+                }})
+                : contentItems);
         inputMessage.put("type", "message");
 
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("input", java.util.Collections.singletonList(inputMessage));
-        // 始终发送 session_id，确保 QwenPaw 能关联到正确的会话
-        body.put("session_id", (sessionId != null && !sessionId.isEmpty()) ? sessionId : "default");
+        body.put("session_id", sessionId);
+        body.put("user_id", userId);
+        body.put("channel", "console");
+        if (chatId != null && !chatId.isEmpty()) {
+            body.put("chat_id", chatId);
+        }
         body.put("stream", true);
+        executeSse(agentId, body, onChunk, "chatStream");
+    }
+
+    /**
+     * 以 reconnect 方式重新挂载到正在运行的 QwenPaw 流
+     *
+     * <p>对应 QwenPaw {@code POST /api/agents/{agentId}/console/chat} 接收 {@code reconnect: true} 请求，
+     * 服务端会用 {@code (session_id, user_id, channel)} 找到预创建的 chat，再 attach 到 running 流。
+     * 流结束后会返回空 SSE，前端需要 fallback 到 {@code getChat(agentId, chatId)} 拉历史 messages。
+     *
+     * <p>三元组 <b>(session_id, user_id, channel)</b> 必须与首次发问时一致。
+     *
+     * @param agentId QwenPaw 智能体 ID
+     * @param chatId  QwenPaw 会话 ID（UUID）
+     * @param userId  芋道用户 ID（字符串）
+     * @param sessionId 会话唯一标识（UUID），必须与 {@link #createChat} 时一致
+     * @param onChunk data 增量回调（与 chatStream 同样的协议）
+     */
+    public void reconnectStream(String agentId, String chatId, String userId, String sessionId, Consumer<String> onChunk) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("reconnect", true);
+        body.put("chat_id", chatId);
+        body.put("session_id", sessionId);
+        body.put("user_id", userId);
+        body.put("input", java.util.Collections.emptyList());
+        body.put("channel", "console");
+        body.put("stream", true);
+        executeSse(agentId, body, onChunk, "reconnectStream");
+    }
+
+    /**
+     * 共享的 SSE 请求/读取逻辑（chatStream 与 reconnectStream 复用）
+     */
+    private void executeSse(String agentId, Map<String, Object> body, Consumer<String> onChunk, String op) {
         HttpHeaders headers = buildHeaders();
         headers.setAccept(java.util.Collections.singletonList(MediaType.TEXT_EVENT_STREAM));
         String path = API_AGENTS + "/" + encode(agentId) + "/console/chat";
@@ -900,11 +1065,77 @@ public class QwenPawClient {
                         return null;
                     });
         } catch (HttpStatusCodeException e) {
-            log.warn("[chatStream] QwenPaw 返回非 2xx，path={}, code={}, body={}",
-                    path, e.getStatusCode().value(), e.getResponseBodyAsString());
+            log.warn("[{}] QwenPaw 返回非 2xx，path={}, code={}, body={}",
+                    op, path, e.getStatusCode().value(), e.getResponseBodyAsString());
             throw new ServiceException(QWENPAW_CONNECT_FAILED);
         } catch (ResourceAccessException e) {
-            log.warn("[chatStream] QwenPaw 连接失败，path={}", path, e);
+            log.warn("[{}] QwenPaw 连接失败，path={}", op, path, e);
+            throw new ServiceException(QWENPAW_CONNECT_FAILED);
+        }
+    }
+
+    // ==================== 聊天文件上传 / 预览 ====================
+
+    /**
+     * 上传文件到智能体（用于"上传文件对话"）
+     *
+     * <p>对应 QwenPaw {@code POST /api/console/upload}，multipart 字段 {@code file}。
+     * QwenPaw 保存到 console channel 的 media_dir，返回 {@code {url: 绝对路径, file_name, size}}。
+     * 需携带 X-Agent-Id 请求头，QwenPaw {@code get_agent_for_request} 据此解析智能体工作区。
+     *
+     * @param agentId  QwenPaw 智能体 ID
+     * @param data     文件字节
+     * @param fileName 文件名
+     * @return 上传结果（url/file_name/size），url 为文件在服务端的绝对路径
+     */
+    public Map<String, Object> uploadChatFile(String agentId, byte[] data, String fileName) {
+        HttpHeaders headers = buildHeaders();
+        headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+        if (agentId != null && !agentId.isEmpty()) {
+            headers.set("X-Agent-Id", agentId);
+        }
+
+        MultiValueMap<String, Object> multipartBody = new LinkedMultiValueMap<>();
+        ByteArrayResource resource = new ByteArrayResource(data) {
+            @Override
+            public String getFilename() {
+                return fileName != null && !fileName.isEmpty() ? fileName : "file";
+            }
+        };
+        multipartBody.add("file", resource);
+
+        HttpEntity<MultiValueMap<String, Object>> entity = new HttpEntity<>(multipartBody, headers);
+        String resp = exchange(API_CONSOLE_UPLOAD, HttpMethod.POST, entity);
+        return parseJsonObject(resp);
+    }
+
+    /**
+     * 获取聊天文件预览（转发文件字节流）
+     *
+     * <p>对应 QwenPaw {@code GET /api/files/preview/{filepath}}，filepath 为服务端绝对路径
+     * （上传接口返回的 url），按路径分段 URL 编码（保留 '/'）。QwenPaw 返回 FileResponse 文件字节流。
+     * 需携带 X-Agent-Id 请求头。
+     *
+     * @param agentId QwenPaw 智能体 ID
+     * @param path    服务端文件绝对路径（上传接口返回的 url）
+     * @return 文件字节
+     */
+    public byte[] previewFile(String agentId, String path) {
+        String encoded = encodePath(path);
+        HttpHeaders headers = buildHeaders();
+        if (agentId != null && !agentId.isEmpty()) {
+            headers.set("X-Agent-Id", agentId);
+        }
+        HttpEntity<Void> entity = new HttpEntity<>(headers);
+        try {
+            ResponseEntity<byte[]> resp = restTemplate.exchange(
+                    url(API_FILES_PREVIEW + "/" + encoded), HttpMethod.GET, entity, byte[].class);
+            return resp.getBody() == null ? new byte[0] : resp.getBody();
+        } catch (HttpStatusCodeException e) {
+            log.warn("[previewFile] QwenPaw 返回非 2xx，path={}, code={}", path, e.getStatusCode().value());
+            throw new ServiceException(QWENPAW_CONNECT_FAILED);
+        } catch (ResourceAccessException e) {
+            log.warn("[previewFile] QwenPaw 连接失败，path={}", path, e);
             throw new ServiceException(QWENPAW_CONNECT_FAILED);
         }
     }
@@ -1046,7 +1277,7 @@ public class QwenPawClient {
      * <p>QwenPaw SSE 事件格式（object 字段区分类型）：
      * <ul>
      *     <li>内容增量块：{@code {"object":"content","type":"text","text":"实际文本","delta":true,...}}</li>
-     *     <li>响应信封：{@code {"object":"response","status":"created|in_progress|completed","session_id":"...",...}}</li>
+     *     <li>响应信封：{@code {"object":"response","status":"created|in_progress|completed",...}}</li>
      *     <li>消息信封：{@code {"object":"message","type":"message","content":[...],...}}</li>
      * </ul>
      *
@@ -1100,31 +1331,6 @@ public class QwenPawClient {
         }
     }
 
-    /**
-     * 从 SSE 事件中提取 session_id（来自 response 信封）
-     *
-     * @return session_id，不存在则返回 null
-     */
-    public String extractSessionId(String chunk) {
-        if (chunk == null || chunk.isEmpty()) {
-            return null;
-        }
-        try {
-            Object value = objectMapper.readValue(chunk, Object.class);
-            if (value instanceof Map) {
-                Map<?, ?> map = (Map<?, ?>) value;
-                if ("response".equals(String.valueOf(map.get("object")))) {
-                    Object sessionId = map.get("session_id");
-                    if (sessionId != null) {
-                        return String.valueOf(sessionId);
-                    }
-                }
-            }
-        } catch (Exception ignored) {
-        }
-        return null;
-    }
-
     @SuppressWarnings("unchecked")
     private List<Map<String, Object>> toMapList(Object value) {
         List<Map<String, Object>> result = new ArrayList<>();
@@ -1158,6 +1364,39 @@ public class QwenPawClient {
             return java.net.URLEncoder.encode(value, "UTF-8");
         } catch (Exception e) {
             return value;
+        }
+    }
+
+    /**
+     * 按路径分段 URL 编码（保留 '/' 分隔符），用于 /files/preview/{filepath:path} 路径参数。
+     *
+     * <p>QwenPaw 服务端对 filepath 做 {@code unquote} 解码，因此每个分段需单独编码
+     * （空格编码为 %20 而非 +），分隔符 '/' 原样保留。
+     */
+    private String encodePath(String value) {
+        if (value == null || value.isEmpty()) {
+            return "";
+        }
+        // Windows 绝对路径 C:\... 统一转成 C:/... 便于按段编码
+        String v = value.replace("\\", "/");
+        String[] segments = v.split("/", -1);
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < segments.length; i++) {
+            if (i > 0) {
+                sb.append('/');
+            }
+            if (!segments[i].isEmpty()) {
+                sb.append(encodePathSegment(segments[i]));
+            }
+        }
+        return sb.toString();
+    }
+
+    private String encodePathSegment(String segment) {
+        try {
+            return java.net.URLEncoder.encode(segment, "UTF-8").replace("+", "%20");
+        } catch (Exception e) {
+            return segment;
         }
     }
 }

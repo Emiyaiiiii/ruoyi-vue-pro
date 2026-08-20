@@ -1,13 +1,13 @@
 # yudao-module-ai-agent
 
-智能体管理模块：把 **QwenPaw** 作为共享的「智能体仓库」，芋道侧负责智能体生命周期、系统级 MCP/Skills 商店、用户级绑定与知识库问答会话。
+智能体管理模块：把 **QwenPaw** 作为共享的「智能体仓库」，芋道侧负责智能体生命周期、系统级 MCP 商店与 Skills 技能池、以及知识库问答会话。MCP / Skills 的挂载以 QwenPaw 为唯一权威源（对齐 skills 的做法，无本地绑定表）。
 
 ## 目录结构
 
 ```
 src/main/java/cn/iocoder/yudao/module/agent/
-├── controller/admin/          # 管理后台接口（agent / mcpmeta / skillmeta / agentmcp / agentskill / chatsession）
-├── dal/dataobject/            # DO（ai_agent / ai_mcp_meta / ai_skill_meta / ai_agent_mcp / ai_agent_skill / ai_chat_session / ai_chat_message）
+├── controller/admin/          # 管理后台接口（agent / mcpmeta / skillmeta / agentskill / chatsession / agent-remote）
+├── dal/dataobject/            # DO（ai_agent / ai_mcp_meta / ai_skill_meta / ai_chat_session / ai_chat_message）
 ├── dal/mysql/                 # Mapper（基于 BaseMapperX + LambdaQueryWrapperX，无需 XML）
 ├── service/                   # Service 接口与实现（含 QwenPaw 下发桩）
 ├── enums/ErrorCodeConstants.java
@@ -16,7 +16,9 @@ src/main/java/cn/iocoder/yudao/module/agent/
 
 ## 接入步骤
 
-1. **建表**：执行 `sql/mysql/ai_agent.sql`（7 张表 + 菜单权限 + 字典）。
+1. **建表**：已由 Flyway 迁移脚本统一管理
+   （`yudao-server/src/main/resources/db/migration/V1__init_ai_and_kb_tables.sql`，
+   含 ai/kb 表结构 + 菜单权限 + 字典，启动时自动执行，幂等安全）。
 2. **注册模块**：在根 `pom.xml` 的 `<modules>` 中加入
    `<module>yudao-module-ai-agent</module>`（位于 `yudao-module-kb` 之后）。
 3. **装配到应用**：在 `yudao-server/pom.xml` 增加依赖

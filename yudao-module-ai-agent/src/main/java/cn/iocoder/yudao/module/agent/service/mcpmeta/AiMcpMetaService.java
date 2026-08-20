@@ -40,8 +40,13 @@ public interface AiMcpMetaService {
     PageResult<AiMcpMetaDO> getMcpMetaPage(McpMetaPageReqVO pageReqVO);
 
     /**
-     * 查询启用的商店项列表
+     * 查询启用的商店项列表（管理视角，全部）
      */
     List<AiMcpMetaDO> getEnabledMcpMetaList();
+
+    /**
+     * 查询当前用户可见的商店项列表（公开 + 自己的个人 MCP）
+     */
+    List<AiMcpMetaDO> getVisibleMcpMetaList();
 
 }

@@ -84,4 +84,12 @@ public class McpMetaController {
         return success(BeanUtils.toBean(list, McpMetaRespVO.class));
     }
 
+    @GetMapping("/visible-list")
+    @Operation(summary = "获得当前用户可见的 MCP 商店项列表（公开 + 自己的个人）")
+    @PreAuthorize("@ss.hasPermission('ai-agent:mcp-meta:query')")
+    public CommonResult<List<McpMetaRespVO>> getVisibleMcpMetaList() {
+        List<AiMcpMetaDO> list = mcpMetaService.getVisibleMcpMetaList();
+        return success(BeanUtils.toBean(list, McpMetaRespVO.class));
+    }
+
 }

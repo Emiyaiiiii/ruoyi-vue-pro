@@ -40,6 +40,33 @@ public interface AiSkillMetaMapper extends BaseMapperX<AiSkillMetaDO> {
     }
 
     /**
+     * 分页查询（用户级隔离：仅公开 visibility=1 或归属自己的技能）
+     */
+    default PageResult<AiSkillMetaDO> selectVisiblePage(SkillMetaPageReqVO reqVO, Long userId) {
+        LambdaQueryWrapperX<AiSkillMetaDO> wrapper = new LambdaQueryWrapperX<AiSkillMetaDO>()
+                .eqIfPresent(AiSkillMetaDO::getSource, reqVO.getSource())
+                .eqIfPresent(AiSkillMetaDO::getVisibility, reqVO.getVisibility())
+                .eqIfPresent(AiSkillMetaDO::getStatus, reqVO.getStatus());
+        // 可见性：公开或自己的个人技能
+        wrapper.and(w -> w
+                .eq(AiSkillMetaDO::getVisibility, 1) // 公开
+                .or()
+                .eq(AiSkillMetaDO::getOwnerUserId, userId)); // 自己的个人技能
+
+        if (reqVO.getSearch() != null && !reqVO.getSearch().isEmpty()) {
+            wrapper.and(w -> w
+                    .like(AiSkillMetaDO::getSkillName, reqVO.getSearch())
+                    .or()
+                    .like(AiSkillMetaDO::getDisplayName, reqVO.getSearch())
+                    .or()
+                    .like(AiSkillMetaDO::getDescription, reqVO.getSearch()));
+        }
+
+        wrapper.orderByDesc(AiSkillMetaDO::getCreateTime);
+        return selectPage(reqVO, wrapper);
+    }
+
+    /**
      * 按 skillName 查询（唯一性校验）
      */
     default AiSkillMetaDO selectBySkillName(String skillName) {

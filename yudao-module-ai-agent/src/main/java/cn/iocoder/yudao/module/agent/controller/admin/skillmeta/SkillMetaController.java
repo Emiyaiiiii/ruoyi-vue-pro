@@ -13,6 +13,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -40,12 +41,14 @@ public class SkillMetaController {
 
     @PostMapping("/create")
     @Operation(summary = "创建技能商店项（仅 Java 侧元数据）")
+    @PreAuthorize("@ss.hasPermission('ai-agent:skill-meta:create')")
     public CommonResult<Long> createSkillMeta(@Valid @RequestBody SkillMetaSaveReqVO createReqVO) {
         return success(skillMetaService.createSkillMeta(createReqVO));
     }
 
     @PutMapping("/update")
     @Operation(summary = "更新技能商店项（icon/可见性/描述等）")
+    @PreAuthorize("@ss.hasPermission('ai-agent:skill-meta:update')")
     public CommonResult<Boolean> updateSkillMeta(@Valid @RequestBody SkillMetaSaveReqVO updateReqVO) {
         skillMetaService.updateSkillMeta(updateReqVO);
         return success(true);
@@ -54,6 +57,7 @@ public class SkillMetaController {
     @DeleteMapping("/delete")
     @Operation(summary = "删除技能商店项（同时从 QwenPaw 技能池删除）")
     @Parameter(name = "id", description = "技能商店项ID", required = true)
+    @PreAuthorize("@ss.hasPermission('ai-agent:skill-meta:delete')")
     public CommonResult<Boolean> deleteSkillMeta(@RequestParam("id") Long id) {
         skillMetaService.deleteSkillMeta(id);
         return success(true);
@@ -62,6 +66,7 @@ public class SkillMetaController {
     @GetMapping("/get")
     @Operation(summary = "获得技能商店项详情")
     @Parameter(name = "id", description = "技能商店项ID", required = true)
+    @PreAuthorize("@ss.hasPermission('ai-agent:skill-meta:query')")
     public CommonResult<SkillMetaRespVO> getSkillMeta(@RequestParam("id") Long id) {
         AiSkillMetaDO meta = skillMetaService.getSkillMeta(id);
         return success(BeanUtils.toBean(meta, SkillMetaRespVO.class));
@@ -69,6 +74,7 @@ public class SkillMetaController {
 
     @GetMapping("/page")
     @Operation(summary = "获得技能商店分页（管理后台用）")
+    @PreAuthorize("@ss.hasPermission('ai-agent:skill-meta:query')")
     public CommonResult<PageResult<SkillMetaRespVO>> getSkillMetaPage(@Valid SkillMetaPageReqVO pageReqVO) {
         PageResult<AiSkillMetaDO> pageResult = skillMetaService.getSkillMetaPage(pageReqVO);
         return success(BeanUtils.toBean(pageResult, SkillMetaRespVO.class));
@@ -76,6 +82,7 @@ public class SkillMetaController {
 
     @GetMapping("/visible-list")
     @Operation(summary = "获得当前用户可见的技能列表（公开 + 自己的个人技能）")
+    @PreAuthorize("@ss.hasPermission('ai-agent:skill-meta:query')")
     public CommonResult<List<SkillMetaRespVO>> getVisibleSkillMetaList() {
         Long userId = SecurityFrameworkUtils.getLoginUserId();
         List<AiSkillMetaDO> list = skillMetaService.getVisibleSkillMetaList(userId);
@@ -84,6 +91,7 @@ public class SkillMetaController {
 
     @PostMapping("/upload")
     @Operation(summary = "上传 zip 到 QwenPaw 技能池并创建 Java 侧元数据")
+    @PreAuthorize("@ss.hasPermission('ai-agent:skill-meta:create')")
     public CommonResult<Long> uploadSkill(
             @RequestParam("file") MultipartFile file,
             @RequestParam(value = "targetName", required = false) String targetName,

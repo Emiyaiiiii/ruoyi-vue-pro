@@ -96,6 +96,11 @@ public class AiMcpMetaDO extends BaseDO {
     private Integer status;
 
     /**
+     * 归属用户ID（type=1 个人 MCP 时，仅创建者可见）
+     */
+    private Long ownerUserId;
+
+    /**
      * 排序
      */
     private Integer sortOrder;

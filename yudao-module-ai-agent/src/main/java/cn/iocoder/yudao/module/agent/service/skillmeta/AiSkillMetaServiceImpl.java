@@ -2,11 +2,14 @@ package cn.iocoder.yudao.module.agent.service.skillmeta;
 
 import cn.iocoder.yudao.framework.common.pojo.PageResult;
 import cn.iocoder.yudao.framework.common.util.object.BeanUtils;
+import cn.iocoder.yudao.framework.security.core.service.SecurityFrameworkService;
+import cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils;
 import cn.iocoder.yudao.module.agent.controller.admin.skillmeta.vo.SkillMetaPageReqVO;
 import cn.iocoder.yudao.module.agent.controller.admin.skillmeta.vo.SkillMetaSaveReqVO;
 import cn.iocoder.yudao.module.agent.dal.dataobject.skillmeta.AiSkillMetaDO;
 import cn.iocoder.yudao.module.agent.dal.mysql.skillmeta.AiSkillMetaMapper;
 import cn.iocoder.yudao.module.agent.framework.config.QwenPawClient;
+import cn.iocoder.yudao.module.system.enums.permission.RoleCodeEnum;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.validation.annotation.Validated;
@@ -36,6 +39,9 @@ public class AiSkillMetaServiceImpl implements AiSkillMetaService {
 
     @Resource
     private QwenPawClient qwenPawClient;
+
+    @Resource
+    private SecurityFrameworkService securityFrameworkService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -84,11 +90,19 @@ public class AiSkillMetaServiceImpl implements AiSkillMetaService {
 
     @Override
     public PageResult<AiSkillMetaDO> getSkillMetaPage(SkillMetaPageReqVO pageReqVO) {
-        return skillMetaMapper.selectPage(pageReqVO);
+        // 用户级隔离：超管/租户管理员看全部，普通用户仅看公开 + 自己的
+        if (isSuperAdmin()) {
+            return skillMetaMapper.selectPage(pageReqVO);
+        }
+        return skillMetaMapper.selectVisiblePage(pageReqVO, SecurityFrameworkUtils.getLoginUserId());
     }
 
     @Override
     public List<AiSkillMetaDO> getVisibleSkillMetaList(Long userId) {
+        // 用户级隔离：超管/租户管理员看全部启用的，普通用户仅看公开 + 自己的
+        if (isSuperAdmin()) {
+            return skillMetaMapper.selectEnabledList();
+        }
         return skillMetaMapper.selectVisibleList(userId);
     }
 
@@ -207,6 +221,15 @@ public class AiSkillMetaServiceImpl implements AiSkillMetaService {
             throw exception(SKILL_META_NOT_EXISTS);
         }
         return meta;
+    }
+
+    /**
+     * 是否超管/租户管理员（可见全部数据）
+     */
+    private boolean isSuperAdmin() {
+        return securityFrameworkService.hasAnyRoles(
+                RoleCodeEnum.SUPER_ADMIN.getCode(),
+                RoleCodeEnum.TENANT_ADMIN.getCode());
     }
 
     private void validateSkillNameUnique(String skillName, Long excludeId) {

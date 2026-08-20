@@ -17,6 +17,7 @@ public interface FileConfigConvert {
     FileConfigConvert INSTANCE = Mappers.getMapper(FileConfigConvert.class);
 
     @Mapping(target = "config", ignore = true)
+    @Mapping(target = "master", ignore = true)
     FileConfigDO convert(FileConfigSaveReqVO bean);
 
 }

@@ -2,19 +2,14 @@ package cn.iocoder.yudao.module.agent.service.agent;
 
 import cn.iocoder.yudao.framework.common.pojo.PageResult;
 import cn.iocoder.yudao.framework.common.util.object.BeanUtils;
-import cn.iocoder.yudao.framework.mybatis.core.query.LambdaQueryWrapperX;
+import cn.iocoder.yudao.framework.security.core.service.SecurityFrameworkService;
 import cn.iocoder.yudao.module.agent.controller.admin.agent.vo.AgentPageReqVO;
 import cn.iocoder.yudao.module.agent.controller.admin.agent.vo.AgentSaveReqVO;
 import cn.iocoder.yudao.module.agent.dal.dataobject.agent.AiAgentDO;
-import cn.iocoder.yudao.module.agent.dal.dataobject.agentmcp.AiAgentMcpDO;
-import cn.iocoder.yudao.module.agent.dal.dataobject.chatmessage.AiChatMessageDO;
-import cn.iocoder.yudao.module.agent.dal.dataobject.chatsession.AiChatSessionDO;
 import cn.iocoder.yudao.module.agent.dal.mysql.agent.AiAgentMapper;
-import cn.iocoder.yudao.module.agent.dal.mysql.agentmcp.AiAgentMcpMapper;
-import cn.iocoder.yudao.module.agent.dal.mysql.chatmessage.AiChatMessageMapper;
-import cn.iocoder.yudao.module.agent.dal.mysql.chatsession.AiChatSessionMapper;
 import cn.iocoder.yudao.module.agent.framework.config.QwenPawClient;
 import cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils;
+import cn.iocoder.yudao.module.system.enums.permission.RoleCodeEnum;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.validation.annotation.Validated;
@@ -41,13 +36,9 @@ public class AiAgentServiceImpl implements AiAgentService {
     @Resource
     private AiAgentMapper agentMapper;
     @Resource
-    private AiAgentMcpMapper agentMcpMapper;
-    @Resource
-    private AiChatSessionMapper chatSessionMapper;
-    @Resource
-    private AiChatMessageMapper chatMessageMapper;
-    @Resource
     private QwenPawClient qwenPawClient;
+    @Resource
+    private SecurityFrameworkService securityFrameworkService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -142,16 +133,10 @@ public class AiAgentServiceImpl implements AiAgentService {
     @Transactional(rollbackFor = Exception.class)
     public void deleteAgent(Long id) {
         AiAgentDO agent = validateExists(id);
-        // 级联删除绑定、会话与消息
-        agentMcpMapper.delete(new LambdaQueryWrapperX<AiAgentMcpDO>()
-                .eq(AiAgentMcpDO::getAgentId, id));
-        chatSessionMapper.delete(new LambdaQueryWrapperX<AiChatSessionDO>()
-                .eq(AiChatSessionDO::getAgentId, id));
-        chatMessageMapper.delete(new LambdaQueryWrapperX<AiChatMessageDO>()
-                .eq(AiChatMessageDO::getAgentId, id));
+        // 本地 MCP 绑定已废弃（对齐 skills，QwenPaw 为权威源），删除 agent 时由 QwenPaw 一并清空其 MCP/Skills/Chat
         agentMapper.deleteById(id);
 
-        // 同步删除 QwenPaw agent
+        // 同步删除 QwenPaw agent（其下的所有 chat 会被 QwenPaw 一并清空）
         try {
             qwenPawClient.deleteAgent(agent.getQwenpawAgentId());
         } catch (Exception e) {
@@ -179,6 +164,10 @@ public class AiAgentServiceImpl implements AiAgentService {
 
     @Override
     public PageResult<AiAgentDO> getAgentPage(AgentPageReqVO pageReqVO) {
+        // 非超管/租户管理员：强制只看当前用户的智能体，实现用户级隔离
+        if (!isSuperAdmin()) {
+            pageReqVO.setUserId(SecurityFrameworkUtils.getLoginUserId());
+        }
         return agentMapper.selectPage(pageReqVO);
     }
 
@@ -290,7 +279,7 @@ public class AiAgentServiceImpl implements AiAgentService {
     public Map<String, Object> registerQwenpawMcp(Long agentId, String clientKey, String transport, String url,
                                                   String command, String commandArgs, String headersJson, String toolsJson) {
         AiAgentDO agent = validateExists(agentId);
-        qwenPawClient.registerMcp(agent.getQwenpawAgentId(), clientKey, transport, url,
+        qwenPawClient.registerMcp(agent.getQwenpawAgentId(), clientKey, clientKey, transport, url,
                 command, commandArgs, headersJson, toolsJson);
         // 返回注册后的最新 MCP 列表，便于前端刷新
         return qwenPawClient.listAgentMcps(agent.getQwenpawAgentId()).stream()
@@ -311,7 +300,32 @@ public class AiAgentServiceImpl implements AiAgentService {
         if (agent == null) {
             throw exception(AGENT_NOT_EXISTS);
         }
+        // 用户级隔离：非超管只能访问属于自己的智能体
+        validateAgentAccess(agent);
         return agent;
+    }
+
+    /**
+     * 校验当前用户是否有权访问该智能体
+     * <p>超管/租户管理员可访问本租户全部智能体；普通用户仅能访问属于自己的。</p>
+     */
+    private void validateAgentAccess(AiAgentDO agent) {
+        if (isSuperAdmin()) {
+            return;
+        }
+        Long userId = SecurityFrameworkUtils.getLoginUserId();
+        if (userId == null || !userId.equals(agent.getUserId())) {
+            throw exception(AGENT_PERMISSION_DENIED);
+        }
+    }
+
+    /**
+     * 是否超管/租户管理员（可见全部数据）
+     */
+    private boolean isSuperAdmin() {
+        return securityFrameworkService.hasAnyRoles(
+                RoleCodeEnum.SUPER_ADMIN.getCode(),
+                RoleCodeEnum.TENANT_ADMIN.getCode());
     }
 
     private void validateNameUnique(Long userId, String name, Long excludeId) {

@@ -16,6 +16,7 @@ public interface ErrorCodeConstants {
     ErrorCode AGENT_QWENPAW_SYNC_FAILED = new ErrorCode(1_020_001_003, "QwenPaw 智能体同步失败");
     ErrorCode AGENT_ALREADY_ENABLED = new ErrorCode(1_020_001_004, "智能体已启用");
     ErrorCode AGENT_ALREADY_DISABLED = new ErrorCode(1_020_001_005, "智能体已停用");
+    ErrorCode AGENT_PERMISSION_DENIED = new ErrorCode(1_020_001_006, "无权访问该智能体");
 
     // ========== MCP 商店 1-020-002-000 ==========
     ErrorCode MCP_META_NOT_EXISTS = new ErrorCode(1_020_002_000, "MCP 商店项不存在");
@@ -42,5 +43,8 @@ public interface ErrorCodeConstants {
     ErrorCode QWENPAW_CONNECT_FAILED = new ErrorCode(1_020_008_000, "QwenPaw 服务连接失败，请检查配置");
     ErrorCode QWENPAW_AGENT_NOT_FOUND = new ErrorCode(1_020_008_001, "QwenPaw 侧智能体不存在");
     ErrorCode QWENPAW_CHAT_FAILED = new ErrorCode(1_020_008_002, "QwenPaw 对话调用失败");
+    ErrorCode QWENPAW_CHAT_CREATE_FAILED = new ErrorCode(1_020_008_003, "QwenPaw 会话创建失败，请稍后重试");
+    ErrorCode CHAT_SESSION_STREAMING = new ErrorCode(1_020_008_004, "当前会话正在生成中，请勿重复发送");
+    ErrorCode QWENPAW_MCP_CONNECTING = new ErrorCode(1_020_008_005, "MCP 服务连接中，请稍后重试");
 
 }
