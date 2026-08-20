@@ -12,6 +12,7 @@ import cn.iocoder.yudao.module.kb.dal.mysql.sharedept.ShareDeptMapper;
 import cn.iocoder.yudao.module.kb.service.library.rule.VisibilityContext;
 import cn.iocoder.yudao.module.kb.service.library.rule.VisibilityRuleEngine;
 import cn.iocoder.yudao.module.kb.service.projectmember.ProjectMemberService;
+import cn.iocoder.yudao.module.kb.service.libraryext.LibraryExtService;
 import cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import org.springframework.stereotype.Service;
@@ -58,6 +59,9 @@ public class LibraryServiceImpl implements LibraryService {
     private ProjectMemberService projectMemberService;
 
     @Resource
+    private LibraryExtService libraryExtService;
+
+    @Resource
     private VisibilityRuleEngine ruleEngine;
 
     @Override
@@ -87,6 +91,10 @@ public class LibraryServiceImpl implements LibraryService {
                         .collect(Collectors.toList());
                 shareDeptMapper.insertBatch(list);
             }
+        }
+        // 保存自定义字段值
+        if (createReqVO.getExtValues() != null) {
+            libraryExtService.replaceExtValues(library.getId(), createReqVO.getExtValues());
         }
         return library.getId();
     }
@@ -118,6 +126,10 @@ public class LibraryServiceImpl implements LibraryService {
                 shareDeptMapper.insertBatch(list);
             }
         }
+        // 保存自定义字段值
+        if (updateReqVO.getExtValues() != null) {
+            libraryExtService.replaceExtValues(updateReqVO.getId(), updateReqVO.getExtValues());
+        }
     }
 
     @Override
@@ -134,6 +146,8 @@ public class LibraryServiceImpl implements LibraryService {
                 .eq(ShareDeptDO::getKbId, id));
         // 删除关联的项目成员记录
         projectMemberService.removeAllByKbId(id);
+        // 删除自定义字段值
+        libraryExtService.removeAllByKbId(id);
         // 删除
         libraryMapper.deleteById(id);
     }
@@ -154,6 +168,7 @@ public class LibraryServiceImpl implements LibraryService {
             shareDeptMapper.delete(new LambdaQueryWrapper<ShareDeptDO>()
                     .eq(ShareDeptDO::getKbId, id));
             projectMemberService.removeAllByKbId(id);
+            libraryExtService.removeAllByKbId(id);
         }
         // 最后批量删除知识库
         libraryMapper.deleteByIds(ids);

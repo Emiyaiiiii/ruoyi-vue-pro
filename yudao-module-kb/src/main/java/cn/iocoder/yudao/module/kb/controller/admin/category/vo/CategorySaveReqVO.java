@@ -28,4 +28,7 @@ public class CategorySaveReqVO {
     @Schema(description = "状态: 0=启用, 1=禁用", example = "1")
     private Integer status;
 
+    @Schema(description = "表头配置(JSON): 该分类下文件列表的动态表头")
+    private String columnConfig;
+
 }

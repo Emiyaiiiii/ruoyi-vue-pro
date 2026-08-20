@@ -53,7 +53,7 @@ public interface LibraryMapper extends BaseMapperX<LibraryDO> {
      * 构建基础查询条件（不含可见性过滤）
      */
     default LambdaQueryWrapperX<LibraryDO> buildBaseWrapper(LibraryPageReqVO reqVO) {
-        return new LambdaQueryWrapperX<LibraryDO>()
+        LambdaQueryWrapperX<LibraryDO> wrapper = new LambdaQueryWrapperX<LibraryDO>()
                 .likeIfPresent(LibraryDO::getName, reqVO.getName())
                 .eqIfPresent(LibraryDO::getCategoryId, reqVO.getCategoryId())
                 .eqIfPresent(LibraryDO::getKbLevelId, reqVO.getKbLevelId())
@@ -64,8 +64,21 @@ public interface LibraryMapper extends BaseMapperX<LibraryDO> {
                 .eqIfPresent(LibraryDO::getStatus, reqVO.getStatus())
                 .eqIfPresent(LibraryDO::getIsPublic, reqVO.getIsPublic())
                 .eqIfPresent(LibraryDO::getIsProject, reqVO.getIsProject())
-                .betweenIfPresent(LibraryDO::getCreateTime, reqVO.getCreateTime())
-                .orderByDesc(LibraryDO::getId);
+                .betweenIfPresent(LibraryDO::getCreateTime, reqVO.getCreateTime());
+
+        // 动态排序（白名单映射到固定列，避免 SQL 注入）
+        String sortField = reqVO.getSortField();
+        boolean asc = !"descending".equals(reqVO.getSortOrder());
+        if ("name".equals(sortField)) {
+            wrapper.orderBy(true, asc, LibraryDO::getName);
+        } else if ("docCount".equals(sortField)) {
+            wrapper.orderBy(true, asc, LibraryDO::getDocCount);
+        } else if ("createTime".equals(sortField)) {
+            wrapper.orderBy(true, asc, LibraryDO::getCreateTime);
+        } else {
+            wrapper.orderByDesc(LibraryDO::getId);
+        }
+        return wrapper;
     }
 
     /**
