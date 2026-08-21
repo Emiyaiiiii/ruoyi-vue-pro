@@ -178,6 +178,11 @@
             <groupId>org.flywaydb</groupId>
             <artifactId>flyway-mysql</artifactId>
         </dependency>
+        <!-- devtools：用于容器内远程热重载（开发环境），通过 -Dloader.path 加载外部编译产物 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-devtools</artifactId>
+        </dependency>
 
     </dependencies>
 
@@ -190,6 +195,13 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <version>${spring.boot.version}</version>
+                <configuration>
+                    <!-- ZIP layout => 使用 PropertiesLauncher，可通过 -Dloader.path 加载外部 classpath（配合 devtools 热重载） -->
+                    <layout>ZIP</layout>
+                    <mainClass>cn.iocoder.yudao.server.YudaoServerApplication</mainClass>
+                    <!-- 默认 repackage 会排除 devtools，这里强制打进 fat jar，供 dev 容器类路径加载实现热重载 -->
+                    <excludeDevtools>false</excludeDevtools>
+                </configuration>
                 <executions>
                     <execution>
                         <goals>

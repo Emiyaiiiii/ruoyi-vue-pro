@@ -15,7 +15,7 @@ public class ActiveModelRespVO {
     @Schema(description = "Provider ID")
     private String providerId;
 
-    @Schema(description = "模型 ID")
+    @Schema(description = "模型 ID ")
     private String model;
 
     @Schema(description = "作用域：global / agent")

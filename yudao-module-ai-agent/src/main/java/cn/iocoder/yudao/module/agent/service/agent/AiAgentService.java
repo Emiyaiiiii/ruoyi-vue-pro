@@ -96,6 +96,18 @@ public interface AiAgentService {
     List<Map<String, Object>> listAgentMcpTools(Long agentId, String clientKey);
 
     /**
+     * 更新智能体某个 MCP client 的工具白名单（QwenPaw 侧；对任意已注册 MCP 生效）
+     *
+     * @param toolsJson 工具白名单 JSON 数组字符串；为 null 表示移除白名单启用全部
+     */
+    List<Map<String, Object>> updateAgentMcpTools(Long agentId, String clientKey, String toolsJson);
+
+    /**
+     * 更新智能体某个 MCP client 的完整配置（QwenPaw 侧；含 transport/url/headers/command/args/env/cwd/tools）
+     */
+    Map<String, Object> updateAgentMcpConfig(Long agentId, String clientKey, Map<String, Object> config);
+
+    /**
      * 列出智能体工作区的 Skills（QwenPaw 侧实际安装）
      */
     List<Map<String, Object>> listAgentQwenpawSkills(Long agentId);

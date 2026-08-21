@@ -241,6 +241,18 @@ public class AiAgentServiceImpl implements AiAgentService {
     }
 
     @Override
+    public List<Map<String, Object>> updateAgentMcpTools(Long agentId, String clientKey, String toolsJson) {
+        AiAgentDO agent = validateExists(agentId);
+        return qwenPawClient.updateMcpTools(agent.getQwenpawAgentId(), clientKey, toolsJson);
+    }
+
+    @Override
+    public Map<String, Object> updateAgentMcpConfig(Long agentId, String clientKey, Map<String, Object> config) {
+        AiAgentDO agent = validateExists(agentId);
+        return qwenPawClient.updateMcpConfig(agent.getQwenpawAgentId(), clientKey, config);
+    }
+
+    @Override
     public List<Map<String, Object>> listAgentQwenpawSkills(Long agentId) {
         AiAgentDO agent = validateExists(agentId);
         return qwenPawClient.listAgentSkills(agent.getQwenpawAgentId());

@@ -67,6 +67,29 @@ public class AgentRemoteController {
         return success(agentService.listAgentMcpTools(agentId, clientKey));
     }
 
+    @PutMapping("/mcp/tools")
+    @Operation(summary = "更新智能体某个 MCP 的工具白名单（QwenPaw 侧，对任意已注册 MCP 生效）")
+    @Parameter(name = "agentId", description = "智能体ID", required = true)
+    @Parameter(name = "clientKey", description = "MCP client key", required = true)
+    @Parameter(name = "toolsJson", description = "工具白名单（JSON 数组字符串；为空则移除白名单启用全部）")
+    @PreAuthorize("@ss.hasPermission('ai-agent:agent:update')")
+    public CommonResult<List<Map<String, Object>>> updateMcpTools(@RequestParam("agentId") Long agentId,
+                                                                  @RequestParam("clientKey") String clientKey,
+                                                                  @RequestParam(value = "toolsJson", required = false) String toolsJson) {
+        return success(agentService.updateAgentMcpTools(agentId, clientKey, toolsJson));
+    }
+
+    @PutMapping("/mcp")
+    @Operation(summary = "更新智能体某个 MCP client 的完整配置（QwenPaw 侧，含 transport/url/headers/command/args/env/cwd/tools）")
+    @Parameter(name = "agentId", description = "智能体ID", required = true)
+    @Parameter(name = "clientKey", description = "MCP client key", required = true)
+    @PreAuthorize("@ss.hasPermission('ai-agent:agent:update')")
+    public CommonResult<Map<String, Object>> updateMcp(@RequestParam("agentId") Long agentId,
+                                                       @RequestParam("clientKey") String clientKey,
+                                                       @RequestBody Map<String, Object> config) {
+        return success(agentService.updateAgentMcpConfig(agentId, clientKey, config));
+    }
+
     @GetMapping("/skills")
     @Operation(summary = "获得智能体在 QwenPaw 侧安装的 Skills 列表")
     @Parameter(name = "agentId", description = "智能体ID", required = true)

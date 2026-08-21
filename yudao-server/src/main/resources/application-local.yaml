@@ -48,7 +48,7 @@ spring:
       primary: master
       datasource:
         master:
-          url: jdbc:mysql://127.0.0.1:23306/ruoyi-vue-pro?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&nullCatalogMeansCurrent=true&rewriteBatchedStatements=true # MySQL Connector/J 8.X 连接的示例
+          url: jdbc:mysql://127.0.0.1:3306/ruoyi-vue-pro?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&nullCatalogMeansCurrent=true&rewriteBatchedStatements=true # MySQL Connector/J 8.X 连接的示例
           #          url: jdbc:mysql://127.0.0.1:3306/ruoyi-vue-pro?useSSL=true&allowPublicKeyRetrieval=true&useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true # MySQL Connector/J 5.X 连接的示例
           #          url: jdbc:postgresql://127.0.0.1:5432/ruoyi-vue-pro # PostgreSQL 连接的示例
           #          url: jdbc:oracle:thin:@127.0.0.1:1521:xe # Oracle 连接的示例
@@ -69,7 +69,7 @@ spring:
           #          password: 123456 # 瀚高 HighGo 连接的示例
         slave: # 模拟从库，可根据自己需要修改
           lazy: true # 开启懒加载，保证启动速度
-          url: jdbc:mysql://127.0.0.1:23306/ruoyi-vue-pro?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&rewriteBatchedStatements=true&nullCatalogMeansCurrent=true
+          url: jdbc:mysql://127.0.0.1:3306/ruoyi-vue-pro?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&rewriteBatchedStatements=true&nullCatalogMeansCurrent=true
           username: root
           password: 20221qaz@WSX
 #        tdengine: # IoT 数据库（需要 IoT 物联网再开启噢！）
@@ -87,7 +87,7 @@ spring:
       host: 127.0.0.1
       database: 2
       password: DVADMIN3
-      port: 26379
+      port: 6379
 
 --- #################### 定时任务相关配置 ####################
 
@@ -304,8 +304,13 @@ yudao:
     qwenpaw:
       # QwenPaw 服务地址（Docker 默认端口 8088）
       base-url: http://127.0.0.1:8088
-      # 是否启用鉴权（QwenPaw 默认关闭）
-      auth-enabled: false
+      # 是否启用鉴权（QwenPaw 开启鉴权后必须为 true，并在启动时用账号密码登录换取 token）
+      # 本机 IDEA 启动无 QWENPAW_AUTH_* 环境变量，回退到与 deploy/.env 一致的默认账号密码；
+      # 容器环境由 docker-compose 的 ARGS 命令行参数覆盖，不受这里影响
+      auth-enabled: true
+      # QwenPaw 服务账号（用于启动时自动登录换取永久 token）
+      auth-username: admin
+      auth-password: 20261qaz@WSX
       # 默认模型
       default-model: qwen3-coder-flash
       # 超时配置

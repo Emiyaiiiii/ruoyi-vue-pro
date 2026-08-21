@@ -12,6 +12,7 @@ import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 
+import jakarta.annotation.PostConstruct;
 import jakarta.annotation.Resource;
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -60,6 +61,57 @@ public class QwenPawClient {
 
     private final RestTemplate restTemplate = new RestTemplate();
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    /**
+     * 当前生效的鉴权 token（authEnabled=true 时由 {@link #init()} 初始化：
+     * 优先用配置的 authToken，否则启动时用账号密码登录换取永久 token）
+     */
+    private volatile String authToken;
+
+    /**
+     * 启动初始化：开启鉴权时准备 token
+     */
+    @PostConstruct
+    public void init() {
+        if (!Boolean.TRUE.equals(properties.getAuthEnabled())) {
+            return;
+        }
+        // 1. 手动配置的 token 优先
+        if (properties.getAuthToken() != null && !properties.getAuthToken().isEmpty()) {
+            authToken = properties.getAuthToken();
+            log.info("[init] 使用配置的 QwenPaw 鉴权 token");
+            return;
+        }
+        // 2. 否则用账号密码启动时登录换取永久 token
+        if (properties.getAuthUsername() != null && !properties.getAuthUsername().isEmpty()
+                && properties.getAuthPassword() != null && !properties.getAuthPassword().isEmpty()) {
+            try {
+                authToken = login();
+                log.info("[init] QwenPaw 启动登录成功，已获取永久 token");
+            } catch (Exception e) {
+                log.warn("[init] QwenPaw 启动登录失败，后续请求将无鉴权头", e);
+            }
+            return;
+        }
+        log.warn("[init] QwenPaw 已开启鉴权，但未配置 authToken 或 authUsername/authPassword，后续请求将无鉴权头");
+    }
+
+    /**
+     * 使用服务账号登录 QwenPaw，换取 token（expires_in=-1 永久有效）
+     */
+    private String login() {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("username", properties.getAuthUsername());
+        body.put("password", properties.getAuthPassword());
+        body.put("expires_in", -1);
+        String resp = postJson("/api/auth/login", toJson(body));
+        Map<String, Object> map = parseJsonObject(resp);
+        Object token = map.get("token");
+        if (token == null || token.toString().isEmpty()) {
+            throw new IllegalStateException("QwenPaw 登录响应缺少 token");
+        }
+        return token.toString();
+    }
     /**
      * 用于发送 PATCH 请求的 RestTemplate。
      *
@@ -370,6 +422,34 @@ public class QwenPawClient {
     }
 
     /**
+     * 更新智能体某个 MCP client 的工具白名单
+     *
+     * <p>对应 QwenPaw {@code PUT /api/agents/{agentId}/mcp/tools/{clientKey}}，
+     * 传 {@code {"tools": [...]}}，tools 为 null 表示移除白名单（启用全部工具）。
+     * 对任意已注册 MCP（含 QwenPaw 自带、自定义 JSON 下发的）均生效，无需依赖 Java 商店模板。
+     * 返回更新后的 MCPToolInfo 数组。
+     *
+     * @param toolsJson 工具白名单 JSON 数组字符串；为 null 表示移除白名单启用全部
+     */
+    @SuppressWarnings("unchecked")
+    public List<Map<String, Object>> updateMcpTools(String agentId, String clientKey, String toolsJson) {
+        String path = API_AGENTS + "/" + encode(agentId) + API_MCP + "/tools/" + encode(clientKey);
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("tools",
+                (toolsJson != null && !toolsJson.isEmpty()) ? parseJsonArray(toolsJson) : null);
+        try {
+            String resp = putJson(path, toJson(body));
+            Object value = objectMapper.readValue(resp, Object.class);
+            if (value instanceof List) {
+                return toMapList(value);
+            }
+        } catch (Exception e) {
+            log.warn("[updateMcpTools] 响应解析失败，agentId={}, clientKey={}", agentId, clientKey, e);
+        }
+        return new ArrayList<>();
+    }
+
+    /**
      * 列出智能体工作区的 Skills（QwenPaw 侧实际安装）
      *
      * <p>对应 QwenPaw {@code GET /api/agents/{agentId}/skills}，返回 SkillInfo 数组。
@@ -490,6 +570,27 @@ public class QwenPawClient {
      */
     public void deleteMcp(String agentId, String clientKey) {
         delete(API_AGENTS + "/" + encode(agentId) + "/mcp/" + encode(clientKey));
+    }
+
+    /**
+     * 更新 MCP client 完整配置
+     *
+     * <p>对应 QwenPaw {@code PUT /api/agents/{agentId}/mcp/{client_key}}，
+     * body 为 {@code MCPClientUpdateRequest}（name/description/enabled/transport/url/headers/
+     * command/args/env/cwd/tools，字段均可选）。用于编辑 MCP 的 JSON 配置（含 env、args 等），
+     * 从而支持先连接/启动 MCP、再配置工具白名单。
+     *
+     * @return 更新后的 client 信息
+     */
+    public Map<String, Object> updateMcpConfig(String agentId, String clientKey, Map<String, Object> config) {
+        String path = API_AGENTS + "/" + encode(agentId) + API_MCP + "/" + encode(clientKey);
+        try {
+            String resp = putJson(path, toJson(config));
+            return parseJsonObject(resp);
+        } catch (Exception e) {
+            log.warn("[updateMcpConfig] 响应解析失败，agentId={}, clientKey={}", agentId, clientKey, e);
+        }
+        return new LinkedHashMap<>();
     }
 
     // ==================== Skills 管理 ====================
@@ -1202,8 +1303,8 @@ public class QwenPawClient {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         if (Boolean.TRUE.equals(properties.getAuthEnabled())
-                && properties.getAuthToken() != null && !properties.getAuthToken().isEmpty()) {
-            headers.setBearerAuth(properties.getAuthToken());
+                && authToken != null && !authToken.isEmpty()) {
+            headers.setBearerAuth(authToken);
         }
         return headers;
     }

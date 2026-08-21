@@ -110,6 +110,10 @@ public class AiChatSessionServiceImpl implements AiChatSessionService {
                     qwenPawClient.chatStream(qwenpawAgentId, chatId, userId, effectiveSessionId, message,
                             chunk -> forwardChunk(emitter, chunk, agentId, chatId, "sendMessageStream"));
                 }
+                // 上游 QwenPaw 流已结束，必须 complete 关闭 SseEmitter。
+                // 若不调用，连接（及经 nginx 中转时末尾缓冲）永不关闭，
+                // 前端读不到 {object:response,status:completed}，onDone 不触发、列表不刷新。
+                emitter.complete();
             } catch (Exception e) {
                 log.error("[sendMessageStream] QwenPaw 流式对话失败，agentId={}, chatId={}", agentId, chatId, e);
                 sendErrorAndComplete(emitter, e);
