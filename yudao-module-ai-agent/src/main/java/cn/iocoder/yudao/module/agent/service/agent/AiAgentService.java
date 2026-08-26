@@ -51,6 +51,27 @@ public interface AiAgentService {
     List<AiAgentDO> getMyAgents();
 
     /**
+     * 获取当前登录用户的默认智能体；不存在则按默认模板自动创建一个（懒加载）。
+     *
+     * <p>核心保证「每人至少有一个默认智能体」，前端列表页因此永远非空。
+     *
+     * @return 用户默认智能体；QwenPaw 不可用且配置了降级时，返回 status=0 的待初始化智能体
+     */
+    AiAgentDO getOrCreateDefaultAgent(Long userId, Long tenantId);
+
+    /**
+     * 将指定智能体设为当前用户的默认智能体（先清旧后设新，唯一约束保证一人一个默认）。
+     */
+    void setDefaultAgent(Long agentId);
+
+    /**
+     * 【超管/租户管理员】批量兜底：为「本地库中尚无任何智能体」的用户各创建一个默认智能体。
+     *
+     * @return {用户名 -> 结果}，结果取值 success / skipped / failed
+     */
+    Map<String, Object> bootstrapUserDefaultAgents();
+
+    /**
      * 按 QwenPaw agent id 查询
      */
     AiAgentDO getAgentByQwenpawAgentId(String qwenpawAgentId);

@@ -64,6 +64,12 @@
             <artifactId>yudao-spring-boot-starter-mq</artifactId>
         </dependency>
 
+        <!-- RabbitMQ（kb 向量任务的 RabbitTemplate 发布需要） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-amqp</artifactId>
+        </dependency>
+
         <!-- Test 测试相关 -->
         <dependency>
             <groupId>cn.iocoder.boot</groupId>

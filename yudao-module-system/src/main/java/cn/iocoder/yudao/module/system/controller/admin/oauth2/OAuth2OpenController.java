@@ -1,13 +1,19 @@
 package cn.iocoder.yudao.module.system.controller.admin.oauth2;
 
+import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.lang.Assert;
 import cn.hutool.core.util.ArrayUtil;
 import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.iocoder.yudao.framework.common.enums.UserTypeEnum;
+import cn.iocoder.yudao.module.system.framework.oidc.config.OidcProperties;
+import cn.iocoder.yudao.module.system.dal.dataobject.user.AdminUserDO;
+import cn.iocoder.yudao.module.system.service.oidc.OidcIdTokenService;
+import cn.iocoder.yudao.module.system.service.user.AdminUserService;
 import cn.iocoder.yudao.framework.common.pojo.CommonResult;
 import cn.iocoder.yudao.framework.common.util.http.HttpUtils;
 import cn.iocoder.yudao.framework.common.util.json.JsonUtils;
+import cn.iocoder.yudao.framework.tenant.core.util.TenantUtils;
 import cn.iocoder.yudao.module.system.controller.admin.oauth2.vo.open.OAuth2OpenAccessTokenRespVO;
 import cn.iocoder.yudao.module.system.controller.admin.oauth2.vo.open.OAuth2OpenAuthorizeInfoRespVO;
 import cn.iocoder.yudao.module.system.controller.admin.oauth2.vo.open.OAuth2OpenCheckTokenRespVO;
@@ -69,6 +75,12 @@ public class OAuth2OpenController {
     private OAuth2ApproveService oauth2ApproveService;
     @Resource
     private OAuth2TokenService oauth2TokenService;
+    @Resource
+    private AdminUserService adminUserService;
+    @Resource
+    private OidcIdTokenService oidcIdTokenService;
+    @Resource
+    private OidcProperties oidcProperties;
 
     /**
      * 对应 Spring Security OAuth 的 TokenEndpoint 类的 postAccessToken 方法
@@ -93,6 +105,7 @@ public class OAuth2OpenController {
             @Parameter(name = "password", example = "cai"), // 多个使用空格分隔
             @Parameter(name = "scope", example = "user_info"),
             @Parameter(name = "refresh_token", example = "123424233"),
+            @Parameter(name = "nonce", description = "OIDC 随机数，用于防重放；仅当 scope 含 openid 时生效", example = "xyz"),
     })
     @SuppressWarnings("EnhancedSwitchMigration")
     public CommonResult<OAuth2OpenAccessTokenRespVO> postAccessToken(HttpServletRequest request,
@@ -103,7 +116,8 @@ public class OAuth2OpenController {
                                                                      @RequestParam(value = "username", required = false) String username, // 密码模式
                                                                      @RequestParam(value = "password", required = false) String password, // 密码模式
                                                                      @RequestParam(value = "scope", required = false) String scope, // 密码模式
-                                                                     @RequestParam(value = "refresh_token", required = false) String refreshToken) { // 刷新模式
+                                                                     @RequestParam(value = "refresh_token", required = false) String refreshToken, // 刷新模式
+                                                                     @RequestParam(value = "nonce", required = false) String nonce) { // OIDC 随机数
         List<String> scopes = OAuth2Utils.buildScopes(scope);
         // 1.1 校验授权类型
         OAuth2GrantTypeEnum grantTypeEnum = OAuth2GrantTypeEnum.getByGrantType(grantType);
@@ -138,7 +152,19 @@ public class OAuth2OpenController {
                 throw new IllegalArgumentException("未知授权类型：" + grantType);
         }
         Assert.notNull(accessTokenDO, "访问令牌不能为空"); // 防御性检查
-        return success(OAuth2OpenConvert.INSTANCE.convert(accessTokenDO));
+        // 3. 构建响应
+        OAuth2OpenAccessTokenRespVO respVO = OAuth2OpenConvert.INSTANCE.convert(accessTokenDO);
+        // 4. OIDC 扩展：仅当客户端请求了 openid scope 且 OIDC 能力开启时，签发 id_token
+        //    老客户端（无 openid scope）响应与原来完全一致，向后兼容
+        if (Boolean.TRUE.equals(oidcProperties.getEnabled()) && CollUtil.contains(scopes, "openid")) {
+            // 跨租户单点登录：以访问令牌归属的租户上下文加载用户，避免请求携带的 tenant-id 与用户归属租户不一致时取不到用户
+            Long tokenTenantId = accessTokenDO.getTenantId();
+            AdminUserDO user = TenantUtils.execute(tokenTenantId, () -> adminUserService.getUser(accessTokenDO.getUserId()));
+            respVO.setIdToken(oidcIdTokenService.createIdToken(
+                    accessTokenDO.getUserId(), user.getUsername(), user.getNickname(), user.getEmail(),
+                    client.getClientId(), nonce));
+        }
+        return success(respVO);
     }
 
     @DeleteMapping("/token")

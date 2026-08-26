@@ -11,7 +11,7 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
  * @author 吴皓
  */
 @Configuration
-@EnableConfigurationProperties(QwenPawProperties.class)
+@EnableConfigurationProperties({QwenPawProperties.class, AiAgentDefaultProperties.class})
 public class QwenPawConfiguration {
 
     /**

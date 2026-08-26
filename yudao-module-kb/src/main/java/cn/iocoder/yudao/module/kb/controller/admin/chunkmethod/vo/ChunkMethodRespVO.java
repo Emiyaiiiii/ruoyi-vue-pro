@@ -51,14 +51,6 @@ public class ChunkMethodRespVO {
     @ExcelProperty("是否默认")
     private Integer isDefaultMethod;
 
-    @Schema(description = "平均处理速度(千字/秒)", example = "5.0")
-    @ExcelProperty("处理速度")
-    private Double avgProcessingSpeed;
-
-    @Schema(description = "内存占用(MB)", example = "50")
-    @ExcelProperty("内存占用")
-    private Integer memoryFootprint;
-
     @Schema(description = "创建时间")
     @ExcelProperty("创建时间")
     private LocalDateTime createTime;

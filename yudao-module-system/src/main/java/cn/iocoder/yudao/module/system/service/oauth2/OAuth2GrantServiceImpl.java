@@ -4,6 +4,7 @@ import cn.hutool.core.lang.Assert;
 import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.iocoder.yudao.framework.common.enums.UserTypeEnum;
+import cn.iocoder.yudao.framework.tenant.core.util.TenantUtils;
 import cn.iocoder.yudao.module.system.dal.dataobject.oauth2.OAuth2AccessTokenDO;
 import cn.iocoder.yudao.module.system.dal.dataobject.oauth2.OAuth2CodeDO;
 import cn.iocoder.yudao.module.system.dal.dataobject.user.AdminUserDO;
@@ -64,9 +65,10 @@ public class OAuth2GrantServiceImpl implements OAuth2GrantService {
             throw exception(ErrorCodeConstants.OAUTH2_GRANT_STATE_MISMATCH);
         }
 
-        // 创建访问令牌
-        return oauth2TokenService.createAccessToken(codeDO.getUserId(), codeDO.getUserType(),
-                codeDO.getClientId(), codeDO.getScopes());
+        // 创建访问令牌：以授权码归属的租户上下文创建，确保 token 的 tenantId 与用户信息归属正确租户
+        // （跨租户单点登录场景，请求方携带的 tenant-id 可能与该授权码归属租户不一致）
+        return TenantUtils.execute(codeDO.getTenantId(), () -> oauth2TokenService.createAccessToken(
+                codeDO.getUserId(), codeDO.getUserType(), codeDO.getClientId(), codeDO.getScopes()));
     }
 
     @Override

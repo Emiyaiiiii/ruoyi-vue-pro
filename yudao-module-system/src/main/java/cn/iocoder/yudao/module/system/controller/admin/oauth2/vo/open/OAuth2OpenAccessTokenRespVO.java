@@ -31,4 +31,8 @@ public class OAuth2OpenAccessTokenRespVO {
     @Schema(description = "授权范围,如果多个授权范围，使用空格分隔", example = "user_info")
     private String scope;
 
+    @Schema(description = "OpenID 身份令牌,仅当请求 scope 含 openid 时返回", example = "eyJhbGciOiJSUzI1...")
+    @JsonProperty("id_token")
+    private String idToken;
+
 }

@@ -92,4 +92,13 @@ public class AiAgentDO extends BaseDO {
      */
     private Integer sortOrder;
 
+    /**
+     * 是否为用户的默认智能体: 1=是, null=否
+     *
+     * <p>数据库层配合 UNIQUE(user_id, is_default) 保证"每人最多一个默认"；
+     * 非默认统一存 null（而非 0），利用 MySQL 唯一索引中 null 互不相等的特性
+     * 避免"多个非默认 agent 互相撞唯一约束"。
+     */
+    private Integer isDefault;
+
 }

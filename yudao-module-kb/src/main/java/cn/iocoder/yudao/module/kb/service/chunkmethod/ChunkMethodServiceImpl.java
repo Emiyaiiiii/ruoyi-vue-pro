@@ -29,6 +29,12 @@ public class ChunkMethodServiceImpl implements ChunkMethodService {
     @Resource
     private ChunkMethodMapper chunkMethodMapper;
 
+    @Resource
+    private cn.iocoder.yudao.module.kb.framework.config.VectorTaskConfig vectorTaskConfig;
+
+    @Resource
+    private org.springframework.web.client.RestTemplate restTemplate;
+
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Long createChunkMethod(ChunkMethodSaveReqVO createReqVO) {
@@ -40,8 +46,6 @@ public class ChunkMethodServiceImpl implements ChunkMethodService {
         // 设置默认值
         if (chunkMethod.getIsActive() == null) chunkMethod.setIsActive(1);
         if (chunkMethod.getIsDefaultMethod() == null) chunkMethod.setIsDefaultMethod(0);
-        if (chunkMethod.getAvgProcessingSpeed() == null) chunkMethod.setAvgProcessingSpeed(1.0);
-        if (chunkMethod.getMemoryFootprint() == null) chunkMethod.setMemoryFootprint(100);
         if (chunkMethod.getParametersTemplate() == null) chunkMethod.setParametersTemplate("{}");
         if (chunkMethod.getDefaultParameters() == null) chunkMethod.setDefaultParameters("{}");
 
@@ -105,8 +109,12 @@ public class ChunkMethodServiceImpl implements ChunkMethodService {
 
         long startTime = System.nanoTime();
 
-        // 模拟切片处理：按指定规则切分文本
-        List<ChunkMethodTestRespVO.ChunkPreview> chunks = simulateChunking(method, testText);
+        // 优先调用 python 真实切片服务；失败（服务未启/联网错）时回退本地模拟
+        List<ChunkMethodTestRespVO.ChunkPreview> chunks = callPythonChunk(method, testText);
+        boolean usingPython = chunks != null;
+        if (chunks == null) {
+            chunks = simulateChunking(method, testText);
+        }
 
         long elapsed = System.nanoTime() - startTime;
         double processingTimeSeconds = elapsed / 1_000_000_000.0;
@@ -123,8 +131,68 @@ public class ChunkMethodServiceImpl implements ChunkMethodService {
         result.setProcessingSpeedCharsPerSecond(Math.round(speed * 100.0) / 100.0);
         result.setAvgChunkSize(Math.round(avgSize * 100.0) / 100.0);
         result.setChunksPreview(chunks.subList(0, Math.min(chunks.size(), 3)));
+        result.setEngine(usingPython ? "python" : "local");
 
         return result;
+    }
+
+    /**
+     * 调用 python 真实切片服务 POST /api/v1/chunk；线程内异常时返回 null 表示走本地模拟。
+     */
+    private List<ChunkMethodTestRespVO.ChunkPreview> callPythonChunk(ChunkMethodDO method, String testText) {
+        try {
+            String url = vectorTaskConfig.getPythonServiceUrl() + "/api/v1/chunk";
+
+            Map<String, Object> params = new HashMap<>();
+            try {
+                String def = method.getDefaultParameters();
+                if (def != null && !def.isBlank()) {
+                    Map<String, Object> parsed = cn.iocoder.yudao.framework.common.util.json.JsonUtils.parseMap(def);
+                    if (parsed != null) {
+                        params.putAll(parsed);
+                    }
+                }
+            } catch (Exception ignore) {
+                // defaultParameters 不可解析则忽略
+            }
+
+            Map<String, Object> body = new HashMap<>();
+            body.put("text", testText);
+            body.put("strategy", method.getMethodType() != null ? method.getMethodType() : "fixed_size");
+            body.put("parameters", params);
+
+            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+            headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+            org.springframework.http.HttpEntity<Map<String, Object>> entity =
+                    new org.springframework.http.HttpEntity<>(body, headers);
+
+            org.springframework.http.ResponseEntity<Map> resp = restTemplate.exchange(
+                    url, org.springframework.http.HttpMethod.POST, entity, Map.class);
+
+            if (resp.getBody() == null || !Integer.valueOf(0).equals(resp.getBody().get("code"))) {
+                log.warn("[callPythonChunk] python 切片返回异常: resp={}", resp.getBody());
+                return null;
+            }
+            Object chunksObj = resp.getBody().get("chunks");
+            if (!(chunksObj instanceof java.util.List)) {
+                return null;
+            }
+            List<ChunkMethodTestRespVO.ChunkPreview> list = new ArrayList<>();
+            for (Object o : (java.util.List<?>) chunksObj) {
+                if (!(o instanceof Map)) continue;
+                Map<?, ?> m = (Map<?, ?>) o;
+                Object txt = m.get("text");
+                String s = txt != null ? txt.toString() : "";
+                ChunkMethodTestRespVO.ChunkPreview p = new ChunkMethodTestRespVO.ChunkPreview();
+                p.setText(s);
+                p.setSize(s.length());
+                list.add(p);
+            }
+            return list;
+        } catch (Exception e) {
+            log.warn("[callPythonChunk] 调用 python 切片服务失败，回退本地模拟: {}", e.getMessage());
+            return null;
+        }
     }
 
     /**

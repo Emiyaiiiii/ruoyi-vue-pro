@@ -53,6 +53,9 @@ public class AgentRespVO {
     @Schema(description = "排序", example = "0")
     private Integer sortOrder;
 
+    @Schema(description = "是否为默认智能体: 1=是, null=否", example = "1")
+    private Integer isDefault;
+
     @Schema(description = "创建时间")
     private LocalDateTime createTime;
 

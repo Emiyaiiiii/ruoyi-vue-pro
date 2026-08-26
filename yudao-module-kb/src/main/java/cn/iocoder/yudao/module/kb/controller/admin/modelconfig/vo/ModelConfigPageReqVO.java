@@ -11,13 +11,10 @@ public class ModelConfigPageReqVO extends PageParam {
     @Schema(description = "关键字搜索(模型名称/UID/描述)", example = "GPT")
     private String search;
 
-    @Schema(description = "部署类型", example = "openai")
-    private String deploy;
+    @Schema(description = "用途分类: embedding/llm/ocr", example = "llm")
+    private String modelType;
 
     @Schema(description = "是否激活: 0=停用, 1=激活", example = "1")
     private Integer isActive;
-
-    @Schema(description = "支持平台: web/App/both", example = "both")
-    private String platform;
 
 }

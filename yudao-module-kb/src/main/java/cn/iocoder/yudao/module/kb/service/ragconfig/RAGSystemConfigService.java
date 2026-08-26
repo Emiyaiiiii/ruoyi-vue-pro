@@ -63,4 +63,10 @@ public interface RAGSystemConfigService {
      */
     Map<String, Object> getStatistics();
 
+    /**
+     * 启动预热：遍历各租户激活的 RAG 配置，经 RabbitMQ 全量重推给 python-vector。
+     * 解决 RAG/rerank 配置触发式推送导致的服务重启后 Redis 缓存为空的问题。
+     */
+    void publishAllToVector();
+
 }

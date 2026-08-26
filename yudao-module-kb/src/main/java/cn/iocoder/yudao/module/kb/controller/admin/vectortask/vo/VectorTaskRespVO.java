@@ -39,9 +39,6 @@ public class VectorTaskRespVO {
     @Schema(description = "分块数量")
     private Integer chunkCount;
 
-    @Schema(description = "Celery任务ID")
-    private String celeryTaskId;
-
     @Schema(description = "错误信息")
     private String errorMsg;
 

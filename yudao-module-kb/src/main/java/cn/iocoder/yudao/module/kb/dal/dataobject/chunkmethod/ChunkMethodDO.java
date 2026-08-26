@@ -72,14 +72,4 @@ public class ChunkMethodDO extends BaseDO {
      */
     private Integer isDefaultMethod;
 
-    /**
-     * 平均处理速度(千字/秒)
-     */
-    private Double avgProcessingSpeed;
-
-    /**
-     * 内存占用(MB)
-     */
-    private Integer memoryFootprint;
-
 }

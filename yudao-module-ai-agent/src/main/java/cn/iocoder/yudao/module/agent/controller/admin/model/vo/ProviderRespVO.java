@@ -33,6 +33,9 @@ public class ProviderRespVO {
     @Schema(description = "是否已配置 API Key")
     private Boolean configured;
 
+    @Schema(description = "是否必须配置 API Key（false 表示免费/本地，无需 key）")
+    private Boolean requireApiKey;
+
     @Schema(description = "是否为自定义 Provider")
     private Boolean isCustom;
 

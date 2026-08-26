@@ -22,9 +22,8 @@ public interface ModelConfigMapper extends BaseMapperX<ModelConfigDO> {
      */
     default PageResult<ModelConfigDO> selectPage(ModelConfigPageReqVO reqVO) {
         LambdaQueryWrapperX<ModelConfigDO> wrapper = new LambdaQueryWrapperX<ModelConfigDO>()
-                .eqIfPresent(ModelConfigDO::getDeploy, reqVO.getDeploy())
-                .eqIfPresent(ModelConfigDO::getIsActive, reqVO.getIsActive())
-                .eqIfPresent(ModelConfigDO::getPlatform, reqVO.getPlatform());
+                .eqIfPresent(ModelConfigDO::getModelType, reqVO.getModelType())
+                .eqIfPresent(ModelConfigDO::getIsActive, reqVO.getIsActive());
 
         // 关键字搜索：uid / name / description 任一匹配（OR 关系）
         if (reqVO.getSearch() != null && !reqVO.getSearch().isEmpty()) {
@@ -48,6 +47,18 @@ public interface ModelConfigMapper extends BaseMapperX<ModelConfigDO> {
      */
     default List<ModelConfigDO> selectActiveList() {
         return selectList(new LambdaQueryWrapperX<ModelConfigDO>()
+                .eq(ModelConfigDO::getIsActive, 1)
+                .orderByDesc(ModelConfigDO::getIsPinned)
+                .orderByAsc(ModelConfigDO::getSortOrder)
+                .orderByDesc(ModelConfigDO::getUpdateTime));
+    }
+
+    /**
+     * 获取指定用途分类中所有激活的模型配置（实现"每类各有一个默认"）
+     */
+    default List<ModelConfigDO> selectActiveByType(String modelType) {
+        return selectList(new LambdaQueryWrapperX<ModelConfigDO>()
+                .eq(ModelConfigDO::getModelType, modelType)
                 .eq(ModelConfigDO::getIsActive, 1)
                 .orderByDesc(ModelConfigDO::getIsPinned)
                 .orderByAsc(ModelConfigDO::getSortOrder)

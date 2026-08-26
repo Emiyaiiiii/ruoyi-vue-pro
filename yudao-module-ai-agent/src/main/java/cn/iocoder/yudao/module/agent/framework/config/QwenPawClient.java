@@ -313,10 +313,26 @@ public class QwenPawClient {
      *
      * <p>对应 QwenPaw {@code GET /api/agents/{agentId}/agent-status}，
      * 返回 status(idle/running/disabled) / running_task_count / last_run_at / last_finish_at。
+     *
+     * <p>QwenPaw 侧 agent 已不存在（404，如已在 QwenPaw 侧删除、或本地与远端脱节）时，
+     * 返回 {@code status=deleted} 的降级对象，避免展示/轮询类接口直接抛 404 导致整体 500。
      */
     public Map<String, Object> getAgentStatus(String agentId) {
         String path = API_AGENTS + "/" + encode(agentId) + "/agent-status";
-        return parseJsonObject(get(path).getBody());
+        try {
+            return parseJsonObject(get(path).getBody());
+        } catch (HttpStatusCodeException e) {
+            if (e.getStatusCode().value() == 404) {
+                log.warn("[getAgentStatus] QwenPaw agent 不存在，agentId={}，降级为 deleted", agentId);
+                Map<String, Object> fallback = new LinkedHashMap<>();
+                fallback.put("status", "deleted");
+                fallback.put("running_task_count", 0);
+                return fallback;
+            }
+            log.warn("[getAgentStatus] QwenPaw 返回非 2xx，agentId={}, code={}, body={}",
+                    agentId, e.getStatusCode().value(), e.getResponseBodyAsString());
+            throw e;
+        }
     }
 
     /**

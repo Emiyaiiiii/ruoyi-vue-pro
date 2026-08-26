@@ -81,6 +81,12 @@ public class DocumentServiceImpl implements DocumentService {
     public void deleteDocument(Long id) {
         // 校验存在
         DocumentDO document = validateDocumentExists(id);
+        // 删除 → 联动清理 Milvus/ES 向量分片
+        try {
+            vectorTaskService.deleteDocumentVectors(document.getId(), document.getKbId());
+        } catch (Exception e) {
+            log.warn("[deleteDocument] 清理向量失败（继续删除文档记录）: docId={}, error={}", id, e.getMessage());
+        }
         // 删除
         documentMapper.deleteById(id);
         // 更新知识库的文档数量
@@ -92,6 +98,12 @@ public class DocumentServiceImpl implements DocumentService {
         for (Long id : ids) {
             DocumentDO document = documentMapper.selectById(id);
             if (document != null) {
+                // 联动清理 Milvus/ES 向量分片
+                try {
+                    vectorTaskService.deleteDocumentVectors(document.getId(), document.getKbId());
+                } catch (Exception e) {
+                    log.warn("[deleteDocumentListByIds] 清理向量失败（继续删除文档记录）: docId={}, error={}", id, e.getMessage());
+                }
                 libraryMapper.updateDocCount(document.getKbId(), -1);
             }
         }
@@ -169,6 +181,7 @@ public class DocumentServiceImpl implements DocumentService {
             taskReqVO.setKbId(kbId);
             taskReqVO.setFileUrl(uploadResp.getUrl());
             taskReqVO.setFileType(document.getFileType());
+            taskReqVO.setDocumentTitle(fileName);
             vectorTaskService.submitTask(taskReqVO);
             log.info("[uploadAndCreate] 已触发向量处理任务: docId={}, taskId={}", document.getId());
         } catch (Exception e) {

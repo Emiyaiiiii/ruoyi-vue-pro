@@ -39,8 +39,6 @@ public class ModelConfigTestRespVO {
         private String name;
         @Schema(description = "模型UID")
         private String uid;
-        @Schema(description = "部署类型")
-        private String deploy;
         @Schema(description = "API地址")
         private String url;
         @Schema(description = "最大Token数")

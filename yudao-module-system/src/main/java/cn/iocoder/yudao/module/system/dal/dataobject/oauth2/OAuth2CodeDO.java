@@ -64,5 +64,11 @@ public class OAuth2CodeDO extends BaseDO {
      * 过期时间
      */
     private LocalDateTime expiresTime;
+    /**
+     * 租户编号
+     *
+     * 由框架的租户拦截器自动写入；跨租户单点登录时用于读取授权码归属的租户
+     */
+    private Long tenantId;
 
 }

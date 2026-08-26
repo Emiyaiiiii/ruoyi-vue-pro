@@ -8,6 +8,7 @@ import cn.iocoder.yudao.framework.mybatis.core.mapper.BaseMapperX;
 import cn.iocoder.yudao.module.kb.dal.dataobject.ragconfig.RAGSystemConfigDO;
 import cn.iocoder.yudao.module.kb.controller.admin.ragconfig.vo.*;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Select;
 
 /**
  * RAG系统配置 Mapper
@@ -81,4 +82,13 @@ public interface RAGSystemConfigMapper extends BaseMapperX<RAGSystemConfigDO> {
         }
         return new ArrayList<>(modules);
     }
+
+    /**
+     * 跨租户查询所有激活配置的 (tenant_id, module) 组合（服务启动预热用）。
+     * 必须在租户忽略上下文（TenantUtils.executeIgnore）中调用，避免被租户拦截器改写。
+     */
+    @Select("SELECT DISTINCT tenant_id AS tenantId, module AS module FROM kb_rag_config " +
+            "WHERE deleted = 0 AND is_active = 1")
+    List<Map<String, Object>> selectActiveTenantModuleRows();
+
 }

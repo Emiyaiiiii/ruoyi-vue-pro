@@ -46,6 +46,7 @@ public interface ErrorCodeConstants {
     ErrorCode MODEL_CONFIG_ALREADY_ACTIVE = new ErrorCode(22, "该配置已激活");
     ErrorCode MODEL_CONFIG_ALREADY_INACTIVE = new ErrorCode(23, "该配置已停用");
     ErrorCode MODEL_CONFIG_BATCH_ACTION_INVALID = new ErrorCode(24, "不支持的批量操作类型");
+    ErrorCode MODEL_CONFIG_TYPE_INVALID = new ErrorCode(44, "不支持的用途分类（应为 embedding/llm/ocr）");
 
     // ========== 切片方法 1-010-005-000 ==========
     ErrorCode CHUNK_METHOD_NOT_EXISTS = new ErrorCode(25, "切片方法不存在");
