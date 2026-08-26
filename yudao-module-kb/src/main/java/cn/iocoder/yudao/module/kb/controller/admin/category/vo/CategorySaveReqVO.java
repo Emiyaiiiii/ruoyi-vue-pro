@@ -31,4 +31,7 @@ public class CategorySaveReqVO {
     @Schema(description = "表头配置(JSON): 该分类下文件列表的动态表头")
     private String columnConfig;
 
+    @Schema(description = "是否项目成果库分类: 0=否, 1=是")
+    private Integer isProject;
+
 }

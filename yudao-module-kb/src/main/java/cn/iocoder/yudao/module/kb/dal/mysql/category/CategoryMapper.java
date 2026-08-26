@@ -32,6 +32,11 @@ public interface CategoryMapper extends BaseMapperX<CategoryDO> {
 	    return selectOne(CategoryDO::getParentId, parentId, CategoryDO::getName, name);
 	}
 
+	default CategoryDO selectByName(String name) {
+	    return selectOne(new LambdaQueryWrapperX<CategoryDO>()
+	            .eq(CategoryDO::getName, name));
+	}
+
     default Long selectCountByParentId(Long parentId) {
         return selectCount(CategoryDO::getParentId, parentId);
     }

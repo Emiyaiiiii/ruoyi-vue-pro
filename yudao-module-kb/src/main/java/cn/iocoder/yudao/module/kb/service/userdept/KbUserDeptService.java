@@ -57,6 +57,12 @@ public interface KbUserDeptService {
     Set<Long> getDeptAncestorIds(Long deptId);
 
     /**
+     * 当前用户系统部门链上的第二级部门。
+     * 第一级是根（如「黄河勘测规划设计研究院」），第二级是其直接下级（如「云河信息科技有限公司」）。
+     */
+    Long getSecondLevelDeptId(Long userId);
+
+    /**
      * 获取部门下所有关联用户（合并系统用户 + kb_user_dept 角色）
      */
     List<DeptMemberRespVO> getByDeptId(Long deptId);

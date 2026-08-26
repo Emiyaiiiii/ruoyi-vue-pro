@@ -7,6 +7,7 @@ import cn.iocoder.yudao.framework.common.pojo.PageResult;
 import cn.iocoder.yudao.framework.mybatis.core.query.LambdaQueryWrapperX;
 import cn.iocoder.yudao.framework.mybatis.core.mapper.BaseMapperX;
 import cn.iocoder.yudao.module.kb.dal.dataobject.library.LibraryDO;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Update;
@@ -122,5 +123,18 @@ public interface LibraryMapper extends BaseMapperX<LibraryDO> {
      */
     @Update("UPDATE kb_library SET doc_count = doc_count + #{delta} WHERE id = #{kbId}")
     void updateDocCount(@Param("kbId") Long kbId, @Param("delta") int delta);
+
+    /**
+     * 将指定分类下的知识库统一标记为项目库 / 非项目库
+     */
+    default int updateIsProjectByCategoryIds(Collection<Long> categoryIds, Integer isProject) {
+        if (categoryIds == null || categoryIds.isEmpty()) {
+            return 0;
+        }
+        return update(null, new LambdaUpdateWrapper<LibraryDO>()
+                .in(LibraryDO::getCategoryId, categoryIds)
+                .and(w -> w.isNull(LibraryDO::getIsProject).or().ne(LibraryDO::getIsProject, isProject))
+                .set(LibraryDO::getIsProject, isProject));
+    }
 
 }

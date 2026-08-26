@@ -95,6 +95,37 @@ public class KbUserDeptServiceImpl implements KbUserDeptService {
     }
 
     @Override
+    public Long getSecondLevelDeptId(Long userId) {
+        if (userId == null) {
+            return null;
+        }
+        AdminUserRespDTO user = adminUserApi.getUser(userId);
+        if (user == null || user.getDeptId() == null || user.getDeptId() == 0L) {
+            return null;
+        }
+        List<Long> chain = new ArrayList<>();
+        Set<Long> seen = new HashSet<>();
+        Long currentId = user.getDeptId();
+        int guard = 20;
+        while (currentId != null && currentId != 0L && guard-- > 0 && seen.add(currentId)) {
+            chain.add(currentId);
+            DeptRespDTO dept = deptApi.getDept(currentId);
+            if (dept == null) {
+                break;
+            }
+            Long parentId = dept.getParentId();
+            if (parentId == null || parentId == 0L) {
+                break;
+            }
+            currentId = parentId;
+        }
+        if (chain.size() < 2) {
+            return null;
+        }
+        return chain.get(chain.size() - 2);
+    }
+
+    @Override
     public Set<Long> getDeptAncestorIds(Long deptId) {
         Set<Long> ancestors = new LinkedHashSet<>();
         Long currentId = deptId;

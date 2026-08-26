@@ -52,6 +52,10 @@ public class CategoryDO extends BaseDO {
      * 表头配置(JSON): 该分类下文件列表的动态表头，如 [{"key":"name","label":"名称","visible":true},...]
      */
     private String columnConfig;
+    /**
+     * 是否项目成果库分类: 0=否, 1=是。
+     * 该分类及其子分类下创建的知识库会自动标记为项目库，纳入项目成员管理。
+     */
+    private Integer isProject;
 
-
-}
+}

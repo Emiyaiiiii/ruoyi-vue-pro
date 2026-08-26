@@ -91,4 +91,15 @@ public interface LibraryService {
      * @return true=有管理权限
      */
     boolean canManage(Long kbId);
-}
+
+    /**
+     * 批量判断当前用户对已查出的知识库是否有管理权限。
+     * 一次构建可见性上下文，供 C 端列表填充 can_manage。
+     */
+    Map<Long, Boolean> canManageMap(List<LibraryDO> libraries);
+
+    /**
+     * 将指定分类及其子分类下的知识库标记为项目成果库。
+     */
+    void markLibrariesAsProjectByCategory(Long categoryId);
+}

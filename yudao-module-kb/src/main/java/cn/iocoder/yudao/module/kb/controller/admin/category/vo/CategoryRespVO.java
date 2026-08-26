@@ -39,8 +39,12 @@ public class CategoryRespVO {
     @Schema(description = "表头配置(JSON): 该分类下文件列表的动态表头")
     private String columnConfig;
 
+    @Schema(description = "是否项目成果库分类: 0=否, 1=是")
+    @ExcelProperty("项目成果库分类")
+    private Integer isProject;
+
     @Schema(description = "创建时间")
     @ExcelProperty("创建时间")
     private LocalDateTime createTime;
 
-}
+}

@@ -50,4 +50,7 @@ public class LibrarySaveReqVO {
     @Schema(description = "自定义字段值(key=字段key, value=字段值字符串；成员多选为 JSON 数组字符串)")
     private Map<String, String> extValues;
 
+    @Schema(description = "项目成员用户ID列表（仅项目成果库生效，写入 kb_project_member）")
+    private List<Long> memberIds;
+
 }

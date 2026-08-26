@@ -18,6 +18,11 @@ public interface ProjectMemberService {
     Long addMember(Long kbId, Long userId);
 
     /**
+     * 批量添加项目成员（已存在则跳过）
+     */
+    void addMembers(Long kbId, java.util.Collection<Long> userIds);
+
+    /**
      * 移除项目成员
      */
     void removeMember(Long kbId, Long userId);

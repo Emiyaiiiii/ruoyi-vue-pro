@@ -1,8 +1,11 @@
 package cn.iocoder.yudao.module.kb.controller.admin.projectmember;
 
 import cn.iocoder.yudao.framework.common.pojo.CommonResult;
+import cn.iocoder.yudao.framework.security.core.service.SecurityFrameworkService;
+import cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils;
 import cn.iocoder.yudao.module.kb.controller.admin.projectmember.vo.ProjectMemberRespVO;
 import cn.iocoder.yudao.module.kb.service.projectmember.ProjectMemberService;
+import cn.iocoder.yudao.module.system.enums.permission.RoleCodeEnum;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -30,6 +33,9 @@ public class ProjectMemberController {
     @Resource
     private ProjectMemberService projectMemberService;
 
+    @Resource
+    private SecurityFrameworkService securityFrameworkService;
+
     @PostMapping("/add")
     @Operation(summary = "添加项目成员")
     @Parameter(name = "kbId", description = "知识库ID", required = true)
@@ -52,13 +58,21 @@ public class ProjectMemberController {
     }
 
     @GetMapping("/check")
-    @Operation(summary = "检查用户是否为项目成员")
+    @Operation(summary = "检查当前登录用户是否为项目成员（大屏/总览进入项目库时调用）")
     @Parameter(name = "kbId", description = "知识库ID", required = true)
-    @Parameter(name = "userId", description = "用户ID", required = true)
-    @PreAuthorize("@ss.hasPermission('kb:project-member:query')")
-    public CommonResult<Boolean> isMember(@RequestParam("kbId") Long kbId,
-                                          @RequestParam("userId") Long userId) {
-        return success(projectMemberService.isMember(kbId, userId));
+    public CommonResult<Boolean> isMember(@RequestParam("kbId") Long kbId) {
+        // 大屏/总览只传 kbId，按当前登录用户判断
+        Long targetUserId = SecurityFrameworkUtils.getLoginUserId();
+        if (targetUserId == null) {
+            return success(false);
+        }
+        // 超管/租户管理员与文档接口一致，视为可访问全部项目库
+        if (securityFrameworkService.hasAnyRoles(
+                RoleCodeEnum.SUPER_ADMIN.getCode(),
+                RoleCodeEnum.TENANT_ADMIN.getCode())) {
+            return success(true);
+        }
+        return success(projectMemberService.isMember(kbId, targetUserId));
     }
 
     @GetMapping("/list")

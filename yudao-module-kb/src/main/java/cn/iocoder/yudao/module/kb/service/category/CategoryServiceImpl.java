@@ -23,6 +23,9 @@ import cn.iocoder.yudao.module.kb.dal.dataobject.category.CategoryDO;
 import cn.iocoder.yudao.framework.common.util.object.BeanUtils;
 
 import cn.iocoder.yudao.module.kb.dal.mysql.category.CategoryMapper;
+import cn.iocoder.yudao.module.kb.dal.mysql.library.LibraryMapper;
+import cn.iocoder.yudao.module.kb.service.library.ProjectCategorySupport;
+import org.springframework.transaction.annotation.Transactional;
 
 import static cn.iocoder.yudao.framework.common.exception.util.ServiceExceptionUtil.exception;
 import static cn.iocoder.yudao.framework.common.util.collection.CollectionUtils.convertList;
@@ -42,6 +45,7 @@ public class CategoryServiceImpl implements CategoryService {
     private final LevelConfigMapper levelConfigMapper;
     private final KbUserDeptService kbUserDeptService;
     private final SecurityFrameworkService securityFrameworkService;
+    private final LibraryMapper libraryMapper;
 
     @Override
     public List<CategoryDO> listCategoriesForUser(Long userDeptId) {
@@ -108,6 +112,7 @@ public class CategoryServiceImpl implements CategoryService {
         validateParentCategory(null, createReqVO.getParentId());
         // 校验分类名称的唯一性
         validateCategoryNameUnique(null, createReqVO.getParentId(), createReqVO.getName());
+        applyAutoProjectCategoryFlag(createReqVO);
 
         // 插入
         CategoryDO category = BeanUtils.toBean(createReqVO, CategoryDO.class);
@@ -118,6 +123,7 @@ public class CategoryServiceImpl implements CategoryService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void updateCategory(CategorySaveReqVO updateReqVO) {
         // 校验存在
         validateCategoryExists(updateReqVO.getId());
@@ -125,10 +131,16 @@ public class CategoryServiceImpl implements CategoryService {
         validateParentCategory(updateReqVO.getId(), updateReqVO.getParentId());
         // 校验分类名称的唯一性
         validateCategoryNameUnique(updateReqVO.getId(), updateReqVO.getParentId(), updateReqVO.getName());
+        applyAutoProjectCategoryFlag(updateReqVO);
 
         // 更新
         CategoryDO updateObj = BeanUtils.toBean(updateReqVO, CategoryDO.class);
         categoryMapper.updateById(updateObj);
+
+        // 标为项目成果库后，把该分类及子分类下已有知识库一并纳入项目成员管理
+        if (ProjectCategorySupport.isMarkedProject(updateReqVO.getIsProject())) {
+            libraryMapper.updateIsProjectByCategoryIds(collectSelfAndDescendantIds(updateReqVO.getId()), 1);
+        }
     }
 
     @Override
@@ -206,6 +218,46 @@ public class CategoryServiceImpl implements CategoryService {
     @Override
     public List<CategoryDO> getCategoryList(CategoryListReqVO listReqVO) {
         return categoryMapper.selectList(listReqVO);
+    }
+
+    /**
+     * 院级/公司下的「项目成果」分类自动打上项目库标记，无需手工勾选。
+     */
+    private void applyAutoProjectCategoryFlag(CategorySaveReqVO reqVO) {
+        if (ProjectCategorySupport.isMarkedProject(reqVO.getIsProject())) {
+            return;
+        }
+        if (ProjectCategorySupport.shouldAutoMark(reqVO.getName(), reqVO.getParentId(),
+                categoryMapper::selectById)) {
+            reqVO.setIsProject(1);
+        } else if (reqVO.getIsProject() == null) {
+            reqVO.setIsProject(0);
+        }
+    }
+
+    private Set<Long> collectSelfAndDescendantIds(Long categoryId) {
+        List<CategoryDO> all = categoryMapper.selectList();
+        Map<Long, List<Long>> childrenMap = new HashMap<>();
+        for (CategoryDO cat : all) {
+            if (cat.getParentId() == null) {
+                continue;
+            }
+            childrenMap.computeIfAbsent(cat.getParentId(), k -> new ArrayList<>()).add(cat.getId());
+        }
+        Set<Long> ids = new LinkedHashSet<>();
+        Deque<Long> queue = new ArrayDeque<>();
+        queue.add(categoryId);
+        while (!queue.isEmpty()) {
+            Long id = queue.poll();
+            if (id == null || !ids.add(id)) {
+                continue;
+            }
+            List<Long> children = childrenMap.get(id);
+            if (children != null) {
+                queue.addAll(children);
+            }
+        }
+        return ids;
     }
 
 }

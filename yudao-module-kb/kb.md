@@ -7,7 +7,7 @@
 | 表 | 作用 | 关键字段 |
 |---|---|---|
 | `kb_level_config` | 定义知识库的**层级模板**，决定可见规则和管理归属 | `visibilityRule`(1/2/3/5), `ownerDim`(1用户/2部门), `deptScope`(JSON数组) |
-| `kb_category` | 定义**分类树**，每个分类绑定一个层级配置 | `kb_level_id`, `parent_id`(树形结构) |
+| `kb_category` | 定义**分类树**，每个分类绑定一个层级配置 | `kb_level_id`, `parent_id`(树形结构), `is_project`(项目成果库分类) |
 
 **关系**：`kb_category.kb_level_id` → `kb_level_config.id`，一个分类对应一个层级配置。
 
@@ -77,6 +77,14 @@
 
 **应用位置**：前端 `overview/index.vue` 中检查 `isProjectMember`，后端 `DocumentController` 和 `FolderController` 中也有对应校验。
 
+**自动纳入项目成员管理**：
+- 分类可配置 `is_project=1`（分类管理里的「项目成果库」开关）
+- 院级知识库 / 公司知识库下名称含「项目成果」的分类会自动打标，无需手工勾选
+- 大屏、总览、知识库管理里在这些分类下创建的库，`createLibrary` 会强制 `is_project=1`，创建人自动成为首个项目成员
+- 打开「项目成员管理」时会回填同分类下尚未打标的旧库
+- 新建/编辑时自定义字段 type=member（或 `member_ids`）会追加写入 `kb_project_member`，只增不删；不在 `kb_library` 加成员列
+- C 端模糊搜人：`GET /auth/users/search/?q=`
+
 ---
 
 ## 三、关键设计决策
@@ -87,6 +95,7 @@
 | **权限统一入口** | 所有管理操作都走 `validateManagementPermission`，便于维护 |
 | **可见性在 Service 层过滤** | `filterVisible` 在分页查询后过滤，而非 SQL 层，因为规则复杂且涉及多表 |
 | **kb_user_dept 补充体系** | 芋道 `system_user` 只有一个 `dept_id`，`kb_user_dept` 支持一人多部门 |
-| **deptScope 格式兼容** | 同时支持 JSON 数组 `"[1,2]"` 和纯数字 `"123"` 两种格式 |
+| **项目成员不进知识库主表** | 成员关系只写 `kb_project_member`；分类自定义字段 type=member 仅作展示和创建时的录入入口 |
+| **院级默认二级部门** | C 端无部门下拉；`createLibrary` 在 visibilityRule=2 且 ownerDim=2 时，把空/当前用户 ownerId 改成用户部门链第二级 |
 
 如果你对某个具体环节还想深入了解，可以告诉我。

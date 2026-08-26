@@ -42,6 +42,18 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
     }
 
     @Override
+    public void addMembers(Long kbId, Collection<Long> userIds) {
+        if (kbId == null || userIds == null || userIds.isEmpty()) {
+            return;
+        }
+        for (Long userId : userIds) {
+            if (userId != null) {
+                addMember(kbId, userId);
+            }
+        }
+    }
+
+    @Override
     public void removeMember(Long kbId, Long userId) {
         projectMemberMapper.delete(new LambdaQueryWrapper<ProjectMemberDO>()
                 .eq(ProjectMemberDO::getKbId, kbId)
