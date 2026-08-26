@@ -1,14 +1,14 @@
 package cn.iocoder.yudao.module.kb.controller.admin.tag;
 
 import org.springframework.web.bind.annotation.*;
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.security.access.prepost.PreAuthorize;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.Operation;
 
-import javax.validation.*;
+import jakarta.validation.*;
 import java.util.*;
 import java.util.stream.Collectors;
 

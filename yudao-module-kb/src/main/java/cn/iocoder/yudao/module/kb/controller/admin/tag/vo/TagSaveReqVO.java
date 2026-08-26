@@ -3,8 +3,8 @@ package cn.iocoder.yudao.module.kb.controller.admin.tag.vo;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
-import javax.validation.constraints.NotEmpty;
-import javax.validation.constraints.Size;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.Size;
 
 @Schema(description = "管理后台 - 标签创建/更新 Request VO")
 @Data
