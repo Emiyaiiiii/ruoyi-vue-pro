@@ -16,10 +16,10 @@ public class ModelConfigSimpleVO {
     @Schema(description = "模型名称", requiredMode = Schema.RequiredMode.REQUIRED, example = "GPT-4")
     private String name;
 
-    @Schema(description = "部署类型", example = "openai")
-    private String deploy;
+    @Schema(description = "具体模型名", example = "text-embedding-v4")
+    private String model;
 
-    @Schema(description = "支持平台", example = "both")
-    private String platform;
+    @Schema(description = "用途分类: embedding/llm/ocr", example = "llm")
+    private String modelType;
 
 }

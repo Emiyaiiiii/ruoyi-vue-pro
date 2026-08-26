@@ -16,6 +16,9 @@ public class ModelConfigSaveReqVO {
     @Size(max = 100, message = "模型UID长度不能超过100个字符")
     private String uid;
 
+    @Schema(description = "具体模型名", example = "text-embedding-v4")
+    private String model;
+
     @Schema(description = "模型名称", requiredMode = Schema.RequiredMode.REQUIRED, example = "GPT-4")
     @NotEmpty(message = "模型名称不能为空")
     @Size(max = 100, message = "模型名称长度不能超过100个字符")
@@ -30,12 +33,14 @@ public class ModelConfigSaveReqVO {
     @Size(min = 10, message = "API密钥长度至少为10个字符")
     private String appkey;
 
-    @Schema(description = "部署类型", requiredMode = Schema.RequiredMode.REQUIRED, example = "openai")
-    @NotEmpty(message = "部署类型不能为空")
-    private String deploy;
+    @Schema(description = "用途分类: embedding=嵌入/向量模型, llm=大模型, ocr=OCR/多模态模型", example = "llm")
+    private String modelType;
 
     @Schema(description = "是否启用思考能力", example = "0")
     private Integer thinkingEnabled;
+
+    @Schema(description = "是否支持多模态(VL)", example = "false")
+    private Boolean vlSupported;
 
     @Schema(description = "是否激活", example = "1")
     private Integer isActive;
@@ -55,9 +60,6 @@ public class ModelConfigSaveReqVO {
     @Schema(description = "Top-P参数", example = "0.9")
     private Double topP;
 
-    @Schema(description = "元数据(JSON格式)", example = "{\"provider\":\"openai\"}")
-    private String metadata;
-
     @Schema(description = "配置参数(JSON格式)", example = "{\"stream\":true}")
     private String config;
 
@@ -66,8 +68,5 @@ public class ModelConfigSaveReqVO {
 
     @Schema(description = "是否置顶", example = "0")
     private Integer isPinned;
-
-    @Schema(description = "支持平台", example = "both")
-    private String platform;
 
 }

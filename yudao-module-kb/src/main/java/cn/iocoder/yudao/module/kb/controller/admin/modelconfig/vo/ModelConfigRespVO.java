@@ -19,6 +19,10 @@ public class ModelConfigRespVO {
     @ExcelProperty("模型UID")
     private String uid;
 
+    @Schema(description = "具体模型名", example = "text-embedding-v4")
+    @ExcelProperty("具体模型名")
+    private String model;
+
     @Schema(description = "模型名称", requiredMode = Schema.RequiredMode.REQUIRED, example = "GPT-4")
     @ExcelProperty("模型名称")
     private String name;
@@ -31,13 +35,17 @@ public class ModelConfigRespVO {
     @ExcelProperty("API密钥")
     private String appkey;
 
-    @Schema(description = "部署类型", example = "openai")
-    @ExcelProperty("部署类型")
-    private String deploy;
+    @Schema(description = "用途分类: embedding=嵌入/向量模型, llm=大模型, ocr=OCR/多模态模型", example = "llm")
+    @ExcelProperty("用途分类")
+    private String modelType;
 
     @Schema(description = "是否启用思考能力", example = "0")
     @ExcelProperty("启用思考")
     private Integer thinkingEnabled;
+
+    @Schema(description = "是否支持多模态(VL)", example = "false")
+    @ExcelProperty("支持多模态")
+    private Boolean vlSupported;
 
     @Schema(description = "是否激活", example = "1")
     @ExcelProperty("是否激活")
@@ -63,10 +71,6 @@ public class ModelConfigRespVO {
     @ExcelProperty("Top-P参数")
     private Double topP;
 
-    @Schema(description = "元数据(JSON格式)")
-    @ExcelProperty("元数据")
-    private String metadata;
-
     @Schema(description = "配置参数(JSON格式)")
     @ExcelProperty("配置参数")
     private String config;
@@ -78,10 +82,6 @@ public class ModelConfigRespVO {
     @Schema(description = "是否置顶", example = "0")
     @ExcelProperty("是否置顶")
     private Integer isPinned;
-
-    @Schema(description = "支持平台", example = "both")
-    @ExcelProperty("支持平台")
-    private String platform;
 
     @Schema(description = "激活时间")
     @ExcelProperty("激活时间")

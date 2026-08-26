@@ -27,8 +27,8 @@ public class ModelConfigStatisticsRespVO {
         private Long configId;
         @Schema(description = "模型名称")
         private String name;
-        @Schema(description = "部署类型")
-        private String deploy;
+        @Schema(description = "用途分类: embedding/llm/ocr/rerank")
+        private String modelType;
         @Schema(description = "是否激活")
         private Integer isActive;
         @Schema(description = "使用次数")

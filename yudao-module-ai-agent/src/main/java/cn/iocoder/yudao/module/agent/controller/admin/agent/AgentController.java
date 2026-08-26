@@ -4,6 +4,7 @@ import cn.iocoder.yudao.framework.common.pojo.CommonResult;
 import cn.iocoder.yudao.framework.common.pojo.PageResult;
 import cn.iocoder.yudao.framework.common.util.object.BeanUtils;
 import cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils;
+import cn.iocoder.yudao.framework.tenant.core.context.TenantContextHolder;
 import cn.iocoder.yudao.module.agent.controller.admin.agent.vo.AgentPageReqVO;
 import cn.iocoder.yudao.module.agent.controller.admin.agent.vo.AgentRespVO;
 import cn.iocoder.yudao.module.agent.controller.admin.agent.vo.AgentSaveReqVO;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.*;
 import jakarta.annotation.Resource;
 import jakarta.validation.Valid;
 import java.util.List;
+import java.util.Map;
 
 import static cn.iocoder.yudao.framework.common.pojo.CommonResult.success;
 
@@ -96,6 +98,32 @@ public class AgentController {
     public CommonResult<List<AgentRespVO>> getMyAgents() {
         List<AiAgentDO> list = agentService.getMyAgents();
         return success(BeanUtils.toBean(list, AgentRespVO.class));
+    }
+
+    @GetMapping("/my-default")
+    @Operation(summary = "获得当前用户的默认智能体（不存在则自动创建）")
+    @PreAuthorize("@ss.hasPermission('ai-agent:agent:query')")
+    public CommonResult<AgentRespVO> getMyDefaultAgent() {
+        Long userId = SecurityFrameworkUtils.getLoginUserId();
+        return success(BeanUtils.toBean(agentService.getOrCreateDefaultAgent(userId,
+                TenantContextHolder.getTenantId()),
+                AgentRespVO.class));
+    }
+
+    @PutMapping("/set-default")
+    @Operation(summary = "设为默认智能体")
+    @Parameter(name = "id", description = "智能体ID", required = true)
+    @PreAuthorize("@ss.hasPermission('ai-agent:agent:update')")
+    public CommonResult<Boolean> setDefaultAgent(@RequestParam("id") Long id) {
+        agentService.setDefaultAgent(id);
+        return success(true);
+    }
+
+    @PostMapping("/bootstrap-defaults")
+    @Operation(summary = "【按钮触发】为当前租户无智能体的用户批量创建默认智能体，供超管/租户管理员一键兜底")
+    @PreAuthorize("@ss.hasPermission('ai-agent:agent:create')")
+    public CommonResult<Map<String, Object>> bootstrapDefaultAgents() {
+        return success(agentService.bootstrapUserDefaultAgents());
     }
 
 }

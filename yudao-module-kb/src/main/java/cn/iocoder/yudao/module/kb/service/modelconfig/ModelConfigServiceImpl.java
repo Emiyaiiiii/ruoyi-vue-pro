@@ -1,5 +1,6 @@
 package cn.iocoder.yudao.module.kb.service.modelconfig;
 
+import cn.hutool.core.util.StrUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -34,27 +35,6 @@ public class ModelConfigServiceImpl implements ModelConfigService {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
-    // ==================== 部署类型映射 ====================
-    private static final Map<String, String> DEPLOY_DISPLAY_MAP = new LinkedHashMap<>();
-    static {
-        DEPLOY_DISPLAY_MAP.put("doubao", "豆包");
-        DEPLOY_DISPLAY_MAP.put("bailian", "百炼");
-        DEPLOY_DISPLAY_MAP.put("lite", "LiteLLM");
-        DEPLOY_DISPLAY_MAP.put("openai", "OpenAI");
-        DEPLOY_DISPLAY_MAP.put("api", "通用API");
-        DEPLOY_DISPLAY_MAP.put("xinf", "Xinference");
-        DEPLOY_DISPLAY_MAP.put("vllm", "VLLM");
-        DEPLOY_DISPLAY_MAP.put("zhipu", "智谱AI");
-        DEPLOY_DISPLAY_MAP.put("other", "其他");
-    }
-
-    private static final Map<String, String> PLATFORM_DISPLAY_MAP = new LinkedHashMap<>();
-    static {
-        PLATFORM_DISPLAY_MAP.put("web", "Web端");
-        PLATFORM_DISPLAY_MAP.put("app", "App端");
-        PLATFORM_DISPLAY_MAP.put("both", "两者都支持");
-    }
-
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Long createModelConfig(ModelConfigSaveReqVO createReqVO) {
@@ -70,14 +50,17 @@ public class ModelConfigServiceImpl implements ModelConfigService {
         if (modelConfig.getTopP() == null) modelConfig.setTopP(0.9);
         if (modelConfig.getSortOrder() == null) modelConfig.setSortOrder(0);
         if (modelConfig.getIsPinned() == null) modelConfig.setIsPinned(0);
-        if (modelConfig.getPlatform() == null) modelConfig.setPlatform("both");
-        if (modelConfig.getMetadata() == null) modelConfig.setMetadata("{}");
+        if (modelConfig.getModelType() == null) modelConfig.setModelType("llm");
         if (modelConfig.getConfig() == null) modelConfig.setConfig("{}");
         if (modelConfig.getIsActive() != null && modelConfig.getIsActive() == 1) {
             modelConfig.setActivatedAt(LocalDateTime.now());
         }
 
         modelConfigMapper.insert(modelConfig);
+        // 同类唯一激活：新建即激活时，停用同类其它激活配置
+        if (modelConfig.getIsActive() != null && modelConfig.getIsActive() == 1) {
+            deactivateSameTypeExcept(modelConfig.getModelType(), modelConfig.getId());
+        }
         return modelConfig.getId();
     }
 
@@ -100,6 +83,10 @@ public class ModelConfigServiceImpl implements ModelConfigService {
         }
 
         modelConfigMapper.updateById(updateObj);
+        // 同类唯一激活：编辑后变为激活时，停用同类其它激活配置
+        if (willBeActive) {
+            deactivateSameTypeExcept(updateObj.getModelType(), updateObj.getId());
+        }
     }
 
     @Override
@@ -123,9 +110,12 @@ public class ModelConfigServiceImpl implements ModelConfigService {
     @Transactional(rollbackFor = Exception.class)
     public void activateModelConfig(Long id) {
         ModelConfigDO config = validateExists(id);
+        assertValidType(config.getModelType());
         if (config.getIsActive() != null && config.getIsActive() == 1) {
             throw exception(MODEL_CONFIG_ALREADY_ACTIVE);
         }
+        // 同类内唯一激活：先停用同类其他激活配置，再激活目标
+        deactivateSameTypeExcept(config.getModelType(), config.getId());
         config.setIsActive(1);
         config.setActivatedAt(LocalDateTime.now());
         modelConfigMapper.updateById(config);
@@ -156,7 +146,6 @@ public class ModelConfigServiceImpl implements ModelConfigService {
         ModelConfigTestRespVO.ModelInfo modelInfo = new ModelConfigTestRespVO.ModelInfo();
         modelInfo.setName(config.getName());
         modelInfo.setUid(config.getUid());
-        modelInfo.setDeploy(config.getDeploy());
         modelInfo.setUrl(config.getUrl());
         modelInfo.setMaxTokens(config.getMaxTokens());
         modelInfo.setTemperature(config.getTemperature());
@@ -183,22 +172,71 @@ public class ModelConfigServiceImpl implements ModelConfigService {
     }
 
     /**
-     * 实际发起测试请求
+     * 实际发起测试请求：按模型类型分发不同协议
      */
     private String doTestRequest(ModelConfigDO config, ModelConfigTestReqVO reqVO) throws Exception {
-        // 使用 Java 标准 HTTP 请求，避免引入额外依赖
-        java.net.URL url = new java.net.URL(config.getUrl());
-        java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+        String modelType = config.getModelType() != null ? config.getModelType() : "llm";
+        switch (modelType) {
+            case "embedding":
+                return testEmbedding(config);
+            case "rerank":
+                return testRerank(config);
+            case "ocr":
+                return testOcr(config);
+            case "llm":
+            default:
+                return testLlm(config, reqVO);
+        }
+    }
+
+    /**
+     * 发起 HTTP POST 请求，返回响应体
+     */
+    private String httpPostJson(String url, String apiKey, String jsonBody) throws Exception {
+        java.net.HttpURLConnection conn = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
         conn.setRequestMethod("POST");
         conn.setConnectTimeout(30000);
-        conn.setReadTimeout(30000);
+        conn.setReadTimeout(60000);
         conn.setDoOutput(true);
         conn.setRequestProperty("Content-Type", "application/json");
-        conn.setRequestProperty("Authorization", "Bearer " + config.getAppkey());
+        if (apiKey != null && !apiKey.isEmpty()) {
+            conn.setRequestProperty("Authorization", "Bearer " + apiKey);
+        }
+        try (java.io.OutputStream os = conn.getOutputStream()) {
+            os.write(jsonBody.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        }
+        try (java.util.Scanner scanner = new java.util.Scanner(
+                conn.getInputStream(), "UTF-8").useDelimiter("\\A")) {
+            return scanner.hasNext() ? scanner.next() : "";
+        } catch (java.io.IOException e) {
+            try (java.util.Scanner scanner = new java.util.Scanner(
+                    conn.getErrorStream(), "UTF-8").useDelimiter("\\A")) {
+                String errorBody = scanner.hasNext() ? scanner.next() : "";
+                throw new RuntimeException("HTTP " + conn.getResponseCode() + ": " + errorBody);
+            }
+        }
+    }
 
-        // 构建请求体
+    /**
+     * 拼接请求 URL：base 上补充操作路径，避免重复拼接
+     */
+    private String resolveEndpoint(String baseUrl, String opPath) {
+        if (baseUrl == null || baseUrl.isEmpty()) {
+            return "";
+        }
+        if (baseUrl.endsWith(opPath)) {
+            return baseUrl;
+        }
+        return baseUrl.replaceAll("/+$", "") + opPath;
+    }
+
+    /**
+     * 测试 LLM（chat completions 协议）
+     */
+    private String testLlm(ModelConfigDO config, ModelConfigTestReqVO reqVO) throws Exception {
         Map<String, Object> payload = new HashMap<>();
-        payload.put("model", config.getUid());
+        // model: 优先 model 字段（真实模型名/部署点），uid 仅是业务唯一标识
+        payload.put("model", StrUtil.isNotBlank(config.getModel()) ? config.getModel() : config.getUid());
         List<Map<String, String>> messages = new ArrayList<>();
         Map<String, String> msg = new HashMap<>();
         msg.put("role", "user");
@@ -206,35 +244,100 @@ public class ModelConfigServiceImpl implements ModelConfigService {
         messages.add(msg);
         payload.put("messages", messages);
         payload.put("temperature", reqVO.getTemperature() != null ? reqVO.getTemperature() : config.getTemperature());
-        payload.put("max_tokens", reqVO.getMaxTokens() != null ? reqVO.getMaxTokens() : Math.min(config.getMaxTokens(), 200));
-
-        String jsonBody = OBJECT_MAPPER.writeValueAsString(payload);
-        try (java.io.OutputStream os = conn.getOutputStream()) {
-            os.write(jsonBody.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        if (reqVO.getMaxTokens() != null) {
+            payload.put("max_tokens", reqVO.getMaxTokens());
+        } else if (config.getMaxTokens() != null && config.getMaxTokens() > 0) {
+            payload.put("max_tokens", Math.min(config.getMaxTokens(), 4096));
         }
+        String endpoint = resolveEndpoint(config.getUrl(), "/chat/completions");
+        String responseBody = httpPostJson(endpoint, config.getAppkey(), OBJECT_MAPPER.writeValueAsString(payload));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> responseMap = OBJECT_MAPPER.readValue(responseBody, Map.class);
+        return extractResponseContent(responseMap);
+    }
 
-        int responseCode = conn.getResponseCode();
-        if (responseCode >= 200 && responseCode < 300) {
-            try (java.util.Scanner scanner = new java.util.Scanner(conn.getInputStream(), "UTF-8")) {
-                String responseBody = scanner.useDelimiter("\\A").next();
-                @SuppressWarnings("unchecked")
-                Map<String, Object> responseMap = OBJECT_MAPPER.readValue(responseBody, Map.class);
-                // 尝试从各种格式的响应中提取内容
-                return extractResponseContent(responseMap, config.getDeploy());
-            }
-        } else {
-            try (java.util.Scanner scanner = new java.util.Scanner(conn.getErrorStream(), "UTF-8")) {
-                String errorBody = scanner.useDelimiter("\\A").next();
-                throw new RuntimeException("HTTP " + responseCode + ": " + errorBody);
+    /**
+     * 测试 Embedding（embeddings 协议）
+     */
+    private String testEmbedding(ModelConfigDO config) throws Exception {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("model", StrUtil.isNotBlank(config.getModel()) ? config.getModel() : config.getUid());
+        payload.put("input", "你好");
+        String endpoint = resolveEndpoint(config.getUrl(), "/embeddings");
+        String responseBody = httpPostJson(endpoint, config.getAppkey(), OBJECT_MAPPER.writeValueAsString(payload));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> responseMap = OBJECT_MAPPER.readValue(responseBody, Map.class);
+        Object data = responseMap.get("data");
+        if (data instanceof List) {
+            List<?> list = (List<?>) data;
+            if (!list.isEmpty() && list.get(0) instanceof Map) {
+                Object emb = ((Map<?, ?>) list.get(0)).get("embedding");
+                if (emb instanceof List) {
+                    return "嵌入成功，维度=" + ((List<?>) emb).size();
+                }
             }
         }
+        return "嵌入测试完成，返回结构未见向量: " + responseBody;
+    }
+
+    /**
+     * 测试 Rerank（rerank 协议）
+     */
+    private String testRerank(ModelConfigDO config) throws Exception {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("model", StrUtil.isNotBlank(config.getModel()) ? config.getModel() : config.getUid());
+        payload.put("query", "什么是向量检索");
+        payload.put("documents", new String[]{"向量检索是常用的召回手段。", "今天天气不错。"});
+        payload.put("top_n", 1);
+        String endpoint = resolveEndpoint(config.getUrl(), "/rerank");
+        String responseBody = httpPostJson(endpoint, config.getAppkey(), OBJECT_MAPPER.writeValueAsString(payload));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> responseMap = OBJECT_MAPPER.readValue(responseBody, Map.class);
+        if (responseMap.containsKey("results")) {
+            return "重排成功，返回结果条数=" + String.valueOf(responseMap.get("results"));
+        }
+        if (responseMap.containsKey("data")) {
+            return "重排成功: " + responseBody;
+        }
+        // 兼容返回 relevance_score / score 字段
+        if (responseMap.containsKey("score") || responseMap.containsKey("relevance_score")) {
+            return "重排成功: " + responseBody;
+        }
+        return "重排完成，返回结构未见评分: " + responseBody;
+    }
+
+    /**
+     * 测试 OCR（多模态 chat，发送 1x1 纯白图 + 提示词）
+     */
+    private String testOcr(ModelConfigDO config) throws Exception {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("model", StrUtil.isNotBlank(config.getModel()) ? config.getModel() : config.getUid());
+        List<Map<String, Object>> messages = new ArrayList<>();
+        Map<String, Object> msg = new HashMap<>();
+        msg.put("role", "user");
+        List<Map<String, Object>> content = new ArrayList<>();
+        // 1x1 透明 PNG（极小 base64），仅用于连通性验证
+        content.add(Map.of("type", "text", "text", "请识别图中的文字"));
+        content.add(Map.of("type", "image_url", "image_url",
+                Map.of("url", "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")));
+        msg.put("content", content);
+        messages.add(msg);
+        payload.put("messages", messages);
+        if (config.getMaxTokens() != null && config.getMaxTokens() > 0) {
+            payload.put("max_tokens", Math.min(config.getMaxTokens(), 8192));
+        }
+        String endpoint = resolveEndpoint(config.getUrl(), "/chat/completions");
+        String responseBody = httpPostJson(endpoint, config.getAppkey(), OBJECT_MAPPER.writeValueAsString(payload));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> responseMap = OBJECT_MAPPER.readValue(responseBody, Map.class);
+        return extractResponseContent(responseMap);
     }
 
     /**
      * 从不同API响应中提取回答内容
      */
     @SuppressWarnings("unchecked")
-    private String extractResponseContent(Map<String, Object> responseData, String deployType) {
+    private String extractResponseContent(Map<String, Object> responseData) {
         try {
             // OpenAI 格式: {"choices": [{"message": {"content": "..."}}]}
             if (responseData.containsKey("choices")) {
@@ -305,15 +408,9 @@ public class ModelConfigServiceImpl implements ModelConfigService {
     @Transactional(rollbackFor = Exception.class)
     public void setDefaultModelConfig(Long id) {
         ModelConfigDO target = validateExists(id);
-
-        // 停用其他所有激活的配置
-        List<ModelConfigDO> activeList = modelConfigMapper.selectActiveList();
-        for (ModelConfigDO config : activeList) {
-            config.setIsActive(0);
-            modelConfigMapper.updateById(config);
-        }
-
-        // 激活目标配置
+        assertValidType(target.getModelType());
+        // 同类内唯一激活：仅停用同用途分类的其他配置，不影响其他类
+        deactivateSameTypeExcept(target.getModelType(), target.getId());
         target.setIsActive(1);
         target.setActivatedAt(LocalDateTime.now());
         modelConfigMapper.updateById(target);
@@ -335,6 +432,8 @@ public class ModelConfigServiceImpl implements ModelConfigService {
                     config.setIsActive(1);
                     config.setActivatedAt(LocalDateTime.now());
                     modelConfigMapper.updateById(config);
+                    // 同类唯一激活：激活时停用同类其它激活配置
+                    deactivateSameTypeExcept(config.getModelType(), config.getId());
                     count++;
                     break;
                 case "deactivate":
@@ -373,7 +472,7 @@ public class ModelConfigServiceImpl implements ModelConfigService {
             ModelConfigStatisticsRespVO.ModelConfigStatItem item = new ModelConfigStatisticsRespVO.ModelConfigStatItem();
             item.setConfigId(config.getId());
             item.setName(config.getName());
-            item.setDeploy(config.getDeploy());
+            item.setModelType(config.getModelType());
             item.setIsActive(config.getIsActive());
             item.setUsageCount(0L);
             item.setTotalSessions(0L);
@@ -409,6 +508,32 @@ public class ModelConfigServiceImpl implements ModelConfigService {
         ModelConfigDO existing = modelConfigMapper.selectByUid(uid);
         if (existing != null && !existing.getId().equals(excludeId)) {
             throw exception(MODEL_CONFIG_UID_EXISTS);
+        }
+    }
+
+    /**
+     * 校验用途分类合法性（embedding / llm / ocr / rerank；空视为 llm）
+     */
+    private void assertValidType(String modelType) {
+        String type = (modelType == null || modelType.isEmpty()) ? "llm" : modelType;
+        if (!"embedding".equals(type) && !"llm".equals(type)
+                && !"ocr".equals(type) && !"rerank".equals(type)) {
+            throw exception(MODEL_CONFIG_TYPE_INVALID);
+        }
+    }
+
+    /**
+     * 停用指定用途分类下除 excludeId 外的所有激活配置（实现"每类各有一个默认"）
+     */
+    private void deactivateSameTypeExcept(String modelType, Long excludeId) {
+        String type = (modelType == null || modelType.isEmpty()) ? "llm" : modelType;
+        List<ModelConfigDO> activeList = modelConfigMapper.selectActiveByType(type);
+        for (ModelConfigDO config : activeList) {
+            if (config.getId().equals(excludeId)) {
+                continue;
+            }
+            config.setIsActive(0);
+            modelConfigMapper.updateById(config);
         }
     }
 }

@@ -37,8 +37,6 @@ public class VectorTaskDO extends BaseDO {
     private String currentStep;
     /** 分块数量 */
     private Integer chunkCount;
-    /** Celery 任务ID */
-    private String celeryTaskId;
     /** 错误信息 */
     private String errorMsg;
     /** 处理参数（JSON 格式） */

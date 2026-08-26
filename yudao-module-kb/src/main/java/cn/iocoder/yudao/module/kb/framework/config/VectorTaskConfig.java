@@ -47,6 +47,35 @@ public class VectorTaskConfig {
      */
     private String redisTaskKeyPrefix = "kb:task:";
 
+    // ========== RabbitMQ 解析任务通道（任务通过原生 JSON 消息进入 Python Worker） ==========
+
+    /**
+     * 解析任务交换机（direct，durable）
+     */
+    private String ingestExchange = "kb.ingest";
+
+    /**
+     * 解析任务队列
+     */
+    private String ingestQueue = "kb.ingest.tasks";
+
+    /**
+     * 解析任务路由键
+     */
+    private String ingestRoutingKey = "kb.ingest.tasks";
+
+    // ========== RAG 配置同步通道（复用 kb.ingest 交换机，独立路由键/队列） ==========
+
+    /**
+     * RAG 配置变更路由键
+     */
+    private String ragRoutingKey = "kb.ingest.rag.config";
+
+    /**
+     * RAG 配置变更队列
+     */
+    private String ragQueue = "kb.ingest.rag.config";
+
     // ========== 通信超时配置 ==========
 
     /**

@@ -114,6 +114,13 @@
             <artifactId>captcha-spring-boot-starter</artifactId> <!-- 验证码，一般用于登录使用 -->
         </dependency>
 
+        <!-- OIDC / JWT 相关 -->
+        <dependency>
+            <groupId>com.nimbusds</groupId>
+            <artifactId>nimbus-jose-jwt</artifactId>
+            <version>9.40</version> <!-- 生成、签名 ID Token，以及 JWKS -->
+        </dependency>
+
     </dependencies>
 
 </project>

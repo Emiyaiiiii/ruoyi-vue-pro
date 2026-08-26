@@ -43,10 +43,4 @@ public class ChunkMethodSaveReqVO {
     @Schema(description = "是否默认切片方法", example = "0")
     private Integer isDefaultMethod;
 
-    @Schema(description = "平均处理速度(千字/秒)", example = "5.0")
-    private Double avgProcessingSpeed;
-
-    @Schema(description = "内存占用(MB)", example = "50")
-    private Integer memoryFootprint;
-
 }

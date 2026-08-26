@@ -29,6 +29,9 @@ public class ChunkMethodTestRespVO {
     @Schema(description = "平均分片大小(字符)", example = "450")
     private Double avgChunkSize;
 
+    @Schema(description = "实际执行引擎: python=真实服务, local=本地模拟", example = "python")
+    private String engine = "local";
+
     @Schema(description = "分片预览(前3个)", example = "[{\"text\":\"分片内容1\"},{\"text\":\"分片内容2\"}]")
     private List<ChunkPreview> chunksPreview;
 

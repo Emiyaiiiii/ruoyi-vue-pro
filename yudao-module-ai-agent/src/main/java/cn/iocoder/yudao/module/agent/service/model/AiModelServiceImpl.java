@@ -2,6 +2,7 @@ package cn.iocoder.yudao.module.agent.service.model;
 
 import cn.iocoder.yudao.module.agent.controller.admin.model.vo.*;
 import cn.iocoder.yudao.module.agent.framework.config.QwenPawClient;
+import cn.hutool.core.util.StrUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -135,7 +136,11 @@ public class AiModelServiceImpl implements AiModelService {
     @Override
     public ActiveModelRespVO getActiveModel(String scope, String agentId) {
         Map<String, Object> raw = qwenPawClient.getActiveModel(scope, agentId);
-        return convertToActiveModelVO(raw);
+        ActiveModelRespVO vo = convertToActiveModelVO(raw);
+        if (vo.getScope() == null) {
+            vo.setScope(scope != null && !scope.isEmpty() ? scope : "effective");
+        }
+        return vo;
     }
 
     @Override
@@ -196,12 +201,34 @@ public class AiModelServiceImpl implements AiModelService {
         vo.setBaseUrl(getString(raw, "base_url"));
         vo.setIsCustom(getBool(raw, "is_custom"));
         vo.setIsLocal(getBool(raw, "is_local"));
+        vo.setRequireApiKey(getBool(raw, "require_api_key"));
         vo.setSupportModelDiscovery(getBool(raw, "support_model_discovery"));
-        // 判断是否已配置：有 api_key_prefix 或 api_key 非空
-        String apiKeyPrefix = getString(raw, "api_key_prefix");
+        // 判断是否已配置：与 QwenPaw 前端 getIsConfigured() 完全一致
+        //   - 内嵌本地(qwenpaw-local/copaw-local)恒为已配置
+        //   - 自定义 provider 配置了 base_url 即视为已配置
+        //   - require_api_key===false（免费/本地服务商，如 OpenCode/Kilo）无需 key 即视为已配置
+        //   - require_api_key===true 时以实际配置的 api_key 非空为准（不能用 api_key_prefix，
+        //     因为内置服务商往往预置了默认 prefix 但并未配置 key）
+        String providerId = getString(raw, "id");
         String apiKey = getString(raw, "api_key");
-        vo.setConfigured((apiKeyPrefix != null && !apiKeyPrefix.isEmpty())
-                || (apiKey != null && !apiKey.isEmpty()));
+        Boolean requireApiKey = vo.getRequireApiKey();
+        Boolean isCustom = vo.getIsCustom();
+        String baseUrl = getString(raw, "base_url");
+        // require_api_key 缺失时按 true 处理（QwenPaw pydantic 默认值即为 true）
+        boolean needsKey = requireApiKey == null || requireApiKey;
+        boolean configured;
+        if ("qwenpaw-local".equals(providerId) || "copaw-local".equals(providerId)) {
+            configured = true;
+        } else if (Boolean.TRUE.equals(isCustom) && !StrUtil.isBlank(baseUrl)) {
+            configured = true;
+        } else if (!needsKey) {
+            configured = true;
+        } else if (!StrUtil.isBlank(apiKey)) {
+            configured = true;
+        } else {
+            configured = false;
+        }
+        vo.setConfigured(configured);
         // 模型列表
         vo.setModels(toModelInfoVOList(toMapList(raw.get("models"))));
         vo.setExtraModels(toModelInfoVOList(toMapList(raw.get("extra_models"))));
@@ -260,8 +287,14 @@ public class AiModelServiceImpl implements AiModelService {
         if (raw == null) {
             return vo;
         }
-        vo.setProviderId(getString(raw, "provider_id"));
-        vo.setModel(getString(raw, "model"));
+        // QwenPaw 的 /models/active 返回 ActiveModelsInfo，槽位嵌套在 active_llm 下：
+        //   { "active_llm": { "provider_id": "...", "model": "..." }, ... }
+        Object activeObj = raw.get("active_llm");
+        if (activeObj instanceof Map) {
+            Map<String, Object> active = (Map<String, Object>) activeObj;
+            vo.setProviderId(getString(active, "provider_id"));
+            vo.setModel(getString(active, "model"));
+        }
         vo.setScope(getString(raw, "scope"));
         vo.setAgentId(getString(raw, "agent_id"));
         return vo;

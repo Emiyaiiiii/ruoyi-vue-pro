@@ -359,6 +359,14 @@ yudao:
   iot:
     message-bus:
       type: redis # 消息总线的类型
+  oidc: # OIDC 身份提供方（IdP）能力，供外部系统（如 dify-sso、dify）通过芋道账号单点登录
+    enabled: true # 是否开启，开启后：暴露 discovery/jwks 端点，并对带 scope=openid 的客户端签发 id_token
+    issuer: http://127.0.0.1:48080 # 对外访问域名（含端口），作为 id_token 的 iss 以及各端点的根地址，生产改为主域名
+    frontend-url: http://localhost:5999 # 前端 SSO 授权入口（authorization_endpoint 指向这里 + /sso，供浏览器跳转登录/授权）；留空则回退到后端 authorize
+    id-token-ttl: 7200 # id_token 有效期（秒），默认 2 小时
+    jwks:
+      key-id: yudao-oidc-rsa-1 # 密钥 id，id_token 头部与 JWKS 中标识
+      # private-key: ${OIDC_PRIVATE_KEY} # 生产建议用环境变量注入（Base64、PKCS#8 编码）；不配置则启动时自动生成（重启后公钥会变）
 
 --- #################### 知识库相关配置 ####################
 yudao:
@@ -386,5 +394,21 @@ yudao:
       # 超时配置
       connect-timeout: 3000
       read-timeout: 30000
+    agent:
+      default:
+        # 用户首次进入聊天/智能体页面时，若无任何智能体则自动创建一个默认智能体。
+        # 名称支持 ${nickname} 占位，会在创建时替换为用户昵称；取不到则保留纯文本。
+        name: "我的智能助手"
+        description: "企业知识库问答助手：可以向我提问公司制度、产品文档、项目资料等内容。"
+        system-prompt: ""
+        enable-kb-tool: true
+        # 模型留空 => 走 QwenPaw 全局激活模型（推荐）。若写死需保证「供应商+模型」与平台实际已激活项一致。
+        model-provider: ""
+        model-name: ""
+        # 初始技能列表（按技能池 name 精确匹配），为空则不预装。
+        #例：initial-skills: ["web_search", "python_interpreter"]
+        initial-skills: []
+        # QwenPaw 暂不可用时的降级：true=仅落库（status=0），下次进入再重试；false=直接抛异常。
+        degrade-on-qwenpaw-failure: true
 
 debug: false

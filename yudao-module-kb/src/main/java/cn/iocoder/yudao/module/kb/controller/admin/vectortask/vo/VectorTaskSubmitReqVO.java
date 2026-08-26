@@ -32,5 +32,29 @@ public class VectorTaskSubmitReqVO {
     private Integer chunkOverlap;
 
     @Schema(description = "Embedding模型", example = "text-embedding-3-small")
-    private String embeddingModel; 
+    private String embeddingModel;
+
+    @Schema(description = "大模型配置(JSON字符串，覆盖python-vector本地配置)", example = "{\"base_url\":\"http://xxx/v1\",\"api_key\":\"sk-xxx\",\"model\":\"qwen-max\"}")
+    private String llmConfig;
+
+    @Schema(description = "OCR/多模态模型配置(JSON字符串)", example = "{\"ocr_api_url\":\"http://xxx/v1\",\"ocr_model\":\"deepseek-ai/DeepSeek-OCR-2\",\"multimodal_api_url\":\"http://xxx/v1\",\"multimodal_model\":\"qwen-vl\"}")
+    private String ocrConfig;
+
+    @Schema(description = "分块策略", example = "fixed_size")
+    private String strategy;
+
+    @Schema(description = "最小分块大小", example = "100")
+    private Integer minChunkSize;
+
+    @Schema(description = "最大分块大小", example = "2000")
+    private Integer maxChunkSize;
+
+    @Schema(description = "解析选项(JSON字符串)", example = "{\"ocr\":true}")
+    private String parseOptions;
+
+    @Schema(description = "文档标题", example = "产品手册.pdf")
+    private String documentTitle;
+
+    @Schema(description = "索引分组(用于按知识库/租户路由集合)", example = "kb_456")
+    private String indexGroup;
 }

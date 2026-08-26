@@ -51,4 +51,16 @@ public interface VectorTaskService {
      */
     void handleTaskCallback(String taskId, String status, Integer progress,
                             String step, Integer chunkCount, String errorMsg);
+
+    /**
+     * 删除文档对应的向量数据（Milvus + ES）
+     *
+     * 同步调用 Python 向量服务清理指定文档在本知识库的所有向量分片。
+     * 用于知识库文档删除时联动清库，避免脏数据残留。
+     *
+     * @param docId 文档ID
+     * @param kbId  知识库ID
+     * @return 是否清理成功
+     */
+    boolean deleteDocumentVectors(Long docId, Long kbId);
 }

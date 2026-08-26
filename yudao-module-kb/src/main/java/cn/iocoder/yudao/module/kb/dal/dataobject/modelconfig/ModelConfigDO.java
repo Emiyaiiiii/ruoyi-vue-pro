@@ -32,6 +32,11 @@ public class ModelConfigDO extends BaseDO {
     private String uid;
 
     /**
+     * 具体模型名（如 text-embedding-v4 / deepseek-chat / DeepSeek-OCR-2）
+     */
+    private String model;
+
+    /**
      * 模型名称
      */
     private String name;
@@ -47,16 +52,19 @@ public class ModelConfigDO extends BaseDO {
     private String appkey;
 
     /**
-     * 部署类型:
-     * doubao=豆包, bailian=百炼, lite=LiteLLM, openai=OpenAI,
-     * api=通用API, xinf=Xinference, vllm=VLLM, zhipu=智谱AI, other=其他
+     * 用途分类: embedding=嵌入/向量模型, llm=大模型, ocr=OCR/多模态模型
      */
-    private String deploy;
+    private String modelType;
 
     /**
      * 是否启用思考能力: 0=否, 1=是
      */
     private Integer thinkingEnabled;
+
+    /**
+     * 是否支持多模态(VL): 0=否, 1=是
+     */
+    private Boolean vlSupported;
 
     /**
      * 是否激活: 0=停用, 1=激活
@@ -89,11 +97,6 @@ public class ModelConfigDO extends BaseDO {
     private Double topP;
 
     /**
-     * 元数据(JSON格式)
-     */
-    private String metadata;
-
-    /**
      * 配置参数(JSON格式)
      */
     private String config;
@@ -107,11 +110,6 @@ public class ModelConfigDO extends BaseDO {
      * 是否置顶: 0=否, 1=是
      */
     private Integer isPinned;
-
-    /**
-     * 支持平台: web=Web端, app=App端, both=两者都支持
-     */
-    private String platform;
 
     /**
      * 激活时间

@@ -1,24 +1,30 @@
 package cn.iocoder.yudao.module.agent.service.agent;
 
+import cn.iocoder.yudao.framework.common.enums.CommonStatusEnum;
 import cn.iocoder.yudao.framework.common.pojo.PageResult;
 import cn.iocoder.yudao.framework.common.util.object.BeanUtils;
 import cn.iocoder.yudao.framework.security.core.service.SecurityFrameworkService;
+import cn.iocoder.yudao.framework.tenant.core.context.TenantContextHolder;
 import cn.iocoder.yudao.module.agent.controller.admin.agent.vo.AgentPageReqVO;
 import cn.iocoder.yudao.module.agent.controller.admin.agent.vo.AgentSaveReqVO;
 import cn.iocoder.yudao.module.agent.dal.dataobject.agent.AiAgentDO;
 import cn.iocoder.yudao.module.agent.dal.mysql.agent.AiAgentMapper;
+import cn.iocoder.yudao.module.agent.framework.config.AiAgentDefaultProperties;
 import cn.iocoder.yudao.module.agent.framework.config.QwenPawClient;
 import cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils;
+import cn.iocoder.yudao.module.system.dal.dataobject.user.AdminUserDO;
+import cn.iocoder.yudao.module.system.dal.mysql.user.AdminUserMapper;
+import cn.iocoder.yudao.module.system.api.user.AdminUserApi;
+import cn.iocoder.yudao.module.system.api.user.dto.AdminUserRespDTO;
 import cn.iocoder.yudao.module.system.enums.permission.RoleCodeEnum;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.transaction.annotation.Transactional;
 
 import jakarta.annotation.Resource;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 import static cn.iocoder.yudao.framework.common.exception.util.ServiceExceptionUtil.exception;
 import static cn.iocoder.yudao.module.agent.enums.ErrorCodeConstants.*;
@@ -39,6 +45,12 @@ public class AiAgentServiceImpl implements AiAgentService {
     private QwenPawClient qwenPawClient;
     @Resource
     private SecurityFrameworkService securityFrameworkService;
+    @Resource
+    private AiAgentDefaultProperties defaultProperties;
+    @Resource
+    private AdminUserMapper adminUserMapper;
+    @Resource
+    private AdminUserApi adminUserApi;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -177,7 +189,80 @@ public class AiAgentServiceImpl implements AiAgentService {
         if (userId == null) {
             return agentMapper.selectEnabledByUserId(0L);
         }
+        // 懒加载：保证每个用户至少有一个默认智能体，列表页因此永远非空
+        getOrCreateDefaultAgent(userId, TenantContextHolder.getTenantId());
         return agentMapper.selectEnabledByUserId(userId);
+    }
+
+    @Override
+    public AiAgentDO getOrCreateDefaultAgent(Long userId, Long tenantId) {
+        // 1. 已有默认智能体则直接返回
+        AiAgentDO defaultAgent = agentMapper.selectDefaultByUserId(userId);
+        if (defaultAgent != null) {
+            return defaultAgent;
+        }
+        // 2. 无默认智能体，但有普通智能体：把最早创建的提升为默认（对准 V3 迁移的存量兜底语义）
+        List<AiAgentDO> myAgents = agentMapper.selectEnabledByUserId(userId);
+        if (!myAgents.isEmpty()) {
+            AiAgentDO first = myAgents.stream()
+                    .min(Comparator.comparing(AiAgentDO::getId))
+                    .orElse(myAgents.get(0));
+            setDefaultFlag(first.getId(), userId);
+            return first;
+        }
+        // 3. 完全没有智能体：按默认模板新建一个【默认】智能体
+        return createDefaultAgent(userId, tenantId);
+    }
+
+    @Override
+    public void setDefaultAgent(Long agentId) {
+        Long userId = SecurityFrameworkUtils.getLoginUserId();
+        validateExists(agentId); // 顺带做用户级权限校验
+        agentMapper.clearDefaultByUserId(userId);
+        setDefaultFlag(agentId, userId);
+    }
+
+    @Override
+    public Map<String, Object> bootstrapUserDefaultAgents() {
+        Map<String, Object> result = new LinkedHashMap<>();
+        Long currentTenant = TenantContextHolder.getTenantId();
+        // 只处理【启用】用户（本模块 status=0 为启用，CommonStatusEnum.ENABLE）；
+        // deleted 过滤器由 BaseMapperX 自动注入，天然排除已删除用户；
+        // 且 AdminUserDO 为租户级数据，TenantDatabaseInterceptor 会自动限定到当前租户，故仅回填当前租户
+        List<AdminUserDO> users = adminUserMapper.selectListByStatus(CommonStatusEnum.ENABLE.getStatus());
+        for (AdminUserDO user : users) {
+            Long userId = user.getId();
+            String label = user.getUsername() + "(" + user.getNickname() + ")";
+            AiAgentDO existing = agentMapper.selectDefaultByUserId(userId);
+            if (existing != null) {
+                result.put(label, "skipped");
+                continue;
+            }
+            boolean hasAny = agentMapper.selectCountByUserId(userId) > 0;
+            if (!hasAny) {
+                try {
+                    createDefaultAgent(userId, currentTenant);
+                    result.put(label, "success");
+                } catch (Exception e) {
+                    log.error("[bootstrapUserDefaultAgents] 为用户创建默认智能体失败，userId={}", userId, e);
+                    result.put(label, "failed");
+                }
+            } else {
+                // 用户有普通智能体但缺默认，沿用「最早提升为默认」
+                try {
+                    AiAgentDO any = agentMapper.selectEnabledByUserId(userId).stream()
+                            .min(Comparator.comparing(AiAgentDO::getId)).orElse(null);
+                    if (any != null) {
+                        setDefaultFlag(any.getId(), userId);
+                        result.put(label, "promoted");
+                    }
+                } catch (Exception e) {
+                    log.error("[bootstrapUserDefaultAgents] 提升默认智能体失败，userId={}", userId, e);
+                    result.put(label, "failed");
+                }
+            }
+        }
+        return result;
     }
 
     @Override
@@ -303,6 +388,113 @@ public class AiAgentServiceImpl implements AiAgentService {
     public void deleteQwenpawMcp(Long agentId, String clientKey) {
         AiAgentDO agent = validateExists(agentId);
         qwenPawClient.deleteMcp(agent.getQwenpawAgentId(), clientKey);
+    }
+
+    // ==================== 默认智能体私有实现 ====================
+
+    /**
+     * 将 {@code is_default} 标记为 1（直接落库，不做权限二次校验）。
+     *
+     * <p>调用方需保证：同一用户旧的默认已清零、且 {userId, isDefault} 不重复，
+     * 否则会触发 UNIQUE(user_id, is_default) 冲突。
+     */
+    private void setDefaultFlag(Long agentId, Long userId) {
+        AiAgentDO update = new AiAgentDO();
+        update.setId(agentId);
+        update.setIsDefault(1);
+        update.setUserId(userId); // 仅用于兜底校验，不参与更新
+        agentMapper.updateById(update);
+    }
+
+    /**
+     * 按 {@link AiAgentDefaultProperties} 模板为用户创建一个【默认】智能体。
+     *
+     * <p>QwenPaw 注册失败时按配置降级：{@code degradeOnQwenpawFailure=true} 则仅落库 status=0
+     * （下次进入页面再重试），避免阻塞"用户能否进入聊天页"；否则抛出 {@link #AGENT_QWENPAW_CREATE_FAILED}。
+     *
+     * <p>并发安全：复用 UNIQUE(user_id, is_default)，若两并发线程同建默认，后到者抛
+     * {@link DuplicateKeyException}，捕获后回查已建的默认返回，不重复创建。
+     */
+    private AiAgentDO createDefaultAgent(Long userId, Long tenantId) {
+        AiAgentDO agent = new AiAgentDO();
+        agent.setUserId(userId);
+        agent.setTenantId(tenantId);
+        agent.setName(buildDefaultName(userId));
+        agent.setDescription(defaultProperties.getDescription());
+        agent.setSystemPrompt(defaultProperties.getSystemPrompt());
+        agent.setEnableKbTool(defaultProperties.getEnableKbTool());
+        agent.setStatus(1);
+        agent.setSortOrder(0);
+        agent.setIsDefault(1);
+        // 模型留空 => 走 QwenPaw 全局激活模型
+        agent.setModelProvider(defaultProperties.getModelProvider());
+        agent.setModelName(defaultProperties.getModelName());
+        agent.setQwenpawAgentId(buildQwenpawAgentId(userId));
+        try {
+            agentMapper.insert(agent);
+        } catch (DuplicateKeyException e) {
+            // 并发下被别人先建了默认，回查返回即可
+            log.warn("[createDefaultAgent] 默认智能体已存在（并发），userId={}", userId);
+            return agentMapper.selectDefaultByUserId(userId);
+        }
+        // 同步创建 QwenPaw agent
+        try {
+            String createdId = qwenPawClient.createAgent(agent.getQwenpawAgentId(), agent.getName(),
+                    agent.getDescription(), agent.getWorkspaceDir(),
+                    agent.getModelProvider(), agent.getModelName());
+            if (createdId != null && !createdId.isEmpty()) {
+                agent.setQwenpawAgentId(createdId);
+                agentMapper.updateById(agent);
+            }
+        } catch (Exception e) {
+            if (!Boolean.TRUE.equals(defaultProperties.getDegradeOnQwenpawFailure())) {
+                log.error("[createDefaultAgent] QwenPaw 创建失败且不允许降级，userId={}", userId, e);
+                throw exception(AGENT_QWENPAW_CREATE_FAILED);
+            }
+            log.warn("[createDefaultAgent] QwenPaw 不可用，降级为仅落库 status=0，userId={}", userId, e);
+            AiAgentDO degrade = new AiAgentDO();
+            degrade.setId(agent.getId());
+            degrade.setStatus(0);
+            agentMapper.updateById(degrade);
+        }
+        installInitialSkillsIfConfigured(agent.getId());
+        return agent;
+    }
+
+    /**
+     * 渲染默认智能体名称，替换 {@code ${nickname}} 占位为用户昵称；查不到昵称则保留模板原样。
+     */
+    private String buildDefaultName(Long userId) {
+        String template = defaultProperties.getName();
+        if (template == null || !template.contains("${nickname}")) {
+            return template;
+        }
+        try {
+            AdminUserRespDTO user = adminUserApi.getUser(userId);
+            if (user != null && user.getNickname() != null && !user.getNickname().isEmpty()) {
+                return template.replace("${nickname}", user.getNickname());
+            }
+        } catch (Exception e) {
+            log.debug("[buildDefaultName] 获取用户昵称失败，userId={}", userId, e);
+        }
+        return template.replace("${nickname}", "助手");
+    }
+
+    private void installInitialSkillsIfConfigured(Long agentId) {
+        List<String> skills = defaultProperties.getInitialSkills();
+        if (skills == null || skills.isEmpty()) {
+            return;
+        }
+        for (String skillName : skills) {
+            if (skillName == null || skillName.trim().isEmpty()) {
+                continue;
+            }
+            try {
+                installQwenpawSkill(agentId, skillName.trim());
+            } catch (Exception e) {
+                log.warn("[installInitialSkillsIfConfigured] 默认技能安装失败，skill={}", skillName, e);
+            }
+        }
     }
 
     // ==================== 私有辅助方法 ====================

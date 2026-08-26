@@ -7,6 +7,7 @@ import cn.iocoder.yudao.framework.mybatis.core.query.LambdaQueryWrapperX;
 import cn.iocoder.yudao.framework.mybatis.core.mapper.BaseMapperX;
 import cn.iocoder.yudao.module.agent.dal.dataobject.agent.AiAgentDO;
 import cn.iocoder.yudao.module.agent.controller.admin.agent.vo.AgentPageReqVO;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import org.apache.ibatis.annotations.Mapper;
 
 /**
@@ -64,6 +65,34 @@ public interface AiAgentMapper extends BaseMapperX<AiAgentDO> {
                 .eq(AiAgentDO::getUserId, userId)
                 .eq(AiAgentDO::getStatus, 1)
                 .orderByAsc(AiAgentDO::getSortOrder));
+    }
+
+    /**
+     * 统计某用户的智能体总数（含停用），用于判断用户是否已有任何智能体
+     */
+    default Long selectCountByUserId(Long userId) {
+        return selectCount(new LambdaQueryWrapperX<AiAgentDO>()
+                .eq(AiAgentDO::getUserId, userId));
+    }
+
+    /**
+     * 查询某用户的默认智能体（is_default = 1）。每人最多 1 条，故用 selectOne。
+     */
+    default AiAgentDO selectDefaultByUserId(Long userId) {
+        return selectOne(new LambdaQueryWrapperX<AiAgentDO>()
+                .eq(AiAgentDO::getUserId, userId)
+                .eq(AiAgentDO::getIsDefault, 1));
+    }
+
+    /**
+     * 清除某用户的默认智能体标记（即将 is_default 重置为 NULL）。
+     *
+     * <p>多租户下 user_id 全局唯一、默认 agent 每人最多 1 条，故重置该用户全部记录为 NULL 是安全的。
+     */
+    default void clearDefaultByUserId(Long userId) {
+        update(null, new LambdaUpdateWrapper<AiAgentDO>()
+                .eq(AiAgentDO::getUserId, userId)
+                .set(AiAgentDO::getIsDefault, null));
     }
 
 }
