@@ -22,4 +22,7 @@ public class ModelConfigSimpleVO {
     @Schema(description = "用途分类: embedding/llm/ocr", example = "llm")
     private String modelType;
 
+    @Schema(description = "是否支持多模态(VL): 0=否, 1=是", example = "true")
+    private Boolean vlSupported;
+
 }

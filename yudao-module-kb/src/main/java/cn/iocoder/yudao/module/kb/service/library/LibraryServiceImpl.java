@@ -32,6 +32,8 @@ import cn.iocoder.yudao.framework.common.util.json.JsonUtils;
 import cn.iocoder.yudao.framework.common.util.object.BeanUtils;
 
 import cn.iocoder.yudao.module.kb.dal.mysql.library.LibraryMapper;
+import cn.iocoder.yudao.module.kb.dal.mysql.folder.FolderMapper;
+import cn.iocoder.yudao.module.kb.service.document.DocumentService;
 
 import static cn.iocoder.yudao.framework.common.exception.util.ServiceExceptionUtil.exception;
 import static cn.iocoder.yudao.module.kb.enums.ErrorCodeConstants.*;
@@ -69,6 +71,12 @@ public class LibraryServiceImpl implements LibraryService {
 
     @Resource
     private KbUserDeptService kbUserDeptService;
+
+    @Resource
+    private DocumentService documentService;
+
+    @Resource
+    private FolderMapper folderMapper;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -174,6 +182,9 @@ public class LibraryServiceImpl implements LibraryService {
         projectMemberService.removeAllByKbId(id);
         // 删除自定义字段值
         libraryExtService.removeAllByKbId(id);
+        // 级联删除库下全部文档与文件夹（含源文件/向量/向量任务清理，避免孤儿）
+        documentService.deleteByKbId(id);
+        folderMapper.deleteByKbId(id);
         // 删除
         libraryMapper.deleteById(id);
     }
@@ -195,6 +206,9 @@ public class LibraryServiceImpl implements LibraryService {
                     .eq(ShareDeptDO::getKbId, id));
             projectMemberService.removeAllByKbId(id);
             libraryExtService.removeAllByKbId(id);
+            // 级联删除库下全部文档与文件夹（含源文件/向量/向量任务清理，避免孤儿）
+            documentService.deleteByKbId(id);
+            folderMapper.deleteByKbId(id);
         }
         // 最后批量删除知识库
         libraryMapper.deleteByIds(ids);

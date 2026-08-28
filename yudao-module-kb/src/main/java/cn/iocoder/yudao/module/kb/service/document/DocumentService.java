@@ -45,6 +45,15 @@ public interface DocumentService {
     void deleteDocumentListByIds(List<Long> ids);
 
     /**
+     * 删除知识库下的全部文件（知识库删除时级联清理）
+     *
+     * 联动删除源文件对象、向量分片（Milvus/ES/图片）及向量任务记录，避免孤儿数据。
+     *
+     * @param kbId 知识库ID
+     */
+    void deleteByKbId(Long kbId);
+
+    /**
      * 获得知识库文件
      *
      * @param id 编号

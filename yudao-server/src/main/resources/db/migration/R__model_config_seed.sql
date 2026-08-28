@@ -12,10 +12,17 @@ INSERT IGNORE INTO `kb_model_config`
  `max_tokens`, `context_length`, `temperature`, `top_p`,
  `config`, `sort_order`, `is_pinned`, `tenant_id`)
 VALUES
--- embedding：默认嵌入模型（火山方舟，OpenAI Embedding 兼容）
-('embedding-ark', 'ep-20250701150431-bxtzk', '默认嵌入模型',
+-- embedding：多模态 VL 联合向量模型（Qwen3-VL-Embedding-8B，纯文本与图片统一 4096 维，
+-- vl_supported=1 -> Level3/4 图片语义检索；作为 selectActiveByType 的默认(置顶激活) embedding）
+('embedding-vl', 'Qwen/Qwen3-VL-Embedding-8B', '多模态嵌入模型(VL)',
+ 'https://api.siliconflow.cn/v1/embeddings', 'sk-cxlynupqhgunokbtzzrocadxcqqsjyswyxbqrwxxbswwyjhy', 'embedding',
+ b'0', b'1', b'1', '多模态联合向量模型：纯文本与图片统一 4096 维(Level3/4 图片语义检索)', 4096, 8192, 0.7, 0.9,
+ '{"adapter":"multimodal","dimension":4096,"max_length":512,"batch_size":32,"timeout":30,"max_retries":3,"retry_delay":1}',
+ 1, b'1', 1),
+-- embedding：纯文本嵌入模型（火山方舟，OpenAI Embedding 兼容，停用备选）
+('embedding-ark', 'ep-20250701150431-bxtzk', '默认嵌入模型(纯文本)',
  'https://ark.cn-beijing.volces.com/api/v3', 'ff47bc89-2fa3-4cd2-ae4f-49f11cb38cf0', 'embedding',
- b'0', b'0', b'1', NULL, 4096, 8192, 0.7, 0.9,
+ b'0', b'0', b'0', NULL, 4096, 8192, 0.7, 0.9,
  '{"adapter":"embedding","dimension":2560,"max_length":512,"batch_size":32,"timeout":30,"max_retries":3,"retry_delay":1}',
  1, b'0', 1),
 -- llm：默认大模型（火山方舟，支持视觉/多模态）

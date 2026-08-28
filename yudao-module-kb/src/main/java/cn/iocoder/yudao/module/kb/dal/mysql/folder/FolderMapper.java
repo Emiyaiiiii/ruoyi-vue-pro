@@ -30,4 +30,11 @@ public interface FolderMapper extends BaseMapperX<FolderDO> {
         return selectCount(FolderDO::getParentId, parentId);
     }
 
+    /**
+     * 删除某知识库下的全部文件夹（知识库删除时联动清理）
+     */
+    default void deleteByKbId(Long kbId) {
+        delete(FolderDO::getKbId, kbId);
+    }
+
 }

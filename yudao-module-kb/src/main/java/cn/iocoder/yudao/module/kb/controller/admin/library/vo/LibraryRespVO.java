@@ -70,4 +70,7 @@ public class LibraryRespVO {
     @Schema(description = "共享部门ID列表")
     private List<Long> shareDeptIds;
 
+    @Schema(description = "图片处理方案：''=按激活模型推断；none/ocr/vl_summary/vision 见 ImageStrategyEnum", example = "ocr")
+    private String imageStrategy;
+
 }

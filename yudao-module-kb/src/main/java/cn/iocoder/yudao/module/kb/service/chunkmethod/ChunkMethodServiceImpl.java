@@ -282,6 +282,48 @@ public class ChunkMethodServiceImpl implements ChunkMethodService {
         return BeanUtils.toBean(list, ChunkMethodSimpleVO.class);
     }
 
+    @Override
+    public String getDefaultImageStrategy() {
+        ChunkMethodDO method = chunkMethodMapper.selectDefaultMethod();
+        if (method == null || method.getDefaultParameters() == null) {
+            return "";
+        }
+        Map<String, Object> params;
+        try {
+            params = cn.iocoder.yudao.framework.common.util.json.JsonUtils.parseMap(method.getDefaultParameters());
+        } catch (Exception e) {
+            params = null;
+        }
+        if (params == null) {
+            return "";
+        }
+        Object v = params.get("image_strategy");
+        return v == null ? "" : String.valueOf(v);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void setDefaultImageStrategy(String imageStrategy) {
+        ChunkMethodDO method = chunkMethodMapper.selectDefaultMethod();
+        if (method == null) {
+            throw exception(CHUNK_METHOD_NO_DEFAULT);
+        }
+        Map<String, Object> params = new HashMap<>();
+        if (method.getDefaultParameters() != null && !method.getDefaultParameters().isBlank()) {
+            try {
+                Map<String, Object> parsed = cn.iocoder.yudao.framework.common.util.json.JsonUtils.parseMap(method.getDefaultParameters());
+                if (parsed != null) {
+                    params.putAll(parsed);
+                }
+            } catch (Exception ignore) {
+                // defaultParameters 不可解析则丢弃原内容
+            }
+        }
+        params.put("image_strategy", (imageStrategy == null || imageStrategy.isBlank()) ? "" : imageStrategy);
+        method.setDefaultParameters(cn.iocoder.yudao.framework.common.util.json.JsonUtils.toJsonString(params));
+        chunkMethodMapper.updateById(method);
+    }
+
     // ==================== 私有辅助方法 ====================
 
     private ChunkMethodDO validateExists(Long id) {

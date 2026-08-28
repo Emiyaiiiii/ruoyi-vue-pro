@@ -77,4 +77,5 @@ public interface ErrorCodeConstants {
     ErrorCode TAG_NOT_EXISTS = new ErrorCode(44, "标签不存在");
     ErrorCode TAG_NAME_DUPLICATE = new ErrorCode(45, "相同归属下已存在同名标签");
     ErrorCode TAG_PERMISSION_DENIED = new ErrorCode(46, "无权限操作该标签");
+    ErrorCode CHUNK_METHOD_NO_DEFAULT = new ErrorCode(47, "尚未设置默认切片方法，请先在「切片方法」中将一个启用方法设为默认");
 }

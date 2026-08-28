@@ -82,4 +82,18 @@ public interface ChunkMethodService {
      */
     List<ChunkMethodSimpleVO> getSimpleChunkMethodList();
 
+    /**
+     * 获取全局默认图片处理方案（读默认切片方法 default_parameters.image_strategy）
+     *
+     * @return 方案 code；无默认方法或未配置时返回空字符串
+     */
+    String getDefaultImageStrategy();
+
+    /**
+     * 设置全局默认图片处理方案（写入默认切片方法 default_parameters.image_strategy）
+     *
+     * @param imageStrategy 方案 code（''/none/ocr/vl_summary/vision）
+     */
+    void setDefaultImageStrategy(String imageStrategy);
+
 }

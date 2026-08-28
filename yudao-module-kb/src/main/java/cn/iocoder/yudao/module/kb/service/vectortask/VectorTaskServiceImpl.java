@@ -11,12 +11,15 @@ import cn.iocoder.yudao.module.kb.controller.admin.vectortask.vo.VectorTaskSubmi
 import cn.iocoder.yudao.module.kb.dal.dataobject.document.DocumentDO;
 import cn.iocoder.yudao.module.kb.dal.dataobject.modelconfig.ModelConfigDO;
 import cn.iocoder.yudao.module.kb.dal.dataobject.chunkmethod.ChunkMethodDO;
+import cn.iocoder.yudao.module.kb.dal.dataobject.library.LibraryDO;
 import cn.iocoder.yudao.module.kb.dal.dataobject.vectortask.VectorTaskDO;
 import cn.iocoder.yudao.module.kb.dal.mysql.chunkmethod.ChunkMethodMapper;
 import cn.iocoder.yudao.module.kb.dal.mysql.document.DocumentMapper;
+import cn.iocoder.yudao.module.kb.dal.mysql.library.LibraryMapper;
 import cn.iocoder.yudao.module.kb.dal.mysql.modelconfig.ModelConfigMapper;
 import cn.iocoder.yudao.module.kb.dal.mysql.vectortask.VectorTaskMapper;
 import cn.iocoder.yudao.module.kb.enums.VectorTaskStatusEnum;
+import cn.iocoder.yudao.module.kb.enums.ImageStrategyEnum;
 import cn.iocoder.yudao.module.kb.framework.config.VectorTaskConfig;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -61,6 +64,8 @@ public class VectorTaskServiceImpl implements VectorTaskService {
     private ModelConfigMapper modelConfigMapper;
     @Resource
     private ChunkMethodMapper chunkMethodMapper;
+    @Resource
+    private LibraryMapper libraryMapper;
 
     @Override
     public String submitTask(VectorTaskSubmitReqVO reqVO) {
@@ -367,6 +372,9 @@ public class VectorTaskServiceImpl implements VectorTaskService {
                 config.put("parse_options", parseOptions);
             }
         }
+        // 图片处理方案：库级 image_strategy 优先，回退到全局缺省切片方法的默认参数，
+        // 再回退到空字符串（python 端按存量布尔推断）
+        config.put("image_strategy", resolveImageStrategy(reqVO.getKbId()));
         return config;
     }
 
@@ -383,6 +391,31 @@ public class VectorTaskServiceImpl implements VectorTaskService {
         }
         Map<String, Object> params = JsonUtils.parseMap(method.getDefaultParameters());
         return params != null ? params : new HashMap<>();
+    }
+
+    /**
+     * 解析图片处理方案（优先级：库级 image_strategy > 全局缺省切片方法 default_parameters）。
+     *
+     * <p>返回方案 code；两处均未显式配置时返回空字符串，交由 python-vector
+     * 按当前激活模型布尔标志执行存量回退（兼容旧库）。非法值一律回退下行。
+     */
+    private String resolveImageStrategy(Long kbId) {
+        // 1. 库级优先
+        if (kbId != null) {
+            LibraryDO lib = libraryMapper.selectById(kbId);
+            if (lib != null && StrUtil.isNotBlank(lib.getImageStrategy())
+                    && ImageStrategyEnum.getByCode(lib.getImageStrategy()) != null) {
+                return lib.getImageStrategy();
+            }
+        }
+        // 2. 全局缺省（kb_chunk_method 默认方法 default_parameters.image_strategy）
+        Map<String, Object> def = resolveDefaultChunkMethodConfig();
+        Object global = def.get("image_strategy");
+        if (global != null && ImageStrategyEnum.getByCode(String.valueOf(global)) != null) {
+            return String.valueOf(global);
+        }
+        // 3. 未显式指定，走存量布尔推断
+        return "";
     }
 
     /**

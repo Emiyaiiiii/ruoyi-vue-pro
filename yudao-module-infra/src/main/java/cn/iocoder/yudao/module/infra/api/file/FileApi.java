@@ -64,4 +64,13 @@ public interface FileApi {
     String presignGetUrl(@NotEmpty(message = "URL 不能为空") String url,
                          Integer expirationSeconds);
 
+    /**
+     * 根据文件配置编号和存储路径，物理删除文件
+     *
+     * @param configId 文件配置编号（infra_file_config.id）
+     * @param path 文件存储路径
+     * @throws Exception 删除存储对象失败时抛出
+     */
+    void deleteFile(Long configId, String path) throws Exception;
+
 }

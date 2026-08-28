@@ -32,4 +32,20 @@ public interface VectorTaskMapper extends BaseMapperX<VectorTaskDO> {
                 .in(VectorTaskDO::getStatus, statuses)
                 .lt(VectorTaskDO::getUpdateTime, threshold));
     }
+
+    /**
+     * 删除某文档的全部向量任务记录（文档删除时联动清理）
+     */
+    default void deleteByDocId(Long docId) {
+        delete(new LambdaQueryWrapperX<VectorTaskDO>()
+                .eq(VectorTaskDO::getDocId, docId));
+    }
+
+    /**
+     * 删除某知识库的全部向量任务记录（知识库删除时联动清理）
+     */
+    default void deleteByKbId(Long kbId) {
+        delete(new LambdaQueryWrapperX<VectorTaskDO>()
+                .eq(VectorTaskDO::getKbId, kbId));
+    }
 }

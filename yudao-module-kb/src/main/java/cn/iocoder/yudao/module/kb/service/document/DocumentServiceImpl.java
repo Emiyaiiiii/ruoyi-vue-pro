@@ -20,8 +20,10 @@ import cn.iocoder.yudao.module.kb.dal.dataobject.library.LibraryDO;
 import cn.iocoder.yudao.framework.common.pojo.PageResult;
 import cn.iocoder.yudao.framework.common.pojo.PageParam;
 import cn.iocoder.yudao.framework.common.util.object.BeanUtils;
+import cn.iocoder.yudao.framework.mybatis.core.query.LambdaQueryWrapperX;
 
 import cn.iocoder.yudao.module.kb.dal.mysql.document.DocumentMapper;
+import cn.iocoder.yudao.module.kb.dal.mysql.vectortask.VectorTaskMapper;
 
 import static cn.iocoder.yudao.framework.common.exception.util.ServiceExceptionUtil.exception;
 import static cn.iocoder.yudao.module.kb.enums.ErrorCodeConstants.*;
@@ -47,6 +49,9 @@ public class DocumentServiceImpl implements DocumentService {
 
     @Resource
     private VectorTaskService vectorTaskService;
+
+    @Resource
+    private VectorTaskMapper vectorTaskMapper;
 
     @Override
     public Long createDocument(DocumentSaveReqVO createReqVO) {
@@ -81,12 +86,8 @@ public class DocumentServiceImpl implements DocumentService {
     public void deleteDocument(Long id) {
         // 校验存在
         DocumentDO document = validateDocumentExists(id);
-        // 删除 → 联动清理 Milvus/ES 向量分片
-        try {
-            vectorTaskService.deleteDocumentVectors(document.getId(), document.getKbId());
-        } catch (Exception e) {
-            log.warn("[deleteDocument] 清理向量失败（继续删除文档记录）: docId={}, error={}", id, e.getMessage());
-        }
+        // 删除 → 联动清理向量分片 + 源文件对象 + 向量任务记录
+        cleanupDocumentResources(document);
         // 删除
         documentMapper.deleteById(id);
         // 更新知识库的文档数量
@@ -94,22 +95,63 @@ public class DocumentServiceImpl implements DocumentService {
     }
 
     @Override
-        public void deleteDocumentListByIds(List<Long> ids) {
+    public void deleteDocumentListByIds(List<Long> ids) {
         for (Long id : ids) {
             DocumentDO document = documentMapper.selectById(id);
             if (document != null) {
-                // 联动清理 Milvus/ES 向量分片
-                try {
-                    vectorTaskService.deleteDocumentVectors(document.getId(), document.getKbId());
-                } catch (Exception e) {
-                    log.warn("[deleteDocumentListByIds] 清理向量失败（继续删除文档记录）: docId={}, error={}", id, e.getMessage());
-                }
+                // 联动清理向量分片 + 源文件对象 + 向量任务记录
+                cleanupDocumentResources(document);
                 libraryMapper.updateDocCount(document.getKbId(), -1);
             }
         }
         // 删除
         documentMapper.deleteByIds(ids);
+    }
+
+    @Override
+    public void deleteByKbId(Long kbId) {
+        // 查询该库下全部文档
+        List<DocumentDO> documents = documentMapper.selectList(
+                new LambdaQueryWrapperX<DocumentDO>().eq(DocumentDO::getKbId, kbId));
+        for (DocumentDO document : documents) {
+            // 逐个联动清理向量分片 + 源文件对象（图片清理已随向量分片一并处理）
+            cleanupDocumentResources(document);
         }
+        // 删除该库下所有文档记录与向量任务记录
+        documentMapper.delete(new LambdaQueryWrapperX<DocumentDO>().eq(DocumentDO::getKbId, kbId));
+        vectorTaskMapper.deleteByKbId(kbId);
+        // 重置知识库的文档数量
+        libraryMapper.updateDocCount(kbId, -documents.size());
+    }
+
+    /**
+     * 联动清理单个文档的关联资源（best-effort，任一步失败均不阻断文档记录删除）：
+     * 1. 向量分片（Milvus/ES + 图片回链对象，经 Python 文档删除接口）；
+     * 2. 源文件对象（MinIO 等，按文件配置ID + 存储路径物理删除）；
+     * 3. 向量任务记录。
+     */
+    private void cleanupDocumentResources(DocumentDO document) {
+        // 1. 清理向量分片（含图片回链对象）
+        try {
+            vectorTaskService.deleteDocumentVectors(document.getId(), document.getKbId());
+        } catch (Exception e) {
+            log.warn("[cleanupDocumentResources] 清理向量失败: docId={}, error={}", document.getId(), e.getMessage());
+        }
+        // 2. 物理删除源文件对象
+        if (document.getFileConfigId() != null && StrUtil.isNotBlank(document.getFilePath())) {
+            try {
+                fileApi.deleteFile(document.getFileConfigId(), document.getFilePath());
+            } catch (Exception e) {
+                log.warn("[cleanupDocumentResources] 删除源文件对象失败: docId={}, error={}", document.getId(), e.getMessage());
+            }
+        }
+        // 3. 删除向量任务记录
+        try {
+            vectorTaskMapper.deleteByDocId(document.getId());
+        } catch (Exception e) {
+            log.warn("[cleanupDocumentResources] 删除向量任务记录失败: docId={}, error={}", document.getId(), e.getMessage());
+        }
+    }
 
 
     private DocumentDO validateDocumentExists(Long id) {

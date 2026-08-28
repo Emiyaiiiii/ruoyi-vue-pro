@@ -53,4 +53,7 @@ public class LibrarySaveReqVO {
     @Schema(description = "项目成员用户ID列表（仅项目成果库生效，写入 kb_project_member）")
     private List<Long> memberIds;
 
+    @Schema(description = "图片处理方案：''=按激活模型推断；none/ocr/vl_summary/vision 见 ImageStrategyEnum", example = "ocr")
+    private String imageStrategy;
+
 }
