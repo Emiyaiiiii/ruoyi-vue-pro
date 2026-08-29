@@ -9,6 +9,8 @@ import cn.iocoder.yudao.framework.tenant.core.context.TenantContextHolder;
 import cn.iocoder.yudao.module.agent.dal.dataobject.agent.AiAgentDO;
 import cn.iocoder.yudao.module.agent.dal.mysql.agent.AiAgentMapper;
 import cn.iocoder.yudao.module.agent.framework.config.QwenPawClient;
+import cn.iocoder.yudao.module.kb.dal.dataobject.library.LibraryDO;
+import cn.iocoder.yudao.module.kb.service.library.LibraryService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
@@ -17,6 +19,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import jakarta.annotation.Resource;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -44,6 +47,8 @@ public class AiChatSessionServiceImpl implements AiChatSessionService {
     private AiAgentMapper agentMapper;
     @Resource(name = "qwenpawChatTaskExecutor")
     private ThreadPoolTaskExecutor chatTaskExecutor;
+    @Resource
+    private LibraryService libraryService;
 
     // ==================== 会话 ====================
 
@@ -86,15 +91,43 @@ public class AiChatSessionServiceImpl implements AiChatSessionService {
 
     @Override
     public SseEmitter sendMessageStream(Long agentId, String chatId, String sessionId, String message) {
-        return sendMessageStream(agentId, chatId, sessionId, message, null);
+        return sendMessageStream(agentId, chatId, sessionId, message, null, null);
     }
 
     @Override
     public SseEmitter sendMessageStream(Long agentId, String chatId, String sessionId, String message,
                                         List<Map<String, Object>> contentItems) {
+        return sendMessageStream(agentId, chatId, sessionId, message, contentItems, null);
+    }
+
+    @Override
+    public SseEmitter sendMessageStream(Long agentId, String chatId, String sessionId, String message,
+                                        List<Map<String, Object>> contentItems, List<Long> kbIds) {
+        return sendMessageStream(agentId, chatId, sessionId, message, contentItems, kbIds, false);
+    }
+
+    @Override
+    public SseEmitter sendMessageStream(Long agentId, String chatId, String sessionId, String message,
+                                        List<Map<String, Object>> contentItems, List<Long> kbIds, boolean approvalOff) {
         AiAgentDO agent = validateAgent(agentId);
         String qwenpawAgentId = agent.getQwenpawAgentId();
         String userId = currentUserId();
+        // 会话级免审批：用户在该会话内选择不再弹工具审批框时，透传 request_context.approval_level=off
+        Map<String, Object> requestContext = approvalOff
+                ? java.util.Collections.singletonMap("approval_level", "off") : null;
+        // 知识库检索范围注入：用户勾选 kbIds 时，把「库名(id)」拼进当轮消息前缀，
+        // 供 LLM 填 search_knowledge_base 的 knowledge_base_ids 参数（QwenPaw 不改，提示词注入）。
+        String scopePrefix = buildKbScopePrefix(kbIds);
+        if (StrUtil.isNotEmpty(scopePrefix) && contentItems != null && !contentItems.isEmpty()) {
+            // 若以 content 数组发送，找到首个 text 项，把前缀拼进其 text 开头
+            for (Map<String, Object> item : contentItems) {
+                if ("text".equals(item.get("type")) && item.get("text") instanceof String) {
+                    item.put("text", scopePrefix + item.get("text"));
+                    break;
+                }
+            }
+        }
+        final String sendText = StrUtil.isNotEmpty(scopePrefix) ? scopePrefix + message : message;
         // sessionId 为空时兜底生成（首次发问无预创建 chat 的场景）
         String effectiveSessionId = (sessionId != null && !sessionId.isEmpty()) ? sessionId : UUID.randomUUID().toString();
         SseEmitter emitter = new SseEmitter(0L);
@@ -105,9 +138,11 @@ public class AiChatSessionServiceImpl implements AiChatSessionService {
             try {
                 if (contentItems != null && !contentItems.isEmpty()) {
                     qwenPawClient.chatStream(qwenpawAgentId, chatId, userId, effectiveSessionId, contentItems,
+                            requestContext,
                             chunk -> forwardChunk(emitter, chunk, agentId, chatId, "sendMessageStream"));
                 } else {
-                    qwenPawClient.chatStream(qwenpawAgentId, chatId, userId, effectiveSessionId, message,
+                    qwenPawClient.chatStream(qwenpawAgentId, chatId, userId, effectiveSessionId, sendText,
+                            requestContext,
                             chunk -> forwardChunk(emitter, chunk, agentId, chatId, "sendMessageStream"));
                 }
                 // 上游 QwenPaw 流已结束，必须 complete 关闭 SseEmitter。
@@ -265,6 +300,38 @@ public class AiChatSessionServiceImpl implements AiChatSessionService {
             emitter.complete();
         } catch (Exception ignored) {
         }
+    }
+
+    /**
+     * 构造知识库检索范围前缀，形如「[本次检索范围：规章库(id=1)、产品手册(id=5)]\n」。
+     *
+     * <p>kbIds 为空/查询不到库名时返回空串，保持「全库检索」语义。库名取不到则仅保留 id，
+     * 不因权限/缺失导致整轮消息失败。
+     */
+    private String buildKbScopePrefix(List<Long> kbIds) {
+        if (kbIds == null || kbIds.isEmpty()) {
+            return "";
+        }
+        List<String> parts = new ArrayList<>();
+        for (Long kbId : kbIds) {
+            if (kbId == null) {
+                continue;
+            }
+            String name = "";
+            try {
+                LibraryDO library = libraryService.getLibrary(kbId);
+                if (library != null) {
+                    name = library.getName();
+                }
+            } catch (Exception e) {
+                log.debug("[buildKbScopePrefix] 查询知识库名失败 kbId={}", kbId, e);
+            }
+            parts.add(name + "(id=" + kbId + ")");
+        }
+        if (parts.isEmpty()) {
+            return "";
+        }
+        return "[本次检索范围：" + String.join("、", parts) + "]\n";
     }
 
 }

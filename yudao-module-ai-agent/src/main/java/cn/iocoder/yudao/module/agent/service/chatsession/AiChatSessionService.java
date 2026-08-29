@@ -81,6 +81,30 @@ public interface AiChatSessionService {
                                  List<Map<String, Object>> contentItems);
 
     /**
+     * SSE 流式发送消息（支持附件 content 数组 + 知识库检索范围）
+     *
+     * <p>在 {@link #sendMessageStream(Long, String, String, String, List)} 基础上，
+     * 支持传入用户本轮勾选的知识库 kbIds。有值时，Java 把「库名(id)」拼进当轮消息前缀，
+     * 供 LLM 填 search_knowledge_base 的 knowledge_base_ids 参数；为空时不注入，走全库检索语义。
+     *
+     * @param kbIds 用户所选知识库 ID 列表（可为 null/空）
+     */
+    SseEmitter sendMessageStream(Long agentId, String chatId, String sessionId, String message,
+                                 List<Map<String, Object>> contentItems, List<Long> kbIds);
+
+    /**
+     * SSE 流式发送消息（支持附件 content + 知识库检索范围 + 会话级免审批）
+     *
+     * <p>在 {@link #sendMessageStream(Long, String, String, String, List, List)} 基础上，
+     * approvalOff=true 时向 QwenPaw 传 {@code request_context:{"approval_level":"off"}}，
+     * 代表用户在该会话内「不再弹工具审批框」。
+     *
+     * @param approvalOff 会话级免审批开关（true 表示本次会话后续工具调用不再审批）
+     */
+    SseEmitter sendMessageStream(Long agentId, String chatId, String sessionId, String message,
+                                 List<Map<String, Object>> contentItems, List<Long> kbIds, boolean approvalOff);
+
+    /**
      * 重新挂载到 QwenPaw 正在运行的流（页面切回/标签切换时使用）
      *
      * <p>通过 {@code reconnect: true} 发到 QwenPaw，attach 到同一 chat 正在运行的流上继续推 chunk。

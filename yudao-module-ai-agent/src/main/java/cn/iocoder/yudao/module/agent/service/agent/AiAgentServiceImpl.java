@@ -24,6 +24,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.transaction.annotation.Transactional;
 
 import jakarta.annotation.Resource;
+import org.springframework.beans.factory.annotation.Value;
 import java.util.*;
 
 import static cn.iocoder.yudao.framework.common.exception.util.ServiceExceptionUtil.exception;
@@ -52,6 +53,33 @@ public class AiAgentServiceImpl implements AiAgentService {
     @Resource
     private AdminUserApi adminUserApi;
 
+    /** 知识库检索 MCP 服务地址（python-vector，Docker 内部服务名） */
+    @Value("${yudao.ai.kb-retrieval.base-url:http://python-vector:8100}")
+    private String kbRetrievalBaseUrl;
+    /** 注册到 QwenPaw 的知识库检索 MCP client_key */
+    @Value("${yudao.ai.kb-retrieval.client-key:knowledge-base-retrieval}")
+    private String kbRetrievalClientKey;
+
+    /** 知识库检索结果呈现指南提示词文件名（写入 QwenPaw 智能体工作区根目录） */
+    private static final String KB_GUIDE_FILE = "KB_GUIDE.md";
+    /** QwenPaw 默认系统提示词文件列表（KB_GUIDE 追加在其后） */
+    private static final List<String> DEFAULT_SYSTEM_PROMPT_FILES =
+            Arrays.asList("AGENTS.md", "SOUL.md", "PROFILE.md");
+    /** 指导模型在引用检索结果时原样保留 Markdown 图片/链接，避免图片连接不显示 */
+    private static final String KB_GUIDE_CONTENT = """
+            # 知识库检索结果呈现规则
+
+            当你通过 knowledge-base-retrieval 工具检索知识库时，工具返回的 content 可能携带 Markdown 格式的图片或链接，例如：
+
+            - 图片：`![图片](http://...)` 或 `![](http://...)`
+            - 链接：`[标题](http://...)`
+
+            请严格遵守以下规则：
+            1. 在回答中引用检索到的文字内容时，必须【原样保留】其中的 Markdown 图片与链接语法，不要删除、不要改写成普通纯文本、不要去掉感叹号。
+            2. 图片对用户很重要。检索内容里的每张图片都应在你的回答中保留在对应位置，必要时可补充简短的图片说明，但 Markdown 语法本身不得改动。
+            3. 如果检索结果里没有图片或链接，正常回答即可，无需额外说明。
+            """;
+
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Long createAgent(AgentSaveReqVO createReqVO) {
@@ -72,6 +100,9 @@ public class AiAgentServiceImpl implements AiAgentService {
         if (agent.getSortOrder() == null) {
             agent.setSortOrder(0);
         }
+        if (agent.getApprovalLevel() == null) {
+            agent.setApprovalLevel("auto");
+        }
         agent.setQwenpawAgentId(qwenpawAgentId);
         agentMapper.insert(agent);
 
@@ -89,6 +120,18 @@ public class AiAgentServiceImpl implements AiAgentService {
             log.error("[createAgent] QwenPaw 智能体创建失败，agentId={}", agent.getId(), e);
             throw exception(AGENT_QWENPAW_CREATE_FAILED);
         }
+
+        // 启用知识库工具时，自动注册检索 MCP（streamable_http + X-Tenant-Id 连接头）
+        if (Boolean.TRUE.equals(agent.getEnableKbTool())) {
+            try {
+                registerKbRetrievalMcp(agent);
+            } catch (Exception e) {
+                log.warn("[createAgent] 注册知识库检索 MCP 失败，agentId={}", agent.getId(), e);
+            }
+        }
+
+        // 同步工具审批级别到 QwenPaw（决定后续是否弹工具审批框）
+        applyAgentApprovalLevel(agent);
 
         // 创建后安装初始技能（从 QwenPaw 技能池按 name 安装）
         List<String> initialSkills = createReqVO.getInitialSkills();
@@ -138,6 +181,39 @@ public class AiAgentServiceImpl implements AiAgentService {
             qwenPawClient.updateAgent(agent.getQwenpawAgentId(), fields);
         } catch (Exception e) {
             log.warn("[updateAgent] QwenPaw 同步失败，agentId={}", agent.getQwenpawAgentId(), e);
+        }
+
+        // 审批级别有变更时同步到 QwenPaw running-config
+        if (updateReqVO.getApprovalLevel() != null) {
+            try {
+                qwenPawClient.setAgentApprovalLevel(agent.getQwenpawAgentId(), updateReqVO.getApprovalLevel());
+            } catch (Exception e) {
+                log.warn("[updateAgent] 同步审批级别失败，agentId={}", agent.getId(), e);
+            }
+        }
+
+        // 知识库工具开关与 QwenPaw 的检索 MCP 保持一致：
+        // 启用时确保已注册（幂等），关闭时注销，避免取消"知识库问答"后 MCP 工具仍挂载在 QwenPaw 上
+        boolean enableKb = Boolean.TRUE.equals(
+                updateReqVO.getEnableKbTool() != null ? updateReqVO.getEnableKbTool() : agent.getEnableKbTool());
+        if (enableKb) {
+            try {
+                registerKbRetrievalMcp(agent);
+            } catch (Exception e) {
+                log.warn("[updateAgent] 注册知识库检索 MCP 失败，agentId={}", agent.getId(), e);
+            }
+        } else {
+            try {
+                qwenPawClient.deleteMcp(agent.getQwenpawAgentId(), kbRetrievalClientKey);
+            } catch (Exception e) {
+                log.warn("[updateAgent] 注销知识库检索 MCP 失败，agentId={}", agent.getId(), e);
+            }
+            // 同步摘除检索结果呈现指南，避免污染未启用知识库问答的智能体
+            try {
+                applyKbGuidePrompt(agent.getQwenpawAgentId(), false);
+            } catch (Exception e) {
+                log.warn("[updateAgent] 摘除知识库检索指南失败，agentId={}", agent.getId(), e);
+            }
         }
     }
 
@@ -388,6 +464,71 @@ public class AiAgentServiceImpl implements AiAgentService {
     public void deleteQwenpawMcp(Long agentId, String clientKey) {
         AiAgentDO agent = validateExists(agentId);
         qwenPawClient.deleteMcp(agent.getQwenpawAgentId(), clientKey);
+    }
+
+    /**
+     * 注册知识库检索 MCP 到 QwenPaw 智能体。
+     *
+     * <p>传输使用 {@code streamable_http}，URL 指向 python-vector 的 /mcp/retrieval；
+     * 租户 ID 通过连接级请求头 {@code X-Tenant-Id} 固定传入，供检索工具内 CurrentHeaders 兜底读取。
+     *
+     * <p>幂等：QwenPaw 以 client_key 维度 upsert，重复调用安全。
+     */
+    private void registerKbRetrievalMcp(AiAgentDO agent) {
+        // 尾斜杠必须保留：FastMCP streamable-http 端点挂载后要求带斜杠访问，
+        // 否则 QwenPaw MCP 客户端 POST 到无斜杠 URL 会收到 307 重定向，握手失败导致驱动无法激活
+        String url = kbRetrievalBaseUrl.replaceAll("/+$", "") + "/mcp/retrieval/";
+        String headersJson = "{\"X-Tenant-Id\":\"" + String.valueOf(agent.getTenantId()) + "\"}";
+        qwenPawClient.registerMcp(agent.getQwenpawAgentId(), kbRetrievalClientKey, kbRetrievalClientKey,
+                "streamable_http", url, null, null, headersJson, null);
+
+        // 写入检索结果呈现指南并加入系统提示词，指导模型保留检索内容里的 Markdown 图片/链接
+        applyKbGuidePrompt(agent.getQwenpawAgentId(), true);
+    }
+
+    /**
+     * 将智能体配置的工具审批级别同步到 QwenPaw running-config
+     *（strict=所有工具需审批 / auto=智能 / off=免审批）
+     */
+    private void applyAgentApprovalLevel(AiAgentDO agent) {
+        if (agent.getQwenpawAgentId() == null || agent.getApprovalLevel() == null) {
+            return;
+        }
+        try {
+            qwenPawClient.setAgentApprovalLevel(agent.getQwenpawAgentId(), agent.getApprovalLevel());
+        } catch (Exception e) {
+            log.warn("[applyAgentApprovalLevel] 同步审批级别失败，agentId={}", agent.getId(), e);
+        }
+    }
+
+    /**
+     * 按知识库工具开关，向 QwenPaw 系统提示词注入/摘除检索结果呈现指南（KB_GUIDE.md）。
+     *
+     * <p>开启：向智能体工作区写入 KB_GUIDE.md 并追加到 system_prompt_files，QwenPaw 会将其
+     * 一并拼进系统提示词，指导模型在引用检索结果时原样保留 Markdown 图片/链接（否则模型易将其
+     * 转成纯文本或剔除，导致前端图片/链接不显示）。关闭：从 system_prompt_files 中摘除。
+     *
+     * <p>幂等：文件重复写、列表重复添加均安全。
+     */
+    private void applyKbGuidePrompt(String qwenpawAgentId, boolean enabled) {
+        List<String> files = qwenPawClient.getSystemPromptFiles(qwenpawAgentId);
+        if (files == null || files.isEmpty()) {
+            // 空列表兜底到 QwenPaw 默认文件，避免仅剩 KB_GUIDE 而丢弃标准提示词文件
+            files = new ArrayList<>(DEFAULT_SYSTEM_PROMPT_FILES);
+        }
+        boolean contains = files.contains(KB_GUIDE_FILE);
+        if (enabled) {
+            qwenPawClient.writeWorkspaceMd(qwenpawAgentId, KB_GUIDE_FILE, KB_GUIDE_CONTENT);
+            if (!contains) {
+                files.add(KB_GUIDE_FILE);
+                qwenPawClient.setSystemPromptFiles(qwenpawAgentId, files);
+            }
+        } else {
+            if (contains) {
+                files.remove(KB_GUIDE_FILE);
+                qwenPawClient.setSystemPromptFiles(qwenpawAgentId, files);
+            }
+        }
     }
 
     // ==================== 默认智能体私有实现 ====================

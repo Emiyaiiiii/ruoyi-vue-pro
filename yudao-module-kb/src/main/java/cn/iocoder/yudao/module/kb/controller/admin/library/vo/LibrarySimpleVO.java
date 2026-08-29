@@ -17,4 +17,7 @@ public class LibrarySimpleVO {
 
     @Schema(description = "是否项目成果库: 0=否, 1=是", example = "0")
     private Integer isProject;
+
+    @Schema(description = "所属分类ID（用于按分类树分组展示）", example = "1024")
+    private Long categoryId;
 }

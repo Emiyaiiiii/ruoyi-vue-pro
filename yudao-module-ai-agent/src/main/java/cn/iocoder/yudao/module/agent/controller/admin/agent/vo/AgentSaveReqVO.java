@@ -45,6 +45,9 @@ public class AgentSaveReqVO {
     @Schema(description = "是否启用知识库问答工具: 0=关闭, 1=开启", example = "true")
     private Boolean enableKbTool;
 
+    @Schema(description = "工具审批级别: strict=所有工具需审批, auto=智能, off=免审批", example = "auto")
+    private String approvalLevel;
+
     @Schema(description = "状态: 0=停用, 1=启用", example = "1")
     private Integer status;
 

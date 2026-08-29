@@ -316,3 +316,9 @@ yudao:
       # 超时配置
       connect-timeout: 3000
       read-timeout: 30000
+    # 知识库检索 MCP（智能体挂载检索工具时注册到 QwenPaw）
+    kb-retrieval:
+      # python-vector 服务地址（compose 服务名 vector；QwenPaw 容器内需可解析）
+      base-url: http://vector:8100
+      # 注册到 QwenPaw 的 client_key
+      client-key: knowledge-base-retrieval

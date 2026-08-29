@@ -132,7 +132,22 @@ public class ChatSessionController {
                 }
             }
         }
-        return chatSessionService.sendMessageStream(agentId, chatId, sessionId, message, contentItems);
+        // 用户本轮勾选的知识库（用于检索范围提示词注入），可为空
+        List<Long> kbIds = null;
+        if (body != null && body.get("kbIds") instanceof List) {
+            List<?> kbIdList = (List<?>) body.get("kbIds");
+            kbIds = new ArrayList<>();
+            for (Object id : kbIdList) {
+                try {
+                    kbIds.add(Long.valueOf(String.valueOf(id)));
+                } catch (NumberFormatException ignored) {
+                    // 非法 id 跳过
+                }
+            }
+        }
+        // 会话级免审批：用户在审批框选"本次会话不再审批"后置 true，透传 approval_level=off
+        boolean approvalOff = body != null && Boolean.TRUE.equals(body.get("approvalOff"));
+        return chatSessionService.sendMessageStream(agentId, chatId, sessionId, message, contentItems, kbIds, approvalOff);
     }
 
     @GetMapping(value = "/reconnect-stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)

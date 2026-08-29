@@ -55,6 +55,8 @@ public class QwenPawClient {
     private static final String API_CONSOLE_CHAT_STOP = "/console/chat/stop";
     private static final String API_CONSOLE_UPLOAD = "/api/console/upload";
     private static final String API_FILES_PREVIEW = "/api/files/preview";
+    private static final String API_APPROVAL = "/api/approval";
+    private static final String API_WORKSPACE_RUNNING_CONFIG = "/workspace/running-config";
 
     @Resource
     private QwenPawProperties properties;
@@ -609,6 +611,141 @@ public class QwenPawClient {
         return new LinkedHashMap<>();
     }
 
+    // ==================== 工作区文件 / 系统提示词 ====================
+
+    /**
+     * 读取智能体配置的系统提示词文件列表
+     *
+     * <p>对应 QwenPaw {@code GET /api/agents/{agentId}/workspace/system-prompt-files}。
+     */
+    @SuppressWarnings("unchecked")
+    public List<String> getSystemPromptFiles(String agentId) {
+        String path = API_AGENTS + "/" + encode(agentId) + "/workspace/system-prompt-files";
+        ResponseEntity<String> resp = get(path);
+        try {
+            Object value = objectMapper.readValue(resp.getBody(), Object.class);
+            if (value instanceof List) {
+                List<String> result = new ArrayList<>();
+                for (Object item : (List<?>) value) {
+                    result.add(String.valueOf(item));
+                }
+                return result;
+            }
+        } catch (Exception e) {
+            log.warn("[getSystemPromptFiles] 响应解析失败，agentId={}", agentId, e);
+        }
+        return new ArrayList<>();
+    }
+
+    /**
+     * 写入智能体工作区根目录的 Markdown 文件（用于系统提示词注入）
+     *
+     * <p>对应 QwenPaw {@code PUT /api/agents/{agentId}/workspace/files/{mdName}}，
+     * body 为 {@code {"content": "..."}}。写入位置为系统提示词读取的 workspace_dir 根目录。
+     */
+    public void writeWorkspaceMd(String agentId, String mdName, String content) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("content", content == null ? "" : content);
+        String path = API_AGENTS + "/" + encode(agentId) + "/workspace/files/" + encode(mdName);
+        putJson(path, toJson(body));
+    }
+
+    /**
+     * 设置智能体的系统提示词文件列表
+     *
+     * <p>对应 QwenPaw {@code PUT /api/agents/{agentId}/workspace/system-prompt-files}，
+     * body 直接为 Markdown 文件名数组（非对象包裹）。
+     */
+    public void setSystemPromptFiles(String agentId, List<String> files) {
+        String path = API_AGENTS + "/" + encode(agentId) + "/workspace/system-prompt-files";
+        try {
+            String json = objectMapper.writeValueAsString(files == null ? new ArrayList<>() : files);
+            putJson(path, json);
+        } catch (Exception e) {
+            throw new IllegalStateException("QwenPaw 系统提示词文件列表序列化失败", e);
+        }
+    }
+
+    // ==================== 工具审批（Approval）====================
+
+    /**
+     * 设置智能体的工具审批级别（strict/smart/auto/off）
+     *
+     * <p>对应 QwenPaw {@code PUT /api/agents/{agentId}/workspace/running-config}，
+     * body 中 approval_level 非空时才写入 agent 配置（persist_running_config 逻辑）。
+     * "off" 表示整个智能体免审批。
+     */
+    public void setAgentApprovalLevel(String agentId, String level) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("approval_level", level);
+        String path = API_AGENTS + "/" + encode(agentId) + API_WORKSPACE_RUNNING_CONFIG;
+        putJson(path, toJson(body));
+    }
+
+    /**
+     * 查询某会话（root session）下待审批的工具调用
+     *
+     * <p>对应 QwenPaw {@code GET /api/approval/list?session_id=xxx}。
+     *
+     * @return 待审批列表，元素含 request_id/tool_name/session_id/severity/created_at/timeout_seconds 等
+     */
+    public List<Map<String, Object>> listApprovals(String sessionId) {
+        String path = API_APPROVAL + "/list?session_id=" + encode(sessionId);
+        ResponseEntity<String> resp = get(path);
+        try {
+            Object root = objectMapper.readValue(resp.getBody(), Object.class);
+            if (root instanceof Map) {
+                Object list = ((Map<?, ?>) root).get("pending_approvals");
+                if (list instanceof List) {
+                    List<Map<String, Object>> result = new ArrayList<>();
+                    for (Object item : (List<?>) list) {
+                        if (item instanceof Map) {
+                            result.add((Map<String, Object>) item);
+                        }
+                    }
+                    return result;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("[listApprovals] 响应解析失败，sessionId={}", sessionId, e);
+        }
+        return new ArrayList<>();
+    }
+
+    /**
+     * 允许某个待审批的工具调用
+     *
+     * <p>对应 QwenPaw {@code POST /api/approval/approve}，body {request_id, session_id, scope}。
+     *
+     * @param scope 可选：exact/similar/all；null 表示按 exact 处理
+     */
+    public Map<String, Object> approveApproval(String requestId, String sessionId, String scope) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("request_id", requestId);
+        body.put("session_id", sessionId);
+        if (scope != null && !scope.isEmpty()) {
+            body.put("scope", scope);
+        }
+        String resp = postJson(API_APPROVAL + "/approve", toJson(body));
+        return parseJsonObject(resp);
+    }
+
+    /**
+     * 拒绝某个待审批的工具调用
+     *
+     * <p>对应 QwenPaw {@code POST /api/approval/deny}，body {request_id, session_id, reason}。
+     */
+    public Map<String, Object> denyApproval(String requestId, String sessionId, String reason) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("request_id", requestId);
+        body.put("session_id", sessionId);
+        if (reason != null && !reason.isEmpty()) {
+            body.put("reason", reason);
+        }
+        String resp = postJson(API_APPROVAL + "/deny", toJson(body));
+        return parseJsonObject(resp);
+    }
+
     // ==================== Skills 管理 ====================
 
     /**
@@ -1079,12 +1216,22 @@ public class QwenPawClient {
      * @param onChunk data 增量回调（原始 data 行内容，未做 JSON 解析）
      */
     public void chatStream(String agentId, String chatId, String userId, String sessionId, String message, Consumer<String> onChunk) {
+        chatStream(agentId, chatId, userId, sessionId, message, null, onChunk);
+    }
+
+    /**
+     * SSE 流式对话（纯文本，支持会话级 requestContext）
+     *
+     * @param requestContext 可选，透传给 QwenPaw；如 {@code {"approval_level":"off"}} 表示本次会话免审批
+     */
+    public void chatStream(String agentId, String chatId, String userId, String sessionId, String message,
+                           Map<String, Object> requestContext, Consumer<String> onChunk) {
         List<Map<String, Object>> contentItems = new ArrayList<>();
         Map<String, Object> textContent = new LinkedHashMap<>();
         textContent.put("type", "text");
         textContent.put("text", message);
         contentItems.add(textContent);
-        chatStream(agentId, chatId, userId, sessionId, contentItems, onChunk);
+        chatStream(agentId, chatId, userId, sessionId, contentItems, requestContext, onChunk);
     }
 
     /**
@@ -1098,6 +1245,17 @@ public class QwenPawClient {
      */
     public void chatStream(String agentId, String chatId, String userId, String sessionId,
                            List<Map<String, Object>> contentItems, Consumer<String> onChunk) {
+        chatStream(agentId, chatId, userId, sessionId, contentItems, null, onChunk);
+    }
+
+    /**
+     * SSE 流式对话（支持附件 content 数组 + 会话级 requestContext）
+     *
+     * @param requestContext 可选，透传给 QwenPaw；如 {@code {"approval_level":"off"}} 表示本次会话免审批
+     */
+    public void chatStream(String agentId, String chatId, String userId, String sessionId,
+                           List<Map<String, Object>> contentItems, Map<String, Object> requestContext,
+                           Consumer<String> onChunk) {
         Map<String, Object> inputMessage = new LinkedHashMap<>();
         inputMessage.put("role", "user");
         inputMessage.put("content", contentItems == null || contentItems.isEmpty()
@@ -1117,6 +1275,9 @@ public class QwenPawClient {
             body.put("chat_id", chatId);
         }
         body.put("stream", true);
+        if (requestContext != null && !requestContext.isEmpty()) {
+            body.put("request_context", requestContext);
+        }
         executeSse(agentId, body, onChunk, "chatStream");
     }
 
@@ -1136,6 +1297,16 @@ public class QwenPawClient {
      * @param onChunk data 增量回调（与 chatStream 同样的协议）
      */
     public void reconnectStream(String agentId, String chatId, String userId, String sessionId, Consumer<String> onChunk) {
+        reconnectStream(agentId, chatId, userId, sessionId, null, onChunk);
+    }
+
+    /**
+     * 以 reconnect 方式重新挂载到正在运行的 QwenPaw 流（支持会话级 requestContext）
+     *
+     * @param requestContext 可选，透传给 QwenPaw；如 {@code {"approval_level":"off"}} 表示本次会话免审批
+     */
+    public void reconnectStream(String agentId, String chatId, String userId, String sessionId,
+                                Map<String, Object> requestContext, Consumer<String> onChunk) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("reconnect", true);
         body.put("chat_id", chatId);
@@ -1144,6 +1315,9 @@ public class QwenPawClient {
         body.put("input", java.util.Collections.emptyList());
         body.put("channel", "console");
         body.put("stream", true);
+        if (requestContext != null && !requestContext.isEmpty()) {
+            body.put("request_context", requestContext);
+        }
         executeSse(agentId, body, onChunk, "reconnectStream");
     }
 

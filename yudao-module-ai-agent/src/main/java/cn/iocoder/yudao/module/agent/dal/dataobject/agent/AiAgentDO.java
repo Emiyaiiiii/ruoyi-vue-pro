@@ -83,6 +83,11 @@ public class AiAgentDO extends BaseDO {
     private Boolean enableKbTool;
 
     /**
+     * 工具审批级别：strict=所有工具都需审批, auto=智能(高风险才审), off=免审批
+     */
+    private String approvalLevel;
+
+    /**
      * 状态: 0=停用, 1=启用
      */
     private Integer status;
