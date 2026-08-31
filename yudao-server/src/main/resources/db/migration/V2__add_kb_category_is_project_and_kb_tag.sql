@@ -1,13 +1,15 @@
 -- =====================================================
--- V2: 知识库 新增「项目成果库标识」+「标签管理」
+-- V2: 知识库/智能体 增量变更（原 V2/V3/V4 整合）
 --
--- 来源:
+-- 来源（并入原 V2/V3/V4 三个一次性增量）:
 --   * sql/mysql/kb_category_is_project.sql —— kb_category 增加 is_project
+--   * V3__add_library_image_strategy.sql    —— kb_library 增加 image_strategy
 --   * sql/mysql/kb_tag.sql                  —— 新建 kb_tag 表
+--   * V4__add_agent_approval_level.sql      —— ai_agent 增加 approval_level
 --
 -- 说明:
 --   * 本文件为一次性增量，在全新库上于 V1（基线）之后执行。
---     此时 is_project 字段、kb_tag 表肯定尚不存在，直接 DDL 即可。
+--     此时所列字段/表肯定尚不存在，直接 DDL 即可。
 --   * kb_screen.sql 中的 kb_category.column_config 与 kb_library_ext 表
 --     已在 V1 基线并入，故此处不重复。
 --   * 对应菜单种子见 R__menu_seed.sql（行业数据走 R__，升级自动重跑）。
@@ -42,3 +44,20 @@ CREATE TABLE `kb_tag` (
     KEY `idx_owner_id` (`owner_id`),
     KEY `idx_name` (`name`)
 ) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='知识库标签表';
+
+-- =====================================================
+-- 3. kb_library 增加 image_strategy（图片处理方案）
+--    原 V3__add_library_image_strategy.sql。
+--    库级优先，未设置时空字符串回退全局缺省/存量推断。
+--    取值: ''=按激活模型推断; none=纯文本; ocr=OCR文字; vl_summary=VL总结; vision=视觉召回
+-- =====================================================
+ALTER TABLE `kb_library` ADD COLUMN `image_strategy` varchar(20) NOT NULL DEFAULT '' COMMENT '图片处理方案' AFTER `is_project`;
+
+-- =====================================================
+-- 4. ai_agent 增加 approval_level（工具审批级别）
+--    原 V4__add_agent_approval_level.sql。
+--    控制智能体调用工具的审批机制。
+--    取值: strict=所有工具需审批, auto=智能, off=免审批
+-- =====================================================
+ALTER TABLE `ai_agent`
+    ADD COLUMN `approval_level` varchar(16) NOT NULL DEFAULT 'auto' COMMENT '工具审批级别: strict=所有工具需审批, auto=智能, off=免审批';

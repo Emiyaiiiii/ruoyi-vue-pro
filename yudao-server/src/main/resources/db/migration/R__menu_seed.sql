@@ -167,24 +167,166 @@ WHERE NOT EXISTS (
 );
 
 -- =====================================================
--- 三、知识库管理 > 标签管理（菜单 + 按钮权限）
+-- 三、管理端「智能体」子树（/ai-agent）：顶级目录 + 6 子菜单 + 按钮权限
+--
+-- 背景：这些管理后台菜单在 docker init 时由 sql/mysql 脚本导入，未进入 Flyway 迁移，
+-- 仅靠 init 脚本重建会丢。故在此以幂等方式补齐，与 DB 现状保持一致。
+-- 全部使用 NOT EXISTS 守卫（子菜单按 name+parent、按钮按 permission），R__ 可安全重跑。
+-- 管理后台需展示，visible=1。
 -- =====================================================
-SELECT id INTO @kb_parent_id FROM `system_menu` WHERE name = '知识库管理' AND deleted = b'0' AND type = 1 LIMIT 1;
+INSERT INTO `system_menu` (`name`,`permission`,`type`,`sort`,`parent_id`,`path`,`icon`,`component`,`component_name`,`status`,`visible`,`keep_alive`,`always_show`,`create_time`,`update_time`,`deleted`)
+SELECT '智能体管理','',1,21,0,'/ai-agent','ep:chat-dot-round','','AiAgent',0,1,1,1,NOW(),NOW(),b'0'
+FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM `system_menu` WHERE `path`='/ai-agent' AND `parent_id`=0 AND `deleted`=b'0');
+SELECT id INTO @m_ai_agent FROM `system_menu` WHERE `path`='/ai-agent' AND `parent_id`=0 AND `deleted`=b'0' LIMIT 1;
 
-INSERT INTO `system_menu` (`name`, `permission`, `type`, `sort`, `parent_id`, `path`, `icon`, `component`, `component_name`, `status`, `visible`, `keep_alive`, `always_show`, `create_time`, `update_time`, `deleted`)
-VALUES ('标签管理', '', 2, 10, @kb_parent_id, 'tag', 'ep:price-tag', 'kb/tag/index', 'KbTag', 0, 1, 1, 0, NOW(), NOW(), b'0');
+-- /ai-agent 下子菜单（parent_id 由 @m_ai_agent 解析）
+INSERT INTO `system_menu` (`name`,`permission`,`type`,`sort`,`parent_id`,`path`,`icon`,`component`,`component_name`,`status`,`visible`,`keep_alive`,`always_show`,`create_time`,`update_time`,`deleted`)
+SELECT `v`.`name`,'',2,`v`.`sort`,@m_ai_agent,`v`.`path`,`v`.`icon`,`v`.`component`,`v`.`component_name`,0,1,1,0,NOW(),NOW(),b'0'
+FROM (
+    SELECT '我的智能体' `name`,1 `sort`,'agent' `path`,'ep:avatar' `icon`,'ai/agent/index' `component`,'AiAgentIndex' `component_name`
+    UNION ALL SELECT '技能商店',2,'skill-store','ep:magic-stick','ai/skillmeta/index','AiSkillMetaIndex'
+    UNION ALL SELECT 'MCP商店',3,'mcp-store','ep:burger','ai/mcpmeta/index','AiMcpMetaIndex'
+    UNION ALL SELECT '问答会话',4,'chat-session','ep:chat-line-round','ai/chatsession/index','AiChatSessionIndex'
+    UNION ALL SELECT '模型管理',5,'model-provider','ep:cpu','ai/model/provider/index','AiModelProvider'
+    UNION ALL SELECT 'Token用量',6,'token-usage','ep:data-analysis','ai/tokenUsage/index','AiTokenUsageIndex'
+) `v`
+WHERE NOT EXISTS (
+    SELECT 1 FROM `system_menu` `sm` WHERE `sm`.`name`=`v`.`name` AND `sm`.`parent_id`=@m_ai_agent AND `sm`.`deleted`=b'0'
+);
 
-SET @tag_id = LAST_INSERT_ID();
-
-INSERT INTO `system_menu` (`name`, `permission`, `type`, `sort`, `parent_id`, `path`, `icon`, `component`, `status`, `visible`, `keep_alive`, `always_show`, `create_time`, `update_time`, `deleted`)
-VALUES
-('标签查询', 'kb:tag:query', 3, 1, @tag_id, '', '', '', 0, 1, 1, 0, NOW(), NOW(), b'0'),
-('标签创建', 'kb:tag:create', 3, 2, @tag_id, '', '', '', 0, 1, 1, 0, NOW(), NOW(), b'0'),
-('标签更新', 'kb:tag:update', 3, 3, @tag_id, '', '', '', 0, 1, 1, 0, NOW(), NOW(), b'0'),
-('标签删除', 'kb:tag:delete', 3, 4, @tag_id, '', '', '', 0, 1, 1, 0, NOW(), NOW(), b'0');
+-- /ai-agent 下按钮权限（parent_id 按子菜单 path 解析）
+INSERT INTO `system_menu` (`name`,`permission`,`type`,`sort`,`parent_id`,`path`,`icon`,`component`,`status`,`visible`,`keep_alive`,`always_show`,`create_time`,`update_time`,`deleted`)
+SELECT `v`.`name`,`v`.`permission`,3,`v`.`sort`,`m`.`id`,'','','',0,1,1,0,NOW(),NOW(),b'0'
+FROM (
+    SELECT 'agent' `child_path`,'智能体查询' `name`,'ai-agent:agent:query' `permission`,1 `sort`
+    UNION ALL SELECT 'agent','智能体创建','ai-agent:agent:create',2
+    UNION ALL SELECT 'agent','智能体更新','ai-agent:agent:update',3
+    UNION ALL SELECT 'agent','智能体删除','ai-agent:agent:delete',4
+    UNION ALL SELECT 'skill-store','技能查询','ai-agent:skill-meta:query',1
+    UNION ALL SELECT 'skill-store','技能创建','ai-agent:skill-meta:create',2
+    UNION ALL SELECT 'skill-store','技能更新','ai-agent:skill-meta:update',3
+    UNION ALL SELECT 'skill-store','技能删除','ai-agent:skill-meta:delete',4
+    UNION ALL SELECT 'mcp-store','MCP查询','ai-agent:mcp-meta:query',1
+    UNION ALL SELECT 'mcp-store','MCP创建','ai-agent:mcp-meta:create',2
+    UNION ALL SELECT 'mcp-store','MCP更新','ai-agent:mcp-meta:update',3
+    UNION ALL SELECT 'mcp-store','MCP删除','ai-agent:mcp-meta:delete',4
+    UNION ALL SELECT 'chat-session','会话查询','ai-agent:chat-session:query',1
+    UNION ALL SELECT 'chat-session','会话创建','ai-agent:chat-session:create',2
+    UNION ALL SELECT 'chat-session','会话更新','ai-agent:chat-session:update',3
+    UNION ALL SELECT 'chat-session','会话删除','ai-agent:chat-session:delete',4
+    UNION ALL SELECT 'model-provider','模型查询','ai-agent:model:query',1
+    UNION ALL SELECT 'model-provider','模型创建','ai-agent:model:create',2
+    UNION ALL SELECT 'model-provider','模型更新','ai-agent:model:update',3
+    UNION ALL SELECT 'model-provider','模型删除','ai-agent:model:delete',4
+    UNION ALL SELECT 'token-usage','Token用量查询','ai-agent:token-usage:query',1
+) `v`
+JOIN `system_menu` `m` ON `m`.`path`=`v`.`child_path` AND `m`.`parent_id`=@m_ai_agent AND `m`.`deleted`=b'0'
+WHERE NOT EXISTS (
+    SELECT 1 FROM `system_menu` `sm` WHERE `sm`.`permission`=`v`.`permission` AND `sm`.`deleted`=b'0'
+);
 
 -- =====================================================
--- 四、C 端导航：从管理后台隐藏（visible=0），C 端仍可用
+-- 四、管理端「知识库」子树（/kb）：顶级目录 + 12 子菜单（含标签管理）+ 按钮权限
+--    实现方式与「三、智能体子树」一致，全部 NOT EXISTS 守卫幂等。
+-- =====================================================
+INSERT INTO `system_menu` (`name`,`permission`,`type`,`sort`,`parent_id`,`path`,`icon`,`component`,`component_name`,`status`,`visible`,`keep_alive`,`always_show`,`create_time`,`update_time`,`deleted`)
+SELECT '知识库管理','',1,25,0,'/kb','carbon:data-set-encryption','','',0,1,1,1,NOW(),NOW(),b'0'
+FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM `system_menu` WHERE `path`='/kb' AND `parent_id`=0 AND `deleted`=b'0');
+SELECT id INTO @m_kb FROM `system_menu` WHERE `path`='/kb' AND `parent_id`=0 AND `deleted`=b'0' LIMIT 1;
+
+-- /kb 下子菜单（parent_id 由 @m_kb 解析，含原先单独维护且非幂等的「标签管理」）
+INSERT INTO `system_menu` (`name`,`permission`,`type`,`sort`,`parent_id`,`path`,`icon`,`component`,`component_name`,`status`,`visible`,`keep_alive`,`always_show`,`create_time`,`update_time`,`deleted`)
+SELECT `v`.`name`,'',2,`v`.`sort`,@m_kb,`v`.`path`,`v`.`icon`,`v`.`component`,`v`.`component_name`,0,1,1,0,NOW(),NOW(),b'0'
+FROM (
+    SELECT '知识库总览' `name`,-1 `sort`,'overview' `path`,'' `icon`,'kb/overview/index' `component`,'KbOverview' `component_name`
+    UNION ALL SELECT '层级配置',0,'level-config','','kb/levelconfig/index','LevelConfig'
+    UNION ALL SELECT '分类管理',1,'category','','kb/category/index','Category'
+    UNION ALL SELECT '共享部门管理',2,'share-dept','','kb/sharedept/index','ShareDept'
+    UNION ALL SELECT '知识库管理',3,'library','','kb/library/index','Library'
+    UNION ALL SELECT '文档管理',5,'document','','kb/document/index','Document'
+    UNION ALL SELECT '切片方法',6,'chunk-method','','kb/chunkmethod/index','KbChunkMethod'
+    UNION ALL SELECT '部门成员管理',6,'user-dept','','kb/userdept/index','UserDept'
+    UNION ALL SELECT 'RAG配置',7,'rag-config','','kb/ragconfig/index','KbRagConfig'
+    UNION ALL SELECT '项目成员管理',7,'project-member','','kb/projectmember/index','ProjectMember'
+    UNION ALL SELECT '模型配置',8,'model-config','','kb/modelconfig/index','KbModelConfig'
+    UNION ALL SELECT '新闻管理',8,'news','','kb/news/index','KbNews'
+    UNION ALL SELECT '标签管理',10,'tag','ep:price-tag','kb/tag/index','KbTag'
+) `v`
+WHERE NOT EXISTS (
+    SELECT 1 FROM `system_menu` `sm` WHERE `sm`.`name`=`v`.`name` AND `sm`.`parent_id`=@m_kb AND `sm`.`deleted`=b'0'
+);
+
+-- /kb 下按钮权限（parent_id 按子菜单 path 解析）
+INSERT INTO `system_menu` (`name`,`permission`,`type`,`sort`,`parent_id`,`path`,`icon`,`component`,`status`,`visible`,`keep_alive`,`always_show`,`create_time`,`update_time`,`deleted`)
+SELECT `v`.`name`,`v`.`permission`,3,`v`.`sort`,`m`.`id`,'','','',0,1,1,0,NOW(),NOW(),b'0'
+FROM (
+    SELECT 'level-config' `child_path`,'查询' `name`,'kb:level-config:query' `permission`,1 `sort`
+    UNION ALL SELECT 'level-config','创建','kb:level-config:create',2
+    UNION ALL SELECT 'level-config','更新','kb:level-config:update',3
+    UNION ALL SELECT 'level-config','删除','kb:level-config:delete',4
+    UNION ALL SELECT 'level-config','导出','kb:level-config:export',5
+    UNION ALL SELECT 'category','查询','kb:category:query',1
+    UNION ALL SELECT 'category','创建','kb:category:create',2
+    UNION ALL SELECT 'category','更新','kb:category:update',3
+    UNION ALL SELECT 'category','删除','kb:category:delete',4
+    UNION ALL SELECT 'category','导出','kb:category:export',5
+    UNION ALL SELECT 'share-dept','查询','kb:share-dept:query',1
+    UNION ALL SELECT 'share-dept','创建','kb:share-dept:create',2
+    UNION ALL SELECT 'share-dept','更新','kb:share-dept:update',3
+    UNION ALL SELECT 'share-dept','删除','kb:share-dept:delete',4
+    UNION ALL SELECT 'share-dept','导出','kb:share-dept:export',5
+    UNION ALL SELECT 'library','查询','kb:library:query',1
+    UNION ALL SELECT 'library','创建','kb:library:create',2
+    UNION ALL SELECT 'library','更新','kb:library:update',3
+    UNION ALL SELECT 'library','删除','kb:library:delete',4
+    UNION ALL SELECT 'library','导出','kb:library:export',5
+    UNION ALL SELECT 'document','查询','kb:document:query',1
+    UNION ALL SELECT 'document','创建','kb:document:create',2
+    UNION ALL SELECT 'document','更新','kb:document:update',3
+    UNION ALL SELECT 'document','删除','kb:document:delete',4
+    UNION ALL SELECT 'document','导出','kb:document:export',5
+    UNION ALL SELECT 'chunk-method','切片方法查询','kb:chunk-method:query',1
+    UNION ALL SELECT 'chunk-method','切片方法创建','kb:chunk-method:create',2
+    UNION ALL SELECT 'chunk-method','切片方法更新','kb:chunk-method:update',3
+    UNION ALL SELECT 'chunk-method','切片方法删除','kb:chunk-method:delete',4
+    UNION ALL SELECT 'chunk-method','切片方法测试','kb:chunk-method:test',5
+    UNION ALL SELECT 'user-dept','查询','kb:user-dept:query',1
+    UNION ALL SELECT 'user-dept','更新','kb:user-dept:update',2
+    UNION ALL SELECT 'user-dept','删除','kb:user-dept:delete',3
+    UNION ALL SELECT 'rag-config','RAG配置查询','kb:rag-config:query',1
+    UNION ALL SELECT 'rag-config','RAG配置创建','kb:rag-config:create',2
+    UNION ALL SELECT 'rag-config','RAG配置更新','kb:rag-config:update',3
+    UNION ALL SELECT 'rag-config','RAG配置删除','kb:rag-config:delete',4
+    UNION ALL SELECT 'project-member','查询','kb:project-member:query',1
+    UNION ALL SELECT 'project-member','更新','kb:project-member:update',2
+    UNION ALL SELECT 'project-member','删除','kb:project-member:delete',3
+    UNION ALL SELECT 'model-config','模型配置查询','kb:model-config:query',1
+    UNION ALL SELECT 'model-config','模型配置创建','kb:model-config:create',2
+    UNION ALL SELECT 'model-config','模型配置更新','kb:model-config:update',3
+    UNION ALL SELECT 'model-config','模型配置删除','kb:model-config:delete',4
+    UNION ALL SELECT 'model-config','模型配置导出','kb:model-config:export',5
+    UNION ALL SELECT 'model-config','模型配置测试','kb:model-config:test',6
+    UNION ALL SELECT 'model-config','模型配置复制','kb:model-config:copy',7
+    UNION ALL SELECT 'model-config','模型配置批量操作','kb:model-config:batch',8
+    UNION ALL SELECT 'news','新闻数据源查询','kb:news-source:query',1
+    UNION ALL SELECT 'news','新闻数据源创建','kb:news-source:create',2
+    UNION ALL SELECT 'news','新闻数据源更新','kb:news-source:update',3
+    UNION ALL SELECT 'news','新闻数据源删除','kb:news-source:delete',4
+    UNION ALL SELECT 'news','新闻记录查询','kb:news-record:query',5
+    UNION ALL SELECT 'news','新闻记录批量操作','kb:news-record:batch',6
+    UNION ALL SELECT 'news','新闻同步日志查询','kb:news-sync-log:query',7
+    UNION ALL SELECT 'tag','标签查询','kb:tag:query',1
+    UNION ALL SELECT 'tag','标签创建','kb:tag:create',2
+    UNION ALL SELECT 'tag','标签更新','kb:tag:update',3
+    UNION ALL SELECT 'tag','标签删除','kb:tag:delete',4
+) `v`
+JOIN `system_menu` `m` ON `m`.`path`=`v`.`child_path` AND `m`.`parent_id`=@m_kb AND `m`.`deleted`=b'0'
+WHERE NOT EXISTS (
+    SELECT 1 FROM `system_menu` `sm` WHERE `sm`.`permission`=`v`.`permission` AND `sm`.`deleted`=b'0'
+);
+
+-- =====================================================
+-- 五、C 端导航：从管理后台隐藏（visible=0），C 端仍可用
 --
 -- C 端导航（首页/个人中心/知识库/笔记/智能体广场/一张图）只服务 C 端用户前端，
 -- 其 component 为空，若被管理后台（yudao-admin）当作动态路由加载会打不开。
