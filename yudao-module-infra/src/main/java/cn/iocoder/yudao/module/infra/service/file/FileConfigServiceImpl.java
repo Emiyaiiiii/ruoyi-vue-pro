@@ -17,6 +17,7 @@ import cn.iocoder.yudao.module.infra.framework.file.core.client.FileClientFactor
 import cn.iocoder.yudao.module.infra.framework.file.core.enums.FileStorageEnum;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
+import jakarta.annotation.PostConstruct;
 import jakarta.annotation.Resource;
 import jakarta.validation.Validator;
 import lombok.Getter;
@@ -203,6 +204,20 @@ public class FileConfigServiceImpl implements FileConfigService {
     @Override
     public FileClient getMasterFileClient() {
         return clientCache.getUnchecked(CACHE_MASTER_ID);
+    }
+
+    /**
+     * 启动时预热 master 文件客户端，触发创建底层存储桶（如 MinIO 的 ckb-documents），
+     * 保证新环境一键初始化时无需手动建桶。
+     */
+    @PostConstruct
+    public void init() {
+        try {
+            FileClient master = getMasterFileClient();
+            log.info("[init][启动预热 master 文件客户端成功：{}]", master);
+        } catch (Exception e) {
+            log.warn("[init][master 文件客户端预热失败（不影响启动）：{}]", e.getMessage());
+        }
     }
 
 }

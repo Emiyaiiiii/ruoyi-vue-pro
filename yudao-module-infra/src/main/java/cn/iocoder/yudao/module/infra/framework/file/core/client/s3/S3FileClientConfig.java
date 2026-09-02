@@ -41,6 +41,10 @@ public class S3FileClientConfig implements FileClientConfig {
      * 4. 七牛云：https://developer.qiniu.com/kodo/8556/set-the-custom-source-domain-name
      * 5. 华为云：https://support.huaweicloud.com/usermanual-obs/obs_03_0032.html
      * 6. 火山云：https://www.volcengine.com/docs/6349/128983
+     * <br><br>
+     * 对 MinIO 私有桶：domain 为【对外 S3 根地址，不含 bucket、不带 /minio 反代前缀】，如 http://10.4.158.95:8080。
+     * 预签名 URL 的 host 由它决定（签名用 = 对外访问用），配合 nginx 对 /{bucket}/ 的透明透传，浏览器即可直接下载；
+     * 若留空则由 endpoint 自动派生为内网地址，浏览器无法访问。
      */
     @URL(message = "domain 必须是 URL 格式")
     private String domain;

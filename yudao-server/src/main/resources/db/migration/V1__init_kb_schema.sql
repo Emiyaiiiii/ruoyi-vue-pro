@@ -322,7 +322,7 @@ CREATE TABLE IF NOT EXISTS `kb_chunk_method` (
   `deleted` bit(1) NOT NULL DEFAULT b'0' COMMENT '是否删除',
   `tenant_id` bigint NOT NULL DEFAULT '0' COMMENT '租户编号',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_code` (`code`),
+  UNIQUE KEY `uk_code` (`tenant_id`,`code`),
   KEY `idx_method_type` (`method_type`),
   KEY `idx_is_active` (`is_active`),
   KEY `idx_is_default_method` (`is_default_method`)
@@ -356,7 +356,7 @@ CREATE TABLE IF NOT EXISTS `kb_model_config` (
   `deleted` bit(1) NOT NULL DEFAULT b'0' COMMENT '是否删除',
   `tenant_id` bigint NOT NULL DEFAULT '0' COMMENT '租户编号',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_uid` (`uid`),
+  UNIQUE KEY `uk_uid` (`tenant_id`,`uid`),
   KEY `idx_is_active` (`is_active`),
   KEY `idx_is_pinned` (`is_pinned`),
   KEY `idx_sort_order` (`sort_order`),
@@ -381,7 +381,7 @@ CREATE TABLE IF NOT EXISTS `kb_rag_config` (
   `deleted` bit(1) NOT NULL DEFAULT b'0' COMMENT '是否删除',
   `tenant_id` bigint NOT NULL DEFAULT '0' COMMENT '租户编号',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_module_key` (`module`,`key`),
+  UNIQUE KEY `uk_module_key` (`tenant_id`,`module`,`key`),
   KEY `idx_module` (`module`),
   KEY `idx_is_active` (`is_active`),
   KEY `idx_module_active` (`module`,`is_active`)

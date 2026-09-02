@@ -362,7 +362,7 @@ yudao:
   oidc: # OIDC 身份提供方（IdP）能力，供外部系统（如 dify-sso、dify）通过芋道账号单点登录
     enabled: true # 是否开启，开启后：暴露 discovery/jwks 端点，并对带 scope=openid 的客户端签发 id_token
     issuer: http://127.0.0.1:48080 # 对外访问域名（含端口），作为 id_token 的 iss 以及各端点的根地址，生产改为主域名
-    frontend-url: http://localhost:5999 # 前端 SSO 授权入口（authorization_endpoint 指向这里 + /sso，供浏览器跳转登录/授权）；留空则回退到后端 authorize
+    frontend-url: ${OIDC_FRONTEND_URL:http://localhost:5999} # 前端 SSO 授权入口（authorization_endpoint 指向这里 + /sso，供浏览器跳转登录/授权）；留空则回退到后端 authorize
     id-token-ttl: 7200 # id_token 有效期（秒），默认 2 小时
     jwks:
       key-id: yudao-oidc-rsa-1 # 密钥 id，id_token 头部与 JWKS 中标识

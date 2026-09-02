@@ -6,6 +6,7 @@ import cn.hutool.core.util.StrUtil;
 import cn.hutool.http.HttpUtil;
 import cn.iocoder.yudao.framework.common.util.http.HttpUtils;
 import cn.iocoder.yudao.module.infra.framework.file.core.client.AbstractFileClient;
+import lombok.extern.slf4j.Slf4j;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
@@ -16,6 +17,8 @@ import software.amazon.awssdk.services.s3.S3Configuration;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.ListBucketsResponse;
+import software.amazon.awssdk.services.s3.model.CreateBucketRequest;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
@@ -29,6 +32,7 @@ import java.time.Duration;
  *
  * @author 芋道源码
  */
+@Slf4j
 public class S3FileClient extends AbstractFileClient<S3FileClientConfig> {
 
     private static final Duration EXPIRATION_DEFAULT = Duration.ofHours(24);
@@ -70,6 +74,26 @@ public class S3FileClient extends AbstractFileClient<S3FileClientConfig> {
                 .endpointOverride(presignerEndpoint)
                 .serviceConfiguration(serviceConfiguration)
                 .build();
+        ensureBucket();
+    }
+
+    /**
+     * 自愈存储桶：配置的 bucket 不存在时自动创建，保证新环境一键初始化（如 MinIO ckb-documents）。
+     * 幂等：桶已存在则跳过；创建失败不影响启动（后续上传会显式报错暴露问题）。
+     */
+    private void ensureBucket() {
+        try {
+            ListBucketsResponse buckets = client.listBuckets();
+            boolean exists = buckets.buckets().stream()
+                    .anyMatch(b -> b.name().equals(config.getBucket()));
+            if (!exists) {
+                client.createBucket(CreateBucketRequest.builder()
+                        .bucket(config.getBucket()).build());
+                log.info("[init][存储桶不存在，已自动创建 bucket=({})]", config.getBucket());
+            }
+        } catch (Exception e) {
+            log.warn("[init][自动创建存储桶 bucket=({}) 失败，可稍后手动处理]", config.getBucket(), e);
+        }
     }
 
     @Override

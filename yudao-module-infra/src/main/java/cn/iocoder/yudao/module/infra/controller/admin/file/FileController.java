@@ -66,6 +66,18 @@ public class FileController {
         return success(fileService.presignPutUrl(name, directory));
     }
 
+    @GetMapping("/presigned-get-url")
+    @Operation(summary = "获取文件预签名地址（下载/预览）", description = "根据文件共享 URL 或对象路径，生成短时效的 GET 签名地址，用于私有 Bucket 的下载与在线预览")
+    @Parameters({
+            @Parameter(name = "url", description = "文件共享 URL 或对象路径", required = true),
+            @Parameter(name = "expirationSeconds", description = "过期时间（秒），缺省 24 小时")
+    })
+    public CommonResult<String> getFilePresignedGetUrl(
+            @RequestParam("url") String url,
+            @RequestParam(value = "expirationSeconds", required = false) Integer expirationSeconds) {
+        return success(fileService.presignGetUrl(url, expirationSeconds));
+    }
+
     @PostMapping("/create")
     @Operation(summary = "创建文件", description = "模式二：前端上传文件：配合 presigned-url 接口，记录上传了上传的文件")
     public CommonResult<Long> createFile(@Valid @RequestBody FileCreateReqVO createReqVO) {
