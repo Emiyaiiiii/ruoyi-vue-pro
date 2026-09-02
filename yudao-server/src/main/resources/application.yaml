@@ -404,7 +404,7 @@ yudao:
       default:
         # 用户首次进入聊天/智能体页面时，若无任何智能体则自动创建一个默认智能体。
         # 名称支持 ${nickname} 占位，会在创建时替换为用户昵称；取不到则保留纯文本。
-        name: "我的智能助手"
+        name: "${nickname}的助手"
         description: "企业知识库问答助手：可以向我提问公司制度、产品文档、项目资料等内容。"
         system-prompt: ""
         enable-kb-tool: true
