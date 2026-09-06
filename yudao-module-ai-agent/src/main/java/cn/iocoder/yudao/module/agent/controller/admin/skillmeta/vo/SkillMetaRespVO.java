@@ -47,6 +47,9 @@ public class SkillMetaRespVO {
     @Schema(description = "状态: 0=停用, 1=启用", example = "1")
     private Integer status;
 
+    @Schema(description = "是否默认挂载到新建智能体: 0=否, 1=是", example = "0")
+    private Integer isInitial;
+
     @Schema(description = "创建时间")
     private LocalDateTime createTime;
 

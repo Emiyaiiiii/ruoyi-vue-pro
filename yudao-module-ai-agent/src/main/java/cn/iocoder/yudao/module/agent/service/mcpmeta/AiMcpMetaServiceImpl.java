@@ -101,6 +101,11 @@ public class AiMcpMetaServiceImpl implements AiMcpMetaService {
         return mcpMetaMapper.selectVisibleList(userId);
     }
 
+    @Override
+    public List<AiMcpMetaDO> getInitialMcpMetaList() {
+        return mcpMetaMapper.selectInitialEnabledList();
+    }
+
     // ==================== 私有辅助方法 ====================
 
     /**

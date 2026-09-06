@@ -5,6 +5,7 @@ import cn.iocoder.yudao.module.infra.api.file.FileApi;
 import cn.iocoder.yudao.module.infra.api.file.FileUploadRespVO;
 import cn.iocoder.yudao.module.kb.controller.admin.vectortask.vo.VectorTaskSubmitReqVO;
 import cn.iocoder.yudao.module.kb.service.vectortask.VectorTaskService;
+import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.StrUtil;
 import lombok.extern.slf4j.Slf4j;
@@ -14,6 +15,7 @@ import jakarta.annotation.Resource;
 import org.springframework.validation.annotation.Validated;
 
 import java.util.*;
+import java.util.stream.Collectors;
 import cn.iocoder.yudao.module.kb.controller.admin.document.vo.*;
 import cn.iocoder.yudao.module.kb.dal.dataobject.document.DocumentDO;
 import cn.iocoder.yudao.module.kb.dal.dataobject.library.LibraryDO;
@@ -24,6 +26,9 @@ import cn.iocoder.yudao.framework.mybatis.core.query.LambdaQueryWrapperX;
 
 import cn.iocoder.yudao.module.kb.dal.mysql.document.DocumentMapper;
 import cn.iocoder.yudao.module.kb.dal.mysql.vectortask.VectorTaskMapper;
+import cn.iocoder.yudao.module.kb.service.library.rule.VisibilityContext;
+import cn.iocoder.yudao.module.kb.service.library.rule.VisibilityRuleEngine;
+import cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils;
 
 import static cn.iocoder.yudao.framework.common.exception.util.ServiceExceptionUtil.exception;
 import static cn.iocoder.yudao.module.kb.enums.ErrorCodeConstants.*;
@@ -52,6 +57,9 @@ public class DocumentServiceImpl implements DocumentService {
 
     @Resource
     private VectorTaskMapper vectorTaskMapper;
+
+    @Resource
+    private VisibilityRuleEngine ruleEngine;
 
     @Override
     public Long createDocument(DocumentSaveReqVO createReqVO) {
@@ -169,6 +177,23 @@ public class DocumentServiceImpl implements DocumentService {
 
     @Override
     public PageResult<DocumentDO> getDocumentPage(DocumentPageReqVO pageReqVO) {
+        // 未指定知识库时，按当前用户的"可见知识库"收敛文档，避免列出其无权访问的知识库文档
+        if (pageReqVO.getKbId() == null) {
+            Long userId = SecurityFrameworkUtils.getLoginUserId();
+            VisibilityContext ctx = ruleEngine.buildContext(userId);
+            if (!ctx.isSuperAdmin()) {
+                List<Long> visibleKbIds = libraryMapper.selectSimpleList(null).stream()
+                        .filter(lib -> ruleEngine.canSee(ctx, lib))
+                        .map(LibraryDO::getId)
+                        .collect(Collectors.toList());
+                if (CollUtil.isEmpty(visibleKbIds)) {
+                    // 无任何可见知识库 → 直接返回空，避免 inIfPresent 空集合退化为全量
+                    return new PageResult<>(Collections.emptyList(), 0L);
+                }
+                pageReqVO.setKbIds(visibleKbIds);
+            }
+            // 超管短路：可见集合为其可见的全部知识库（此处不做裁剪，等同全量）
+        }
         return documentMapper.selectPage(pageReqVO);
     }
 

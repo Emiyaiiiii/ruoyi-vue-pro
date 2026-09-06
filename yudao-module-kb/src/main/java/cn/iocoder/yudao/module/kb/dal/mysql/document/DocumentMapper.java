@@ -29,6 +29,8 @@ public interface DocumentMapper extends BaseMapperX<DocumentDO> {
     default PageResult<DocumentDO> selectPage(DocumentPageReqVO reqVO) {
         return selectPage(reqVO, new LambdaQueryWrapperX<DocumentDO>()
                 .eqIfPresent(DocumentDO::getKbId, reqVO.getKbId())
+                // 服务端注入的可见知识库过滤（未选知识库时按权限收敛，配合 inIfPresent 只在非空时生效）
+                .inIfPresent(DocumentDO::getKbId, reqVO.getKbIds())
                 .eqIfPresent(DocumentDO::getFolderId, reqVO.getFolderId())
                 .likeIfPresent(DocumentDO::getFileName, reqVO.getFileName())
                 .eqIfPresent(DocumentDO::getFileUrl, reqVO.getFileUrl())

@@ -3,7 +3,9 @@ spring:
     name: yudao-server
 
   profiles:
-    active: local
+    # 默认 local 是历史口径；本机 IDE 直接启动（测试环境）走 dev，
+    # 与生产容器(compose 显式 SPRING_PROFILES_ACTIVE=local)相互独立，互不影响。
+    active: dev
 
   main:
     allow-circular-references: true # 允许循环依赖，因为项目是三层架构，无法避免这个情况。

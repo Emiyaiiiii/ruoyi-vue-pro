@@ -62,4 +62,7 @@ public class McpMetaSaveReqVO {
     @Schema(description = "排序", example = "0")
     private Integer sortOrder;
 
+    @Schema(description = "是否默认挂载到新建智能体: 0=否, 1=是", example = "0")
+    private Integer isInitial;
+
 }

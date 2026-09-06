@@ -16,6 +16,11 @@ public class DocumentPageReqVO extends PageParam {
     @Schema(description = "所属知识库ID", example = "13175")
     private Long kbId;
 
+    /**
+     * 服务端按可见知识库过滤的 ID 集合（前端不上传，由后端根据当前用户可见知识库注入）
+     */
+    private List<Long> kbIds;
+
     @Schema(description = "所属文件夹ID: 0=根目录", example = "0")
     private Long folderId;
 

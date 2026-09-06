@@ -49,4 +49,9 @@ public interface AiMcpMetaService {
      */
     List<AiMcpMetaDO> getVisibleMcpMetaList();
 
+    /**
+     * 查询启用的、标记"默认挂载"的系统级 MCP 列表（新建智能体自动挂载）
+     */
+    List<AiMcpMetaDO> getInitialMcpMetaList();
+
 }

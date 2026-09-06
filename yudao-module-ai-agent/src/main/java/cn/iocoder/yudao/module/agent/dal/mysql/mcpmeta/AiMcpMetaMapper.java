@@ -81,6 +81,18 @@ public interface AiMcpMetaMapper extends BaseMapperX<AiMcpMetaDO> {
     }
 
     /**
+     * 查询启用的系统级且标记"默认挂载"的 MCP 列表（新建智能体自动挂载）。
+     * 限定 type=0（系统级），个人 MCP 不随默认智能体自动挂载，避免跨用户泄露。
+     */
+    default List<AiMcpMetaDO> selectInitialEnabledList() {
+        return selectList(new LambdaQueryWrapperX<AiMcpMetaDO>()
+                .eq(AiMcpMetaDO::getType, 0)
+                .eq(AiMcpMetaDO::getStatus, 1)
+                .eq(AiMcpMetaDO::getIsInitial, 1)
+                .orderByAsc(AiMcpMetaDO::getSortOrder));
+    }
+
+    /**
      * 查询启用的系统级 MCP 列表（商店展示）
      */
     default List<AiMcpMetaDO> selectEnabledList() {

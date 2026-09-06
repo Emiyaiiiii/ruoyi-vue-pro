@@ -75,6 +75,18 @@ public interface AiSkillMetaMapper extends BaseMapperX<AiSkillMetaDO> {
     }
 
     /**
+     * 查询启用的且标记"默认挂载"的公开技能列表（新建智能体自动安装）。
+     * 限定 visibility=1（公开）：个人技能不随默认智能体自动安装，避免跨用户泄露。
+     */
+    default List<AiSkillMetaDO> selectInitialEnabledList() {
+        return selectList(new LambdaQueryWrapperX<AiSkillMetaDO>()
+                .eq(AiSkillMetaDO::getStatus, 1)
+                .eq(AiSkillMetaDO::getIsInitial, 1)
+                .eq(AiSkillMetaDO::getVisibility, 1)
+                .orderByDesc(AiSkillMetaDO::getCreateTime));
+    }
+
+    /**
      * 查询启用的技能列表
      */
     default List<AiSkillMetaDO> selectEnabledList() {

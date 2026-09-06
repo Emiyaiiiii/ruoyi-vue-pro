@@ -45,6 +45,11 @@ public interface AiSkillMetaService {
     List<AiSkillMetaDO> getVisibleSkillMetaList(Long userId);
 
     /**
+     * 查询启用的、标记"默认挂载"的公开技能列表（新建智能体自动安装）
+     */
+    List<AiSkillMetaDO> getInitialSkillMetaList();
+
+    /**
      * 上传 zip 到 QwenPaw 技能池并创建 Java 侧元数据记录
      *
      * @param data       zip 文件字节

@@ -105,4 +105,9 @@ public class AiMcpMetaDO extends BaseDO {
      */
     private Integer sortOrder;
 
+    /**
+     * 是否默认挂载到新建智能体: 0=否, 1=是
+     */
+    private Integer isInitial;
+
 }

@@ -107,6 +107,11 @@ public class AiSkillMetaServiceImpl implements AiSkillMetaService {
     }
 
     @Override
+    public List<AiSkillMetaDO> getInitialSkillMetaList() {
+        return skillMetaMapper.selectInitialEnabledList();
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public Long uploadSkillToPool(byte[] data, String fileName, String targetName,
                                   String displayName, String description, String icon,

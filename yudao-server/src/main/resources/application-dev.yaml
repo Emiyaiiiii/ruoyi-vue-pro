@@ -1,15 +1,24 @@
+# ============================================================
+# 本机开发/测试环境（IDEA 直接启动，不在容器）。
+# 由 application.yaml 默认 spring.profiles.active=dev 触发。
+# 独立于生产部署：生产容器由 docker-compose 显式设 SPRING_PROFILES_ACTIVE=local，
+# 使用 application-local.yaml，与本文件互不影响。
+# 与 local 的唯一差异：kb-retrieval.base-url 用 localhost（本机 vector），
+# 而非 compose 服务名 vector；其余基础设施地址/凭据与本机实测一致。
+# ============================================================
 server:
   port: 48080
 
 --- #################### 数据库相关配置 ####################
-
 spring:
   autoconfigure:
     # noinspection SpringBootApplicationYaml
     exclude:
       - com.alibaba.druid.spring.boot3.autoconfigure.DruidDataSourceAutoConfigure # 排除 Druid 的自动配置，使用 dynamic-datasource-spring-boot-starter 配置多数据源
+      - org.springframework.boot.autoconfigure.quartz.QuartzAutoConfiguration # 默认 local 环境，不开启 Quartz 的自动配置
       - org.springframework.ai.vectorstore.qdrant.autoconfigure.QdrantVectorStoreAutoConfiguration # 禁用 AI 模块的 Qdrant，手动创建
       - org.springframework.ai.vectorstore.milvus.autoconfigure.MilvusVectorStoreAutoConfiguration # 禁用 AI 模块的 Milvus，手动创建
+  # 数据源配置项
   datasource:
     druid: # Druid 【监控】相关的全局配置
       web-stat-filter:
@@ -31,8 +40,8 @@ spring:
             multi-statement-allow: true
     dynamic: # 多数据源配置
       druid: # Druid 【连接池】相关的全局配置
-        initial-size: 5 # 初始连接数
-        min-idle: 10 # 最小连接池数量
+        initial-size: 1 # 初始连接数
+        min-idle: 1 # 最小连接池数量
         max-active: 20 # 最大连接池数量
         max-wait: 60000 # 配置获取连接等待超时的时间，单位：毫秒（1 分钟）
         time-between-eviction-runs-millis: 60000 # 配置间隔多久才进行一次检测，检测需要关闭的空闲连接，单位：毫秒（1 分钟）
@@ -48,28 +57,55 @@ spring:
       datasource:
         master:
           url: jdbc:mysql://127.0.0.1:3306/ruoyi-vue-pro?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&nullCatalogMeansCurrent=true&rewriteBatchedStatements=true # MySQL Connector/J 8.X 连接的示例
+          #          url: jdbc:mysql://127.0.0.1:3306/ruoyi-vue-pro?useSSL=true&allowPublicKeyRetrieval=true&useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true # MySQL Connector/J 5.X 连接的示例
+          #          url: jdbc:postgresql://127.0.0.1:5432/ruoyi-vue-pro # PostgreSQL 连接的示例
+          #          url: jdbc:oracle:thin:@127.0.0.1:1521:xe # Oracle 连接的示例
+          #          url: jdbc:sqlserver://127.0.0.1:1433;DatabaseName=ruoyi-vue-pro;SelectMethod=cursor;encrypt=false;rewriteBatchedStatements=true;useUnicode=true;characterEncoding=utf-8 # SQLServer 连接的示例
+          #          url: jdbc:dm://127.0.0.1:5236?schema=RUOYI_VUE_PRO # DM 连接的示例
+          #          url: jdbc:kingbase8://127.0.0.1:54321/test  # 人大金仓 KingbaseES 连接的示例
+          #          url: jdbc:postgresql://127.0.0.1:5432/postgres # OpenGauss 连接的示例
+          #          url: jdbc:postgresql://127.0.0.1:5866/ruoyi-vue-pro # 瀚高 HighGo 连接的示例
           username: root
-          password: 123456
-        slave: # 模拟从库，可根据自己需要修改 # 模拟从库，可根据自己需要修改
+          # 测试环境连接 deploy 的 docker-compose.dev.yml（ckb-mysql），root 密码见 .env MYSQL_ROOT_PASSWORD
+          password: 20261qaz@WSX
+          #          username: sa # SQL Server 连接的示例
+          #          password: Yudao@2024 # SQL Server 连接的示例
+          #          username: SYSDBA # DM 连接的示例
+          #          password: SYSDBA001 # DM 连接的示例
+          #          username: root # OpenGauss 连接的示例
+          #          password: Yudao@2024 # OpenGauss 连接的示例
+          #          username: root # 瀚高 HighGo 连接的示例
+          #          password: 123456 # 瀚高 HighGo 连接的示例
+        slave: # 模拟从库，可根据自己需要修改
           lazy: true # 开启懒加载，保证启动速度
-          url: jdbc:mysql://127.0.0.1:3306/ruoyi-vue-pro?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&nullCatalogMeansCurrent=true&rewriteBatchedStatements=true # MySQL Connector/J 8.X 连接的示例
+          url: jdbc:mysql://127.0.0.1:3306/ruoyi-vue-pro?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&rewriteBatchedStatements=true&nullCatalogMeansCurrent=true
           username: root
-          password: 123456
+          # 与 master 一致，测试环境连 ckb-mysql（.env MYSQL_ROOT_PASSWORD）
+          password: 20261qaz@WSX
+#        tdengine: # IoT 数据库（需要 IoT 物联网再开启噢！）
+#          lazy: true # 开启懒加载，保证启动速度
+#          url: jdbc:TAOS-WS://127.0.0.1:6041/ruoyi_vue_pro?varcharAsString=true&enableAutoReconnect=true # 参见：https://t.zsxq.com/qaX9c，开启 TDengine WebSocket 自动重连
+#          driver-class-name: com.taosdata.jdbc.ws.WebSocketDriver
+#          username: root
+#          password: taosdata
+#          druid:
+#            validation-query: SELECT SERVER_STATUS() # TDengine 数据源的有效性检查 SQL
 
   # Redis 配置。Redisson 默认的配置足够使用，一般不需要进行调优
   data:
     redis:
-      port: 6379
-      database: 2
       host: 127.0.0.1
-      password: DVADMIN3
+      database: 2
+      # 测试环境连 ckb-redis（.env REDIS_PASSWORD）
+      password: 20261qaz@WSX
+      port: 6379
 
 --- #################### 定时任务相关配置 ####################
 
 # Quartz 配置项，对应 QuartzProperties 配置类
 spring:
   quartz:
-    auto-startup: true # 测试环境，需要开启 Job
+    auto-startup: true # 本地开发环境，尽量不要开启 Job
     scheduler-name: schedulerName # Scheduler 名字。默认为 schedulerName
     job-store-type: jdbc # Job 存储器类型。默认为 memory 表示内存，可选 jdbc 使用数据库。
     wait-for-jobs-to-complete-on-shutdown: true # 应用关闭时，是否等待定时任务执行完成。默认为 false ，建议设置为 true
@@ -106,8 +142,8 @@ spring:
   rabbitmq:
     host: 127.0.0.1 # RabbitMQ 服务的地址
     port: 5672 # RabbitMQ 服务的端口
-    username: guest # RabbitMQ 服务的账号
-    password: guest # RabbitMQ 服务的密码
+    username: rabbit # RabbitMQ 服务的账号
+    password: 20261qaz@WSX # 测试环境连 ckb-rabbitmq（.env RABBITMQ_PASSWORD）
   # Kafka 配置项，对应 KafkaProperties 配置类
   kafka:
     bootstrap-servers: 127.0.0.1:9092 # 指定 Kafka Broker 地址，可以设置多个，以逗号分隔
@@ -142,26 +178,65 @@ spring:
         password: admin
       # Spring Boot Admin Server 服务端的相关配置
       context-path: /admin # 配置 Spring
+      # 允许嵌入 iframe 的域名（支持通配符），实际部署时，可以改为 "'self' [你的公网域名]"
+      frame-ancestors: "'self' localhost localhost:48080 127.0.0.1 127.0.0.1:48080"
 
 # 日志文件配置
 logging:
   file:
     name: ${user.home}/logs/${spring.application.name}.log # 日志文件名，全路径
+  level:
+    # 配置自己写的 MyBatis Mapper 打印日志
+    cn.iocoder.yudao.module.bpm.dal.mysql: debug
+    cn.iocoder.yudao.module.infra.dal.mysql: debug
+    cn.iocoder.yudao.module.infra.dal.mysql.logger.ApiErrorLogMapper: INFO # 配置 ApiErrorLogMapper 的日志级别为 info，避免和 GlobalExceptionHandler 重复打印
+    cn.iocoder.yudao.module.infra.dal.mysql.job.JobLogMapper: INFO # 配置 JobLogMapper 的日志级别为 info
+    cn.iocoder.yudao.module.infra.dal.mysql.file.FileConfigMapper: INFO # 配置 FileConfigMapper 的日志级别为 info
+    cn.iocoder.yudao.module.pay.dal.mysql: debug
+    cn.iocoder.yudao.module.pay.dal.mysql.notify.PayNotifyTaskMapper: INFO # 配置 PayNotifyTaskMapper 的日志级别为 info
+    cn.iocoder.yudao.module.system.dal.mysql: debug
+    cn.iocoder.yudao.module.system.dal.mysql.sms.SmsChannelMapper: INFO # 配置 SmsChannelMapper 的日志级别为 info
+    cn.iocoder.yudao.module.tool.dal.mysql: debug
+    cn.iocoder.yudao.module.member.dal.mysql: debug
+    cn.iocoder.yudao.module.trade.dal.mysql: debug
+    cn.iocoder.yudao.module.promotion.dal.mysql: debug
+    cn.iocoder.yudao.module.statistics.dal.mysql: debug
+    cn.iocoder.yudao.module.crm.dal.mysql: debug
+    cn.iocoder.yudao.module.erp.dal.mysql: debug
+    cn.iocoder.yudao.module.mes.dal.mysql: debug
+    cn.iocoder.yudao.module.wms.dal.mysql: debug
+    cn.iocoder.yudao.module.iot.dal.mysql: debug
+    cn.iocoder.yudao.module.iot.dal.tdengine: DEBUG
+    cn.iocoder.yudao.module.iot.service.rule: debug
+    cn.iocoder.yudao.module.ai.dal.mysql: debug
+    cn.iocoder.yudao.module.im.dal.mysql: debug
+    org.springframework.context.support.PostProcessorRegistrationDelegate: ERROR # TODO 芋艿：先禁用，Spring Boot 3.X 存在部分错误的 WARN 提示
 
---- #################### 微信公众号相关配置 ####################
-wx: # 参见 https://github.com/Wechat-Group/WxJava/blob/develop/spring-boot-starters/wx-java-mp-spring-boot-starter/README.md 文档
-  mp:
-    # 公众号配置(必填)
-    app-id: wx041349c6f39b268b
-    secret: 5abee519483bc9f8cb37ce280e814bd0
+debug: false
+
+--- #################### 微信公众号、小程序相关配置 ####################
+wx:
+  mp: # 公众号配置（必填），参见 https://github.com/Wechat-Group/WxJava/blob/develop/spring-boot-starters/wx-java-mp-spring-boot-starter/README.md 文档
+#    app-id: wx041349c6f39b268b # 测试号（牛希尧提供的）
+#    secret: 5abee519483bc9f8cb37ce280e814bd0
+#    app-id: wx5b23ba7a5589ecbb # 测试号（自己的）
+#    secret: 2a7b3b20c537e52e74afd395eb85f61f
+    app-id: wxf56b1542b9e85f8a # 测试号（Kongdy 提供的）
+    secret: 496379dcef1ba869e9234de8d598cfd3
     # 存储配置，解决 AccessToken 的跨节点的共享
     config-storage:
       type: RedisTemplate # 采用 RedisTemplate 操作 Redis，会自动从 Spring 中获取
       key-prefix: wx # Redis Key 的前缀
       http-client-type: HttpComponents # 采用 HttpComponents（HttpClient 5）请求微信公众号平台
   miniapp: # 小程序配置（必填），参见 https://github.com/Wechat-Group/WxJava/blob/develop/spring-boot-starters/wx-java-miniapp-spring-boot-starter/README.md 文档
-    appid: wx63c280fe3248a3e7
-    secret: 6f270509224a7ae1296bbf1c8cb97aed
+    #    appid: wx62056c0d5e8db250 # 测试号（牛希尧提供的）
+    #    secret: 333ae72f41552af1e998fe1f54e1584a
+#    appid: wx63c280fe3248a3e7 # wenhualian的接口测试号
+#    secret: 6f270509224a7ae1296bbf1c8cb97aed
+    appid: wxc4598c446f8a9cb3 # 测试号（Kongdy 提供的）
+    secret: 4a1a04e07f6a4a0751b39c3064a92c8b
+#    appid: wx66186af0759f47c9 # 测试号（puhui 提供的）
+#    secret: 3218bcbd112cbc614c7264ceb20144ac
     config-storage:
       type: RedisTemplate # 采用 RedisTemplate 操作 Redis，会自动从 Spring 中获取
       key-prefix: wa # Redis Key 的前缀
@@ -171,11 +246,21 @@ wx: # 参见 https://github.com/Wechat-Group/WxJava/blob/develop/spring-boot-sta
 
 # 芋道配置项，设置当前项目所有自定义的配置
 yudao:
+  captcha:
+    enable: false # 本地环境，暂时关闭图片验证码，方便登录等接口的测试；
+  security:
+    mock-enable: true
   pay:
-    order-notify-url: http://yunai.natapp1.cc/admin-api/pay/notify/order # 支付渠道的【支付】回调地址
-    refund-notify-url: http://yunai.natapp1.cc/admin-api/pay/notify/refund # 支付渠道的【退款】回调地址
-    transfer-notify-url: https://yunai.natapp1.cc/admin-api/pay/notify/transfer # 支付渠道的【转账】回调地址
-  demo: false # 开启演示模式
+    order-notify-url: https://yutou.mynatapp.cc/admin-api/pay/notify/order # 支付渠道的【支付】回调地址
+    refund-notify-url: https://yutou.mynatapp.cc/admin-api/pay/notify/refund # 支付渠道的【退款】回调地址
+    transfer-notify-url: https://yutou.mynatapp.cc/admin-api/pay/notify/transfer # 支付渠道的【转账】回调地址
+  access-log: # 访问日志的配置项
+    enable: false
+  demo: false # 关闭演示模式
+  wxa-code:
+    env-version: develop # 小程序版本: 正式版为 "release"；体验版为 "trial"；开发版为 "develop"
+  wxa-subscribe-message:
+    miniprogram-state: developer # 跳转小程序类型：开发版为 “developer”；体验版为 “trial”为；正式版为 “formal”
   tencent-lbs-key: TVDBZ-TDILD-4ON4B-PFDZA-RNLKH-VVF6E # QQ 地图的密钥 https://lbs.qq.com/service/staticV2/staticGuide/staticDoc
 
 justauth:
@@ -210,3 +295,41 @@ justauth:
     type: REDIS
     prefix: 'social_auth_state:' # 缓存前缀，目前只对 Redis 缓存生效，默认 JUSTAUTH::STATE::
     timeout: 24h # 超时时长，目前只对 Redis 缓存生效，默认 3 分钟
+
+--- #################### 知识库相关配置 ####################
+yudao:
+  kb:
+    vector:
+      python-service-url: http://localhost:8100
+      task-timeout-minutes: 30
+      # 通信超时配置
+      connect-timeout-ms: 5000
+      read-timeout-ms: 10000
+      # 重试配置
+      max-retries: 3
+      retry-delay-ms: 1000
+
+--- #################### QwenPaw 智能体服务配置 ####################
+yudao:
+  ai:
+    qwenpaw:
+      # QwenPaw 服务地址（Docker 默认端口 8088）
+      base-url: http://127.0.0.1:8088
+      # 是否启用鉴权（QwenPaw 开启鉴权后必须为 true，并在启动时用账号密码登录换取 token）
+      # 本机 IDEA 启动无 QWENPAW_AUTH_* 环境变量，回退到与 deploy/.env 一致的默认账号密码；
+      # 容器环境由 docker-compose 的 ARGS 命令行参数覆盖，不受这里影响
+      auth-enabled: true
+      # QwenPaw 服务账号（用于启动时自动登录换取永久 token）
+      auth-username: admin
+      auth-password: 20261qaz@WSX
+      # 默认模型
+      default-model: qwen3-coder-flash
+      # 超时配置
+      connect-timeout: 3000
+      read-timeout: 30000
+    # 知识库检索 MCP（智能体挂载检索工具时注册到 QwenPaw）
+    kb-retrieval:
+      # python-vector 服务地址（本机 IDE dev：localhost 直连；生产容器内由 application-local.yaml 用 compose 服务名 vector）
+      base-url: http://localhost:8100
+      # 注册到 QwenPaw 的 client_key
+      client-key: knowledge-base-retrieval

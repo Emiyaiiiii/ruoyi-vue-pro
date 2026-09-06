@@ -82,4 +82,9 @@ public class AiSkillMetaDO extends BaseDO {
      */
     private Integer status;
 
+    /**
+     * 是否默认挂载到新建智能体: 0=否, 1=是
+     */
+    private Integer isInitial;
+
 }

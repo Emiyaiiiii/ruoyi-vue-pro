@@ -8,9 +8,13 @@ import cn.iocoder.yudao.framework.tenant.core.context.TenantContextHolder;
 import cn.iocoder.yudao.module.agent.controller.admin.agent.vo.AgentPageReqVO;
 import cn.iocoder.yudao.module.agent.controller.admin.agent.vo.AgentSaveReqVO;
 import cn.iocoder.yudao.module.agent.dal.dataobject.agent.AiAgentDO;
+import cn.iocoder.yudao.module.agent.dal.dataobject.mcpmeta.AiMcpMetaDO;
+import cn.iocoder.yudao.module.agent.dal.dataobject.skillmeta.AiSkillMetaDO;
 import cn.iocoder.yudao.module.agent.dal.mysql.agent.AiAgentMapper;
 import cn.iocoder.yudao.module.agent.framework.config.AiAgentDefaultProperties;
 import cn.iocoder.yudao.module.agent.framework.config.QwenPawClient;
+import cn.iocoder.yudao.module.agent.service.mcpmeta.AiMcpMetaService;
+import cn.iocoder.yudao.module.agent.service.skillmeta.AiSkillMetaService;
 import cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils;
 import cn.iocoder.yudao.module.system.dal.dataobject.user.AdminUserDO;
 import cn.iocoder.yudao.module.system.dal.mysql.user.AdminUserMapper;
@@ -52,6 +56,10 @@ public class AiAgentServiceImpl implements AiAgentService {
     private AdminUserMapper adminUserMapper;
     @Resource
     private AdminUserApi adminUserApi;
+    @Resource
+    private AiMcpMetaService mcpMetaService;
+    @Resource
+    private AiSkillMetaService skillMetaService;
 
     /** 知识库检索 MCP 服务地址（python-vector，Docker 内部服务名） */
     @Value("${yudao.ai.kb-retrieval.base-url:http://python-vector:8100}")
@@ -62,6 +70,10 @@ public class AiAgentServiceImpl implements AiAgentService {
 
     /** 知识库检索结果呈现指南提示词文件名（写入 QwenPaw 智能体工作区根目录） */
     private static final String KB_GUIDE_FILE = "KB_GUIDE.md";
+    /** MCP 商店模板占位符：运行时替换为智能体所属租户 ID */
+    private static final String TENANT_ID_PLACEHOLDER = "{tenant_id}";
+    /** MCP 商店模板占位符：运行时替换为知识库检索服务 baseUrl（去尾斜杠） */
+    private static final String KB_RETRIEVAL_BASE_URL_PLACEHOLDER = "{kb_retrieval_base_url}";
     /** QwenPaw 默认系统提示词文件列表（KB_GUIDE 追加在其后） */
     private static final List<String> DEFAULT_SYSTEM_PROMPT_FILES =
             Arrays.asList("AGENTS.md", "SOUL.md", "PROFILE.md");
@@ -475,6 +487,7 @@ public class AiAgentServiceImpl implements AiAgentService {
      * <p>幂等：QwenPaw 以 client_key 维度 upsert，重复调用安全。
      */
     private void registerKbRetrievalMcp(AiAgentDO agent) {
+        // 知识库检索 MCP 配置统一走代码内联配置（kb.retrieval.base-url），不依赖 MCP 商店。
         // 尾斜杠必须保留：FastMCP streamable-http 端点挂载后要求带斜杠访问，
         // 否则 QwenPaw MCP 客户端 POST 到无斜杠 URL 会收到 307 重定向，握手失败导致驱动无法激活
         String url = kbRetrievalBaseUrl.replaceAll("/+$", "") + "/mcp/retrieval/";
@@ -484,6 +497,33 @@ public class AiAgentServiceImpl implements AiAgentService {
 
         // 写入检索结果呈现指南并加入系统提示词，指导模型保留检索内容里的 Markdown 图片/链接
         applyKbGuidePrompt(agent.getQwenpawAgentId(), true);
+    }
+
+    /**
+     * 从 MCP 商店条目挂载 MCP 到 QwenPaw 智能体。
+     *
+     * <p>url/headers 中的 {@code {tenant_id}}、{@code {kb_retrieval_base_url}} 占位符
+     * 在挂载时按智能体租户/运行配置动态替换（用于知识库检索等租户场景）。
+     *
+     * <p>幂等：QwenPaw 以 client_key 维度 upsert，重复调用安全。
+     */
+    private void mountMcpFromStore(AiAgentDO agent, AiMcpMetaDO meta) {
+        String url = resolveMcpTemplate(meta.getUrl(), agent);
+        String headers = resolveMcpTemplate(meta.getHeaders(), agent);
+        qwenPawClient.registerMcp(agent.getQwenpawAgentId(), meta.getCode(), meta.getName(),
+                meta.getTransport(), url, meta.getCommand(), meta.getArgs(), headers, meta.getToolsWhitelist());
+    }
+
+    /**
+     * 解析 MCP 存储模板中的占位符：{@link #KB_RETRIEVAL_BASE_URL_PLACEHOLDER} 与 {@link #TENANT_ID_PLACEHOLDER}。
+     */
+    private String resolveMcpTemplate(String raw, AiAgentDO agent) {
+        if (raw == null || raw.isEmpty()) {
+            return raw;
+        }
+        String base = kbRetrievalBaseUrl.replaceAll("/+$", "");
+        return raw.replace(TENANT_ID_PLACEHOLDER, String.valueOf(agent.getTenantId()))
+                .replace(KB_RETRIEVAL_BASE_URL_PLACEHOLDER, base);
     }
 
     /**
@@ -598,7 +638,17 @@ public class AiAgentServiceImpl implements AiAgentService {
             degrade.setStatus(0);
             agentMapper.updateById(degrade);
         }
-        installInitialSkillsIfConfigured(agent.getId());
+        // QwenPaw agent 创建成功后，若默认启用知识库问答，则需要像 createAgent/updateAgent 一样挂载检索 MCP，
+        // 否则默认智能体 enableKbTool=true 却无 knowledge-base-retrieval 工具可用（此前漏挂的 bug）
+        if (Boolean.TRUE.equals(agent.getEnableKbTool()) && agent.getQwenpawAgentId() != null) {
+            try {
+                registerKbRetrievalMcp(agent);
+            } catch (Exception e) {
+                log.warn("[createDefaultAgent] 注册知识库检索 MCP 失败，agentId={}", agent.getId(), e);
+            }
+        }
+        // 按商店 is_initial 挂载"默认挂载"的其余 MCP 与技能（检索 MCP 已在上面按启用开关惰性处理）
+        mountDefaultMounts(agent);
         return agent;
     }
 
@@ -621,19 +671,46 @@ public class AiAgentServiceImpl implements AiAgentService {
         return template.replace("${nickname}", "助手");
     }
 
-    private void installInitialSkillsIfConfigured(Long agentId) {
-        List<String> skills = defaultProperties.getInitialSkills();
-        if (skills == null || skills.isEmpty()) {
-            return;
-        }
-        for (String skillName : skills) {
-            if (skillName == null || skillName.trim().isEmpty()) {
+    /**
+     * 挂载"默认挂载"条目到新建智能体：
+     * 1) MCP：商店里 is_initial=1 的系统级 MCP（知识库检索已由 registerKbRetrievalMcp 惰性处理，这里跳过）；
+     * 2) 技能：商店里 is_initial=1 的公开技能 + yaml {@code initialSkills} 兜底，按技能名去重。
+     */
+    private void mountDefaultMounts(AiAgentDO agent) {
+        // 默认 MCP（商店 is_initial）
+        List<AiMcpMetaDO> mcps = mcpMetaService.getInitialMcpMetaList();
+        for (AiMcpMetaDO mcp : mcps) {
+            if (kbRetrievalClientKey.equals(mcp.getCode())) {
                 continue;
             }
             try {
-                installQwenpawSkill(agentId, skillName.trim());
+                mountMcpFromStore(agent, mcp);
             } catch (Exception e) {
-                log.warn("[installInitialSkillsIfConfigured] 默认技能安装失败，skill={}", skillName, e);
+                log.warn("[mountDefaultMounts] 默认 MCP 挂载失败，mcp={}", mcp.getCode(), e);
+            }
+        }
+        // 默认技能（商店 is_initial 优先，yaml initialSkills 兜底，按名去重）
+        Set<String> installed = new HashSet<>();
+        List<AiSkillMetaDO> skills = skillMetaService.getInitialSkillMetaList();
+        for (AiSkillMetaDO skill : skills) {
+            if (skill.getSkillName() != null && installed.add(skill.getSkillName())) {
+                try {
+                    installQwenpawSkill(agent.getId(), skill.getSkillName());
+                } catch (Exception e) {
+                    log.warn("[mountDefaultMounts] 默认技能安装失败，skill={}", skill.getSkillName(), e);
+                }
+            }
+        }
+        List<String> yamlSkills = defaultProperties.getInitialSkills();
+        if (yamlSkills != null) {
+            for (String skillName : yamlSkills) {
+                if (skillName != null && !skillName.trim().isEmpty() && installed.add(skillName.trim())) {
+                    try {
+                        installQwenpawSkill(agent.getId(), skillName.trim());
+                    } catch (Exception e) {
+                        log.warn("[mountDefaultMounts] 默认技能安装失败，skill={}", skillName, e);
+                    }
+                }
             }
         }
     }
