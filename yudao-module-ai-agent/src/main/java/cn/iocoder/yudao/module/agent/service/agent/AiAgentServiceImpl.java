@@ -494,6 +494,10 @@ public class AiAgentServiceImpl implements AiAgentService {
         String headersJson = "{\"X-Tenant-Id\":\"" + String.valueOf(agent.getTenantId()) + "\"}";
         qwenPawClient.registerMcp(agent.getQwenpawAgentId(), kbRetrievalClientKey, kbRetrievalClientKey,
                 "streamable_http", url, null, null, headersJson, null);
+        // QwenPaw 对 MCP 懒连接，首次注册可能未立即扫描出工具；校验并重扫一次
+        ensureMcpToolsReady(agent.getQwenpawAgentId(), kbRetrievalClientKey,
+                () -> qwenPawClient.registerMcp(agent.getQwenpawAgentId(), kbRetrievalClientKey, kbRetrievalClientKey,
+                        "streamable_http", url, null, null, headersJson, null));
 
         // 写入检索结果呈现指南并加入系统提示词，指导模型保留检索内容里的 Markdown 图片/链接
         applyKbGuidePrompt(agent.getQwenpawAgentId(), true);
@@ -512,6 +516,36 @@ public class AiAgentServiceImpl implements AiAgentService {
         String headers = resolveMcpTemplate(meta.getHeaders(), agent);
         qwenPawClient.registerMcp(agent.getQwenpawAgentId(), meta.getCode(), meta.getName(),
                 meta.getTransport(), url, meta.getCommand(), meta.getArgs(), headers, meta.getToolsWhitelist());
+        // QwenPaw 懒连接，校验并重扫一次，避免首次挂载工具为空
+        ensureMcpToolsReady(agent.getQwenpawAgentId(), meta.getCode(),
+                () -> qwenPawClient.registerMcp(agent.getQwenpawAgentId(), meta.getCode(), meta.getName(),
+                        meta.getTransport(), url, meta.getCommand(), meta.getArgs(), headers, meta.getToolsWhitelist()));
+    }
+
+    /**
+     * 注册 MCP 后校验其工具列表是否就绪。
+     *
+     * <p>QwenPaw 对 MCP 采用懒连接：registerMcp 仅登记 client，工具扫描可能尚未完成，
+     * 导致首次挂载后工具列表为空（重新保存/编辑保存后才可见）。
+     * 这里先经 {@link QwenPawClient#listMcpTools} 校验（其内部已带 connecting 重试），
+     * 若仍为空则重放一次注册（幂等 upsert，等价"重新保存"）强制 QwenPaw 重连重扫，再回读确认。
+     * 校验失败不影响主流程，仅告警日志便于排查。
+     *
+     * @param agentId    QwenPaw 智能体 ID
+     * @param clientKey  MCP client_key
+     * @param reRegister 重放注册的动作（与初次注册同参）
+     */
+    private void ensureMcpToolsReady(String agentId, String clientKey, Runnable reRegister) {
+        try {
+            List<Map<String, Object>> tools = qwenPawClient.listMcpTools(agentId, clientKey);
+            if (tools == null || tools.isEmpty()) {
+                log.warn("[ensureMcpToolsReady] MCP={} 首次注册工具为空，重放注册强制重扫，agentId={}", clientKey, agentId);
+                reRegister.run();
+                qwenPawClient.listMcpTools(agentId, clientKey);
+            }
+        } catch (Exception e) {
+            log.warn("[ensureMcpToolsReady] MCP={} 工具校验异常（不影响主流程），agentId={}", clientKey, agentId, e);
+        }
     }
 
     /**
