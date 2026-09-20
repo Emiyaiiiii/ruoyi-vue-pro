@@ -32,6 +32,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static cn.iocoder.yudao.framework.apilog.core.enums.OperateTypeEnum.EXPORT;
 import static cn.iocoder.yudao.framework.common.pojo.CommonResult.success;
@@ -130,11 +131,19 @@ public class UserController {
     }
 
     @GetMapping({"/list-all-simple", "/simple-list"})
-    @Operation(summary = "获取用户精简信息列表", description = "只包含被开启的用户，主要用于前端的下拉选项")
+    @Operation(summary = "获取用户精简信息列表", description = "只包含被开启的用户，主要用于前端的下拉选项；传 ids 时仅返回指定用户（成员昵称回显用）")
     public CommonResult<List<UserSimpleRespVO>> getSimpleUserList(
-            @RequestParam(value = "deptId", required = false) Long deptId) {
+            @RequestParam(value = "deptId", required = false) Long deptId,
+            @RequestParam(value = "ids", required = false) String ids) {
         List<AdminUserDO> list;
-        if (deptId != null) {
+        if (StrUtil.isNotBlank(ids)) {
+            List<Long> idList = Arrays.stream(ids.split("[,，]"))
+                    .map(String::trim)
+                    .filter(s -> s.matches("\\d+"))
+                    .map(Long::parseLong)
+                    .collect(Collectors.toList());
+            list = idList.isEmpty() ? Collections.emptyList() : userService.getUserList(idList);
+        } else if (deptId != null) {
             List<Long> deptIds = Collections.singletonList(deptId);
             list = userService.getDeptUsers(deptIds);
         } else {

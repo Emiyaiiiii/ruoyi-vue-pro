@@ -149,6 +149,7 @@ CREATE TABLE IF NOT EXISTS `kb_library` (
   `status` tinyint DEFAULT '0' COMMENT '状态: 0=启用, 1=禁用',
   `is_public` tinyint DEFAULT '0' COMMENT '是否公开到广场: 0=否, 1=是',
   `is_project` tinyint DEFAULT '0' COMMENT '是否项目成果库: 0=否, 1=是',
+  `image_strategy` varchar(20) DEFAULT '' COMMENT '图片处理方案: none/ocr/vl_summary/vision',
   `creator` varchar(64) DEFAULT '' COMMENT '创建者',
   `create_time` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updater` varchar(64) DEFAULT '' COMMENT '更新者',

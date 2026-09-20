@@ -19,9 +19,6 @@ import cn.iocoder.yudao.framework.common.pojo.PageParam;
 import cn.iocoder.yudao.framework.common.pojo.PageResult;
 import cn.iocoder.yudao.framework.common.pojo.CommonResult;
 import cn.iocoder.yudao.framework.common.util.object.BeanUtils;
-import cn.iocoder.yudao.framework.security.core.service.SecurityFrameworkService;
-import cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils;
-import cn.iocoder.yudao.module.system.enums.permission.RoleCodeEnum;
 import static cn.iocoder.yudao.framework.common.pojo.CommonResult.success;
 
 import static cn.iocoder.yudao.framework.common.exception.util.ServiceExceptionUtil.exception;
@@ -37,7 +34,6 @@ import cn.iocoder.yudao.module.kb.dal.dataobject.document.DocumentDO;
 import cn.iocoder.yudao.module.kb.dal.dataobject.library.LibraryDO;
 import cn.iocoder.yudao.module.kb.service.document.DocumentService;
 import cn.iocoder.yudao.module.kb.service.library.LibraryService;
-import cn.iocoder.yudao.module.kb.service.projectmember.ProjectMemberService;
 
 @Tag(name = "管理后台 - 知识库文件")
 @RestController
@@ -50,12 +46,6 @@ public class DocumentController {
 
     @Resource
     private LibraryService libraryService;
-
-    @Resource
-    private ProjectMemberService projectMemberService;
-
-    @Resource
-    private SecurityFrameworkService securityFrameworkService;
 
     @PostMapping("/create")
     @Operation(summary = "创建知识库文件")
@@ -72,10 +62,11 @@ public class DocumentController {
             @RequestParam("file") MultipartFile file,
             @RequestParam("kbId") Long kbId,
             @RequestParam(value = "folderId", required = false) Long folderId,
+            @RequestParam(value = "relPath", required = false) String relPath,
             @RequestParam(value = "description", required = false) String description,
             @RequestParam(value = "tags", required = false) String tags) {
         validateDocumentManagementAccess(kbId);
-        return success(documentService.uploadAndCreate(file, kbId, folderId, description, tags));
+        return success(documentService.uploadAndCreate(file, kbId, folderId, relPath, description, tags));
     }
 
     @PutMapping("/update")
@@ -163,16 +154,8 @@ public class DocumentController {
         // 非项目成果库 → 无额外限制
         if (library.getIsProject() == null || library.getIsProject() != 1) return;
 
-        // 超级管理员/租户管理员 → 可访问所有项目成果库内容
-        Long userId = SecurityFrameworkUtils.getLoginUserId();
-        if (userId != null && securityFrameworkService.hasAnyRoles(
-                RoleCodeEnum.SUPER_ADMIN.getCode(),
-                RoleCodeEnum.TENANT_ADMIN.getCode())) {
-            return;
-        }
-
-        // 项目成果库 → 校验当前用户是否为项目成员
-        if (userId == null || !projectMemberService.isMember(kbId, userId)) {
+        // 项目成果库 → 需为项目成员（或租户管理员/超管短路）；实时读「打开依据成员字段」ext 值判断
+        if (!libraryService.canOpenProjectLibrary(kbId)) {
             throw exception(DOCUMENT_PERMISSION_DENIED);
         }
     }

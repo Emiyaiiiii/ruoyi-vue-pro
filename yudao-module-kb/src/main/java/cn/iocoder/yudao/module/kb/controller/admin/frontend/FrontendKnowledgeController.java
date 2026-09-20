@@ -177,10 +177,15 @@ public class FrontendKnowledgeController {
             return FrontendResult.error("知识库不存在");
         }
         boolean manage = libraryService.canManage(id);
+        // 项目成果库：非项目成员（含创建者，租户管理员/超管除外）无查看/获取/下载权限（只能看列表，不能打开库）
+        boolean canView = true;
+        if (lib.getIsProject() != null && lib.getIsProject() == 1) {
+            canView = libraryService.canOpenProjectLibrary(id);
+        }
         FrontendPermissionsVO vo = new FrontendPermissionsVO();
-        vo.setCanView(true);
-        vo.setCanGet(true);
-        vo.setCanDownload(true);
+        vo.setCanView(canView);
+        vo.setCanGet(canView);
+        vo.setCanDownload(canView);
         vo.setCanEdit(manage);
         vo.setCanManage(manage);
         vo.setCanUpload(manage);
@@ -440,10 +445,11 @@ public class FrontendKnowledgeController {
                 : libraryExtService.getExtValuesMap(kbIds);
         Map<Long, String> ownerNames = resolveOwnerNames(libs);
         Map<Long, Boolean> canManageMap = libraryService.canManageMap(libs);
+        Set<Long> openableIds = libraryService.filterOpenProjectLibraries(kbIds);
 
         List<FrontendKnowledgeBaseVO> list = libs.stream()
                 .map(lib -> toVO(lib, extMap.get(lib.getId()), ownerNames.get(lib.getOwnerId()),
-                        Boolean.TRUE.equals(canManageMap.get(lib.getId()))))
+                        Boolean.TRUE.equals(canManageMap.get(lib.getId())), openableIds))
                 .collect(Collectors.toList());
         return FrontendResult.okList(list, page.getTotal());
     }
@@ -524,7 +530,7 @@ public class FrontendKnowledgeController {
     }
 
     private FrontendKnowledgeBaseVO toVO(LibraryDO lib, Map<String, String> extValues, String ownerName,
-                                         boolean canManage) {
+                                         boolean canManage, Set<Long> openableIds) {
         FrontendKnowledgeBaseVO vo = new FrontendKnowledgeBaseVO();
         vo.setId(lib.getId());
         vo.setName(lib.getName());
@@ -536,7 +542,12 @@ public class FrontendKnowledgeController {
         vo.setDocumentCount(lib.getDocCount());
         vo.setStatus(lib.getStatus());
         vo.setCreator(lib.getCreator());
-        vo.setCanView(true);
+        // 项目成果库：非项目成员只能看列表，不能打开（can_view=false，前端据此拦截跳转）
+        if (lib.getIsProject() != null && lib.getIsProject() == 1) {
+            vo.setCanView(openableIds != null && openableIds.contains(lib.getId()));
+        } else {
+            vo.setCanView(true);
+        }
         vo.setCanManage(canManage);
         vo.setCoverUrl(lib.getCoverUrl());
         vo.setExtValues(extValues);

@@ -71,4 +71,11 @@ public class LibraryDO extends BaseDO {
      */
     private String imageStrategy;
 
+    /**
+     * KB级处理配置(JSON)：{chunking, retrieval, rerank, model} 四组；
+     * 键名与系统配置(kb_rag_config/kb_chunk_method/kb_model_config)保持一致，
+     * KB 配置优先，缺省回退租户级配置。
+     */
+    private String processConfig;
+
 }

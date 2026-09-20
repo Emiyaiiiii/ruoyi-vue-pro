@@ -19,6 +19,7 @@ import cn.iocoder.yudao.module.kb.service.document.DocumentService;
 import cn.iocoder.yudao.module.kb.service.folder.FolderService;
 import cn.iocoder.yudao.module.kb.service.library.LibraryService;
 import cn.iocoder.yudao.module.kb.service.vectortask.VectorTaskService;
+import cn.iocoder.yudao.module.kb.dal.dataobject.library.LibraryDO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.web.bind.annotation.*;
@@ -93,6 +94,10 @@ public class FrontendFileNodeController {
             @RequestParam(value = "parent_id", required = false) Long parentId,
             @RequestParam(value = "search", required = false) String search,
             @RequestParam(value = "tags", required = false) String tags) {
+        FrontendResult<FrontendFileNodePageVO> denied = requireCanView(kbId);
+        if (denied != null) {
+            return denied;
+        }
         int pageNo = page == null || page < 1 ? 1 : page;
         int size = pageSize == null || pageSize < 1 ? 10 : pageSize;
         Long parent = parentId != null ? parentId : FolderDO.PARENT_ID_ROOT;
@@ -138,6 +143,10 @@ public class FrontendFileNodeController {
     @GetMapping({"/folder-tree", "/folder-tree/"})
     @Operation(summary = "前端文件夹树")
     public FrontendResult<List<FrontendFolderTreeNodeVO>> folderTree(@PathVariable("kbId") Long kbId) {
+        FrontendResult<List<FrontendFolderTreeNodeVO>> denied = requireCanView(kbId);
+        if (denied != null) {
+            return denied;
+        }
         List<FolderDO> tree = folderService.getFolderTree(kbId);
         return FrontendResult.ok(buildFolderTreeNodes(tree));
     }
@@ -318,6 +327,19 @@ public class FrontendFileNodeController {
     private <T> FrontendResult<T> requireCanManage(Long kbId) {
         if (!libraryService.canManage(kbId)) {
             return FrontendResult.error("无权限操作该知识库");
+        }
+        return null;
+    }
+
+    /**
+     * 打开知识库的读权限校验：项目成果库仅项目成员可打开（租户管理员/超管短路）；其他库放行。
+     * 非成员（含创建者，除非是租户管理员）返回错误结果（只能看列表，不能打开库）。
+     */
+    private <T> FrontendResult<T> requireCanView(Long kbId) {
+        LibraryDO lib = libraryMapper.selectById(kbId);
+        if (lib != null && lib.getIsProject() != null && lib.getIsProject() == 1
+                && !libraryService.canOpenProjectLibrary(kbId)) {
+            return FrontendResult.error("无权限打开该知识库（仅项目成员可访问）");
         }
         return null;
     }

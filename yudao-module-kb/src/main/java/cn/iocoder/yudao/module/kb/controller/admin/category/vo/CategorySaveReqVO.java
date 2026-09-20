@@ -34,4 +34,7 @@ public class CategorySaveReqVO {
     @Schema(description = "是否项目成果库分类: 0=否, 1=是")
     private Integer isProject;
 
+    @Schema(description = "项目成果库「打开依据成员字段」key；必须显式指定，为空则项目成果库无人可打开")
+    private String projectMemberFieldKey;
+
 }

@@ -73,4 +73,7 @@ public class LibraryRespVO {
     @Schema(description = "图片处理方案：''=按激活模型推断；none/ocr/vl_summary/vision 见 ImageStrategyEnum", example = "ocr")
     private String imageStrategy;
 
+    @Schema(description = "KB级处理配置(JSON对象)：{chunking, retrieval, rerank, model}；键名与系统配置一致，空对象表示全部回退租户级配置")
+    private Map<String, Object> processConfig;
+
 }

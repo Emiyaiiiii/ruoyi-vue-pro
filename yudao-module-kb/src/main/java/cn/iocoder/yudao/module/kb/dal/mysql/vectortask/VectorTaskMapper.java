@@ -5,6 +5,7 @@ import cn.iocoder.yudao.framework.mybatis.core.mapper.BaseMapperX;
 import cn.iocoder.yudao.framework.mybatis.core.query.LambdaQueryWrapperX;
 import cn.iocoder.yudao.module.kb.controller.admin.vectortask.vo.VectorTaskPageReqVO;
 import cn.iocoder.yudao.module.kb.dal.dataobject.vectortask.VectorTaskDO;
+import cn.iocoder.yudao.module.kb.enums.VectorTaskStatusEnum;
 import org.apache.ibatis.annotations.Mapper;
 
 import java.util.List;
@@ -22,6 +23,19 @@ public interface VectorTaskMapper extends BaseMapperX<VectorTaskDO> {
 
     default VectorTaskDO selectByTaskId(String taskId) {
         return selectOne(VectorTaskDO::getTaskId, taskId);
+    }
+
+    /**
+     * 查询某文档最新的在途（PENDING/PROCESSING）任务，用于删除文档时取消其进行中的向量任务
+     */
+    default VectorTaskDO selectActiveByDocId(Long docId) {
+        return selectOne(new LambdaQueryWrapperX<VectorTaskDO>()
+                .eq(VectorTaskDO::getDocId, docId)
+                .in(VectorTaskDO::getStatus,
+                        VectorTaskStatusEnum.PENDING.getStatus(),
+                        VectorTaskStatusEnum.PROCESSING.getStatus())
+                .orderByDesc(VectorTaskDO::getId)
+                .last("LIMIT 1"));
     }
 
     /**

@@ -92,4 +92,17 @@ public interface DocumentService {
      */
     Long uploadAndCreate(MultipartFile file, Long kbId, Long folderId, String description, String tags);
 
+    /**
+     * 上传文件到指定文件夹并创建知识库文档记录（支持文件夹层级自动建目录）
+     *
+     * @param file 上传的文件
+     * @param kbId 所属知识库ID
+     * @param folderId 起始文件夹ID（可选，null/0 表示根目录）
+     * @param relPath 相对目录路径（可选），以 '/' 分段，如 "a/b"，按需逐级创建子文件夹
+     * @param description 文件描述（可选）
+     * @param tags 标签（可选）
+     * @return 文档ID
+     */
+    Long uploadAndCreate(MultipartFile file, Long kbId, Long folderId, String relPath, String description, String tags);
+
 }

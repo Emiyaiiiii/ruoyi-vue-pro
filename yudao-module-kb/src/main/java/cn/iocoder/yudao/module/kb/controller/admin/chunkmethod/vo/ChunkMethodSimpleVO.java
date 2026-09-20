@@ -19,4 +19,7 @@ public class ChunkMethodSimpleVO {
     @Schema(description = "方法类型", example = "fixed_size")
     private String methodType;
 
+    @Schema(description = "方法描述（适用文档说明，前端下拉/提示展示）")
+    private String description;
+
 }

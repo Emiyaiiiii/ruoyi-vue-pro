@@ -36,6 +36,9 @@ public class VectorTaskRespVO {
     @Schema(description = "当前处理步骤")
     private String currentStep;
 
+    @Schema(description = "处理阶段时间线(JSON数组): [{stage,status,begin_ts,end_ts,duration_s,metrics}]")
+    private String stages;
+
     @Schema(description = "分块数量")
     private Integer chunkCount;
 

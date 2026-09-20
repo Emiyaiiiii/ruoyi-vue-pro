@@ -108,4 +108,12 @@ public interface FileService {
      */
     FileDO getFileByConfigIdAndPath(Long configId, String path);
 
+    /**
+     * 仅删除文件台账记录（infra_file），不操作文件存储器。
+     * 供「已物理删除存储对象、但需同步清理台账」的场景使用（如 FileApi.deleteFile 按 path 删对象后）。
+     *
+     * @param id 文件台账记录编号
+     */
+    void deleteFileRecord(Long id);
+
 }

@@ -35,6 +35,8 @@ public class VectorTaskDO extends BaseDO {
     private Integer progress;
     /** 当前处理步骤 */
     private String currentStep;
+    /** 处理阶段时间线（JSON数组）：[{stage,status,begin_ts,end_ts,duration_s,metrics}]，前端时间轴渲染用 */
+    private String stages;
     /** 分块数量 */
     private Integer chunkCount;
     /** 错误信息 */

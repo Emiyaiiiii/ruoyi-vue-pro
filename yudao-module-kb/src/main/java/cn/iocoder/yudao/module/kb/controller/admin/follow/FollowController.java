@@ -3,13 +3,16 @@ package cn.iocoder.yudao.module.kb.controller.admin.follow;
 import cn.iocoder.yudao.framework.common.pojo.CommonResult;
 import cn.iocoder.yudao.framework.common.pojo.PageParam;
 import cn.iocoder.yudao.framework.common.pojo.PageResult;
-import cn.iocoder.yudao.framework.common.util.object.BeanUtils;
+import cn.iocoder.yudao.framework.common.util.json.JsonUtils;
 import cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils;
 import cn.iocoder.yudao.module.kb.controller.admin.library.vo.LibraryRespVO;
 import cn.iocoder.yudao.module.kb.dal.dataobject.library.LibraryDO;
 import cn.iocoder.yudao.module.kb.dal.mysql.follow.FollowMapper;
 import cn.iocoder.yudao.module.kb.dal.mysql.library.LibraryMapper;
 import cn.iocoder.yudao.module.kb.service.follow.FollowService;
+import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.bean.copier.CopyOptions;
+import cn.hutool.core.util.StrUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -20,6 +23,8 @@ import jakarta.annotation.Resource;
 import jakarta.validation.Valid;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 import static cn.iocoder.yudao.framework.common.pojo.CommonResult.success;
 
@@ -81,7 +86,18 @@ public class FollowController {
             return success(new PageResult<>(Collections.emptyList(), (long) total));
         }
         List<LibraryDO> page = list.subList(fromIndex, toIndex);
-        return success(new PageResult<>(
-                BeanUtils.toBean(page, LibraryRespVO.class), (long) total));
+        List<LibraryRespVO> voList = page.stream().map(lib -> {
+            LibraryRespVO vo = new LibraryRespVO();
+            // processConfig：DO 为 JSON 字符串、VO 为 Map，hutool convertField 无法转换，显式忽略后反序列化填充
+            BeanUtil.copyProperties(lib, vo, CopyOptions.create().setIgnoreProperties("processConfig"));
+            if (StrUtil.isNotBlank(lib.getProcessConfig())) {
+                Map<String, Object> config = JsonUtils.parseMap(lib.getProcessConfig());
+                if (config != null) {
+                    vo.setProcessConfig(config);
+                }
+            }
+            return vo;
+        }).collect(Collectors.toList());
+        return success(new PageResult<>(voList, (long) total));
     }
 }

@@ -99,6 +99,18 @@ public interface LibraryService {
     Map<Long, Boolean> canManageMap(List<LibraryDO> libraries);
 
     /**
+     * 当前用户是否可打开某个知识库。
+     * 项目成果库：租户管理员/超管短路放行，否则判断用户是否在「分类指定的打开依据成员字段」的 ext 值中；
+     * 非项目库直接放行。
+     */
+    boolean canOpenProjectLibrary(Long kbId);
+
+    /**
+     * 批量返回当前用户可打开的知识库 id 集合（供 C 端列表填充 can_view，一次批量读 ext 避免 N+1）。
+     */
+    Set<Long> filterOpenProjectLibraries(Collection<Long> kbIds);
+
+    /**
      * 将指定分类及其子分类下的知识库标记为项目成果库。
      */
     void markLibrariesAsProjectByCategory(Long categoryId);

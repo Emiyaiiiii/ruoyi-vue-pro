@@ -38,7 +38,7 @@ public class FrontendKnowledgeBaseSaveReqVO {
     @JsonProperty("ext_values")
     private Map<String, String> extValues;
 
-    /** 项目成员用户ID（写入 kb_project_member，仅项目成果库生效；可用数字或数字字符串，避免前端雪花ID精度丢失） */
+    /** 项目成员用户ID（已废弃：成员改由项目成员字段 ext 值定义，打开权限实时推导；可用数字或数字字符串） */
     @JsonProperty("member_ids")
     private java.util.List<String> memberIds;
 

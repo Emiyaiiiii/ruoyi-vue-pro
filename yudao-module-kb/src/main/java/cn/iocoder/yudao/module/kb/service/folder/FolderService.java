@@ -50,4 +50,15 @@ public interface FolderService {
      */
     List<FolderDO> getFolderTree(Long kbId);
 
+    /**
+     * 按相对路径获取（不存在则逐级创建）目标文件夹，返回叶子文件夹ID。
+     * 用于文件夹层级上传：将 webkitRelativePath 的目录部分映射到知识库文件夹树。
+     *
+     * @param kbId     知识库ID
+     * @param parentId 起始父文件夹（null 或 0 表示根目录）
+     * @param relPath  相对目录路径，以 '/' 分段，如 "a/b"（空则返回 parentId）
+     * @return 叶子文件夹ID
+     */
+    Long getOrCreateFolderByPath(Long kbId, Long parentId, String relPath);
+
 }

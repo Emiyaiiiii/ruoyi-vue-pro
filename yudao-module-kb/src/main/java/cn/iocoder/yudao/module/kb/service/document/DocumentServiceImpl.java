@@ -28,6 +28,7 @@ import cn.iocoder.yudao.module.kb.dal.mysql.document.DocumentMapper;
 import cn.iocoder.yudao.module.kb.dal.mysql.vectortask.VectorTaskMapper;
 import cn.iocoder.yudao.module.kb.service.library.rule.VisibilityContext;
 import cn.iocoder.yudao.module.kb.service.library.rule.VisibilityRuleEngine;
+import cn.iocoder.yudao.module.kb.service.folder.FolderService;
 import cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils;
 
 import static cn.iocoder.yudao.framework.common.exception.util.ServiceExceptionUtil.exception;
@@ -60,6 +61,9 @@ public class DocumentServiceImpl implements DocumentService {
 
     @Resource
     private VisibilityRuleEngine ruleEngine;
+
+    @Resource
+    private FolderService folderService;
 
     @Override
     public Long createDocument(DocumentSaveReqVO createReqVO) {
@@ -139,6 +143,12 @@ public class DocumentServiceImpl implements DocumentService {
      * 3. 向量任务记录。
      */
     private void cleanupDocumentResources(DocumentDO document) {
+        // 0. 先取消该文档仍在运行的向量任务（Python 端），避免删除后任务继续写入产生脏数据
+        try {
+            vectorTaskService.cancelActiveTaskByDocId(document.getId());
+        } catch (Exception e) {
+            log.warn("[cleanupDocumentResources] 取消在途向量任务失败: docId={}, error={}", document.getId(), e.getMessage());
+        }
         // 1. 清理向量分片（含图片回链对象）
         try {
             vectorTaskService.deleteDocumentVectors(document.getId(), document.getKbId());
@@ -204,10 +214,21 @@ public class DocumentServiceImpl implements DocumentService {
 
     @Override
     public Long uploadAndCreate(MultipartFile file, Long kbId, Long folderId, String description, String tags) {
+        return uploadAndCreate(file, kbId, folderId, null, description, tags);
+    }
+
+    @Override
+    public Long uploadAndCreate(MultipartFile file, Long kbId, Long folderId, String relPath, String description, String tags) {
         // 1. 校验知识库存在
         LibraryDO library = libraryMapper.selectById(kbId);
         if (library == null) {
             throw exception(LIBRARY_NOT_EXISTS);
+        }
+
+        // 1.1 文件夹层级上传：按相对路径逐级获取/创建子文件夹，定位叶子文件夹
+        Long targetFolderId = folderId != null ? folderId : 0L;
+        if (StrUtil.isNotBlank(relPath)) {
+            targetFolderId = folderService.getOrCreateFolderByPath(kbId, targetFolderId, relPath);
         }
 
         // 2. 上传文件到芋道文件存储
@@ -218,13 +239,20 @@ public class DocumentServiceImpl implements DocumentService {
             throw new RuntimeException("读取文件内容失败", e);
         }
         String fileName = file.getOriginalFilename();
+        // 文件夹/批量上传时，浏览器可能把原始文件名带上路径前缀（如 C:\fakepath\... 或 webkitRelativePath）。
+        // 归一到纯文件名，避免 FilePathUtils.validateFileName 因含路径分隔符拒绝上传。
+        String rawName = fileName;
+        if (StrUtil.isNotBlank(fileName) && !StrUtil.equals(fileName, FileUtil.getName(fileName))) {
+            fileName = FileUtil.getName(fileName);
+            log.warn("[uploadAndCreate] 文件名含路径前缀，已归一化: [{}] -> [{}]", rawName, fileName);
+        }
         // 使用 createFileDetail 获取完整文件信息（含 URL、路径、配置编号）
         FileUploadRespVO uploadResp = fileApi.createFileDetail(content, fileName, "kb", file.getContentType());
 
         // 3. 创建文档记录
         DocumentDO document = new DocumentDO();
         document.setKbId(kbId);
-        document.setFolderId(folderId != null ? folderId : 0L);
+        document.setFolderId(targetFolderId);
         document.setFileName(fileName);
         document.setFileUrl(uploadResp.getUrl());
         document.setFilePath(uploadResp.getPath());
@@ -246,7 +274,9 @@ public class DocumentServiceImpl implements DocumentService {
             VectorTaskSubmitReqVO taskReqVO = new VectorTaskSubmitReqVO();
             taskReqVO.setDocId(document.getId());
             taskReqVO.setKbId(kbId);
-            taskReqVO.setFileUrl(uploadResp.getUrl());
+            // 下发时重新生成签名 URL（7 天，host=文件配置 endpoint，python-vector 容器内网可达）：
+            // 不复用 uploadResp.getUrl()（上传时签名，可能因队列延迟/重试过期）
+            taskReqVO.setFileUrl(fileApi.presignGetUrl(uploadResp.getPath(), 604800));
             taskReqVO.setFileType(document.getFileType());
             taskReqVO.setDocumentTitle(fileName);
             vectorTaskService.submitTask(taskReqVO);

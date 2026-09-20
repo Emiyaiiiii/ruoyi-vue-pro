@@ -183,6 +183,8 @@ public class ModelConfigServiceImpl implements ModelConfigService {
                 return testRerank(config);
             case "ocr":
                 return testOcr(config);
+            case "mineru":
+                return testMineru(config);
             case "llm":
             default:
                 return testLlm(config, reqVO);
@@ -331,6 +333,53 @@ public class ModelConfigServiceImpl implements ModelConfigService {
         @SuppressWarnings("unchecked")
         Map<String, Object> responseMap = OBJECT_MAPPER.readValue(responseBody, Map.class);
         return extractResponseContent(responseMap);
+    }
+
+    /**
+     * 测试 MinerU 文档解析通道连通性：对服务根地址发一个 GET（V1 可打 /v1/usage，云 v4 打根路径）。
+     * 仅验证可达，不真正消耗解析额度。
+     */
+    private String testMineru(ModelConfigDO config) throws Exception {
+        Map<String, String> cfg = config.getConfig() == null ? new HashMap<>() : parseConfigMap(config.getConfig());
+        if ("v1".equalsIgnoreCase(String.valueOf(cfg.getOrDefault("mineru_mode", "v4"))) && StrUtil.isNotBlank(config.getUrl())) {
+            int code = httpGetCode(resolveEndpoint(config.getUrl(), "/v1/usage"), config.getAppkey());
+            return "MinerU(自部署V1) 连接成功，HTTP " + code;
+        }
+        if (StrUtil.isBlank(config.getUrl())) {
+            return "MinerU 未配置服务地址";
+        }
+        int code = httpGetCode(config.getUrl(), config.getAppkey());
+        return "MinerU 连接成功，HTTP " + code;
+    }
+
+    private Map<String, String> parseConfigMap(String configJson) {
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> map = OBJECT_MAPPER.readValue(configJson, Map.class);
+            Map<String, String> out = new HashMap<>();
+            map.forEach((k, v) -> out.put(k, String.valueOf(v)));
+            return out;
+        } catch (Exception e) {
+            return new HashMap<>();
+        }
+    }
+
+    /**
+     * 发起 GET 请求，返回 HTTP 状态码（仅连通性探测，忽略响应体）。
+     */
+    private int httpGetCode(String url, String apiKey) {
+        try {
+            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
+            conn.setRequestMethod("GET");
+            conn.setConnectTimeout(15000);
+            conn.setReadTimeout(15000);
+            if (apiKey != null && !apiKey.isEmpty()) {
+                conn.setRequestProperty("Authorization", "Bearer " + apiKey);
+            }
+            return conn.getResponseCode();
+        } catch (Exception e) {
+            throw new RuntimeException("MinerU 连接失败: " + e.getMessage());
+        }
     }
 
     /**
@@ -512,12 +561,14 @@ public class ModelConfigServiceImpl implements ModelConfigService {
     }
 
     /**
-     * 校验用途分类合法性（embedding / llm / ocr / rerank；空视为 llm）
+     * 校验用途分类合法性（embedding / llm / ocr / rerank / mineru；空视为 llm）
+     * mineru 为文档文本解析通道（独立分类，与 ocr 图片处理无关）。
      */
     private void assertValidType(String modelType) {
         String type = (modelType == null || modelType.isEmpty()) ? "llm" : modelType;
         if (!"embedding".equals(type) && !"llm".equals(type)
-                && !"ocr".equals(type) && !"rerank".equals(type)) {
+                && !"ocr".equals(type) && !"rerank".equals(type)
+                && !"mineru".equals(type)) {
             throw exception(MODEL_CONFIG_TYPE_INVALID);
         }
     }

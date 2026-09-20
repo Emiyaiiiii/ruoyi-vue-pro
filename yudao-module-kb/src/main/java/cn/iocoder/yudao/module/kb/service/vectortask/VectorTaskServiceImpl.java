@@ -21,6 +21,7 @@ import cn.iocoder.yudao.module.kb.dal.mysql.vectortask.VectorTaskMapper;
 import cn.iocoder.yudao.module.kb.enums.VectorTaskStatusEnum;
 import cn.iocoder.yudao.module.kb.enums.ImageStrategyEnum;
 import cn.iocoder.yudao.module.kb.framework.config.VectorTaskConfig;
+import cn.iocoder.yudao.module.kb.service.kbconfig.KbProcessConfigResolver;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -66,6 +67,10 @@ public class VectorTaskServiceImpl implements VectorTaskService {
     private ChunkMethodMapper chunkMethodMapper;
     @Resource
     private LibraryMapper libraryMapper;
+    @Resource
+    private KbProcessConfigResolver kbProcessConfigResolver;
+    @Resource
+    private cn.iocoder.yudao.module.infra.api.file.FileApi fileApi;
 
     @Override
     public String submitTask(VectorTaskSubmitReqVO reqVO) {
@@ -189,6 +194,21 @@ public class VectorTaskServiceImpl implements VectorTaskService {
     }
 
     @Override
+    public void cancelActiveTaskByDocId(Long docId) {
+        VectorTaskDO task = vectorTaskMapper.selectActiveByDocId(docId);
+        if (task == null || StrUtil.isBlank(task.getTaskId())) {
+            return;
+        }
+        try {
+            cancelTask(task.getTaskId());
+            log.info("[cancelActiveTaskByDocId] 已取消文档在途向量任务: docId={}, taskId={}", docId, task.getTaskId());
+        } catch (Exception e) {
+            log.warn("[cancelActiveTaskByDocId] 取消文档在途任务失败（不影响删除）: docId={}, taskId={}, error={}",
+                    docId, task.getTaskId(), e.getMessage());
+        }
+    }
+
+    @Override
     public String retryTask(Long docId) {
         // 1. 查询文档信息
         DocumentDO doc = documentMapper.selectById(docId);
@@ -204,14 +224,14 @@ public class VectorTaskServiceImpl implements VectorTaskService {
             log.warn("[retryTask] 文档向量任务不允许重试: docId={}, vectorStatus={}", docId, vectorStatus);
             throw exception(VECTOR_TASK_ALREADY_FINISHED);
         }
-        // 3. 构建提交参数，复用文档的文件信息
+        // 3. 构建提交参数，复用文档的文件信息；file_url 重新签名（7 天），避免复用上传时的旧签名过期
         VectorTaskSubmitReqVO reqVO = new VectorTaskSubmitReqVO();
         reqVO.setDocId(docId);
         reqVO.setKbId(doc.getKbId());
-        reqVO.setFileUrl(doc.getFileUrl());
+        reqVO.setFileUrl(fileApi.presignGetUrl(doc.getFilePath(), 604800));
         reqVO.setFileType(doc.getFileType());
         // 4. 提交新任务（submitTask 内部会创建新的任务记录并调用 Python）
-        log.info("[retryTask] 重试文档向量处理: docId={}, fileUrl={}", docId, doc.getFileUrl());
+        log.info("[retryTask] 重试文档向量处理: docId={}, filePath={}", docId, doc.getFilePath());
         return submitTask(reqVO);
     }
 
@@ -321,34 +341,32 @@ public class VectorTaskServiceImpl implements VectorTaskService {
     }
 
     private Map<String, Object> buildChunkingConfig(VectorTaskSubmitReqVO reqVO) {
-        // 任务未显式传入切片参数时，回退到 kb_chunk_method 的默认方法参数（权威配置）
-        boolean hasRuntimeChunk = reqVO.getStrategy() != null
-                || reqVO.getChunkSize() != null || reqVO.getChunkOverlap() != null
-                || reqVO.getMinChunkSize() != null || reqVO.getMaxChunkSize() != null;
-        Map<String, Object> config = new HashMap<>(hasRuntimeChunk
-                ? new HashMap<>() : resolveDefaultChunkMethodConfig());
+        // 任务显式传入的切片参数（最高优先）
+        Map<String, Object> taskParams = new HashMap<>();
         if (reqVO.getStrategy() != null) {
-            config.put("strategy", reqVO.getStrategy());
+            taskParams.put("strategy", reqVO.getStrategy());
         }
         if (reqVO.getChunkSize() != null) {
-            config.put("chunk_size", reqVO.getChunkSize());
+            taskParams.put("chunk_size", reqVO.getChunkSize());
         }
         if (reqVO.getChunkOverlap() != null) {
-            config.put("chunk_overlap", reqVO.getChunkOverlap());
+            taskParams.put("chunk_overlap", reqVO.getChunkOverlap());
         }
         if (reqVO.getMinChunkSize() != null) {
-            config.put("min_chunk_size", reqVO.getMinChunkSize());
+            taskParams.put("min_chunk_size", reqVO.getMinChunkSize());
         }
         if (reqVO.getMaxChunkSize() != null) {
-            config.put("max_chunk_size", reqVO.getMaxChunkSize());
+            taskParams.put("max_chunk_size", reqVO.getMaxChunkSize());
         }
+        // 三级合并：任务参数 > KB 级 process_config.chunking > kb_chunk_method 默认 > 内置默认
+        Map<String, Object> config = new HashMap<>(kbProcessConfigResolver.resolveChunkingConfig(reqVO.getKbId(), taskParams));
         if (reqVO.getEmbeddingModel() != null) {
             config.put("embedding_model", reqVO.getEmbeddingModel());
         }
         // 模型配置（覆盖 python-vector 本地配置）：embedding / llm / ocr
-        // 优先级：请求体显式传入 > 读取 kb_model_config 中该用途分类的默认(激活)配置
+        // 优先级：请求体显式传入 > KB 级 model.embedding_model_uid > kb_model_config 激活配置
         Map<String, Object> modelConfig = new HashMap<>();
-        Map<String, Object> embedding = buildEmbeddingConfig(reqVO.getEmbeddingModel());
+        Map<String, Object> embedding = buildEmbeddingConfig(reqVO.getEmbeddingModel(), reqVO.getKbId());
         if (!embedding.isEmpty()) {
             modelConfig.put("embedding", embedding);
         }
@@ -359,6 +377,11 @@ public class VectorTaskServiceImpl implements VectorTaskService {
         Map<String, Object> ocr = buildOcrConfig(reqVO.getOcrConfig());
         if (!ocr.isEmpty()) {
             modelConfig.put("ocr", ocr);
+        }
+        // MinerU 为文档文本解析通道（独立分类），与 ocr 图片处理无关；经 model_config.mineru 单独下发
+        Map<String, Object> mineru = buildMineruConfig();
+        if (!mineru.isEmpty()) {
+            modelConfig.put("mineru", mineru);
         }
         if (!modelConfig.isEmpty()) {
             config.put("model_config", modelConfig);
@@ -372,9 +395,13 @@ public class VectorTaskServiceImpl implements VectorTaskService {
                 config.put("parse_options", parseOptions);
             }
         }
-        // 图片处理方案：库级 image_strategy 优先，回退到全局缺省切片方法的默认参数，
-        // 再回退到空字符串（python 端按存量布尔推断）
-        config.put("image_strategy", resolveImageStrategy(reqVO.getKbId()));
+        // 图片处理方案：任务参数 > KB 级 process_config.chunking.image_strategy > kb_library.image_strategy(旧字段)
+        // > kb_chunk_method 默认参数；全部缺失时回退空串（python 端按存量布尔推断）。
+        // resolver 已处理 KB 级与全局默认，这里仅在未合并到时补旧字段兜底。
+        Object mergedImageStrategy = config.get("image_strategy");
+        if (mergedImageStrategy == null || StrUtil.isBlank(String.valueOf(mergedImageStrategy))) {
+            config.put("image_strategy", resolveLegacyImageStrategy(reqVO.getKbId()));
+        }
         return config;
     }
 
@@ -394,13 +421,14 @@ public class VectorTaskServiceImpl implements VectorTaskService {
     }
 
     /**
-     * 解析图片处理方案（优先级：库级 image_strategy > 全局缺省切片方法 default_parameters）。
+     * 解析图片处理方案的旧字段兜底（kb_library.image_strategy 存量字段）。
      *
-     * <p>返回方案 code；两处均未显式配置时返回空字符串，交由 python-vector
-     * 按当前激活模型布尔标志执行存量回退（兼容旧库）。非法值一律回退下行。
+     * <p>KB 级 process_config.chunking.image_strategy 已由 KbProcessConfigResolver 合并；
+     * 此处仅在未合并到时回退旧库字段：kb_library.image_strategy > kb_chunk_method 默认
+     * default_parameters.image_strategy > 空字符串（python 端按存量布尔推断）。
      */
-    private String resolveImageStrategy(Long kbId) {
-        // 1. 库级优先
+    private String resolveLegacyImageStrategy(Long kbId) {
+        // 1. 旧库字段：kb_library.image_strategy
         if (kbId != null) {
             LibraryDO lib = libraryMapper.selectById(kbId);
             if (lib != null && StrUtil.isNotBlank(lib.getImageStrategy())
@@ -427,15 +455,20 @@ public class VectorTaskServiceImpl implements VectorTaskService {
     }
 
     /**
-     * 解析 embedding 配置：请求体传入 -> 否则读库默认 embedding 配置
+     * 解析 embedding 配置：请求体传入 -> KB 级 model.embedding_model_uid -> 否则读库默认 embedding 配置
      */
-    private Map<String, Object> buildEmbeddingConfig(String embeddingModel) {
+    private Map<String, Object> buildEmbeddingConfig(String embeddingModel, Long kbId) {
         if (StrUtil.isNotBlank(embeddingModel)) {
             Map<String, Object> emb = new HashMap<>();
             emb.put("adapter", embeddingModel);
             return emb;
         }
-        ModelConfigDO cfg = resolveActiveDefault("embedding");
+        // KB 级模型选择：process_config.model.embedding_model_uid
+        String kbModelUid = kbProcessConfigResolver.resolveModelUid(kbId, "embedding");
+        ModelConfigDO cfg = StrUtil.isNotBlank(kbModelUid) ? modelConfigMapper.selectByUid(kbModelUid) : null;
+        if (cfg == null) {
+            cfg = resolveActiveDefault("embedding");
+        }
         if (cfg == null) {
             return new HashMap<>();
         }
@@ -523,6 +556,29 @@ public class VectorTaskServiceImpl implements VectorTaskService {
         ocr.put("ocr_enabled", true);
         ocr.putIfAbsent("ocr_kind", resolveOcrKind(cfg));
         return ocr;
+    }
+
+    /**
+     * 解析 MinerU 文档解析通道配置（独立分类 model_type=mineru，与 ocr 图片处理无关）。
+     *
+     * <p>仅用于 PDF 文本层解析通道选择（MinerU vs fitz/pypdf），下发给 python 的
+     * model_config.mineru：{base_url, api_key, ...(config.mineru_mode/tier/model_version)}。
+     * 缺省读取该分类的激活(默认)配置；未配则返回空（python 回退本地解析）。
+     */
+    private Map<String, Object> buildMineruConfig() {
+        ModelConfigDO cfg = resolveActiveDefault("mineru");
+        if (cfg == null) {
+            return new HashMap<>();
+        }
+        Map<String, Object> mineru = new HashMap<>();
+        if (StrUtil.isNotBlank(cfg.getUrl())) {
+            mineru.put("base_url", cfg.getUrl());
+        }
+        if (StrUtil.isNotBlank(cfg.getAppkey())) {
+            mineru.put("api_key", cfg.getAppkey());
+        }
+        putExtras(mineru, cfg);  // 透传 mineru_mode / mineru_tier / mineru_model_version 等 config 键
+        return mineru;
     }
 
     /**

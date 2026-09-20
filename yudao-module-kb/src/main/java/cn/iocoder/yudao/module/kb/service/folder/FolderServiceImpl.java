@@ -1,5 +1,6 @@
 package cn.iocoder.yudao.module.kb.service.folder;
 
+import cn.hutool.core.util.StrUtil;
 import cn.iocoder.yudao.module.kb.dal.mysql.folder.FolderMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -76,6 +77,40 @@ public class FolderServiceImpl implements FolderService {
         List<FolderDO> all = folderMapper.selectByKbId(kbId);
         // 构建树形结构
         return buildTree(all, FolderDO.PARENT_ID_ROOT);
+    }
+
+    @Override
+    public Long getOrCreateFolderByPath(Long kbId, Long parentId, String relPath) {
+        if (StrUtil.isBlank(relPath)) {
+            return parentId != null ? parentId : FolderDO.PARENT_ID_ROOT;
+        }
+        Long current = parentId != null ? parentId : FolderDO.PARENT_ID_ROOT;
+        String[] segments = relPath.split("/");
+        for (String segment : segments) {
+            if (StrUtil.isBlank(segment)) {
+                continue;
+            }
+            current = getOrCreateFolder(kbId, current, segment.trim());
+        }
+        return current;
+    }
+
+    /**
+     * 在指定父目录下获取同名文件夹，不存在则新建（同层级名称唯一）
+     */
+    private Long getOrCreateFolder(Long kbId, Long parentId, String name) {
+        FolderDO exist = folderMapper.selectByParentIdAndName(kbId, parentId, name);
+        if (exist != null) {
+            return exist.getId();
+        }
+        FolderDO folder = FolderDO.builder()
+                .kbId(kbId)
+                .name(name)
+                .parentId(parentId)
+                .sort(0)
+                .build();
+        folderMapper.insert(folder);
+        return folder.getId();
     }
 
     /**

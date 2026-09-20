@@ -29,7 +29,7 @@ SELECT
   100,
   'MinIO（主配置）',
   20,
-  '私有文档桶：上传走容器内网 minio:9000；浏览经 kkfile + 签名 URL 访问',
+  '私有文档桶：上传走容器内网 minio:9000；浏览/下载经签名 URL 访问',
   b'1',
   '{"@class":"cn.iocoder.yudao.module.infra.framework.file.core.client.s3.S3FileClientConfig","endpoint":"http://minio:9000","domain":null,"bucket":"ckb-documents","accessKey":"admin","accessSecret":"20261qaz@WSX","enablePathStyleAccess":true,"enablePublicAccess":false}',
   '1', NOW(), '1', NOW(), b'0'

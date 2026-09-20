@@ -12,10 +12,11 @@ import cn.iocoder.yudao.module.kb.dal.mysql.levelconfig.LevelConfigMapper;
 import cn.iocoder.yudao.module.kb.dal.mysql.sharedept.ShareDeptMapper;
 import cn.iocoder.yudao.module.kb.service.library.rule.VisibilityContext;
 import cn.iocoder.yudao.module.kb.service.library.rule.VisibilityRuleEngine;
-import cn.iocoder.yudao.module.kb.service.projectmember.ProjectMemberService;
 import cn.iocoder.yudao.module.kb.service.libraryext.LibraryExtService;
 import cn.iocoder.yudao.module.kb.service.userdept.KbUserDeptService;
+import cn.iocoder.yudao.framework.security.core.service.SecurityFrameworkService;
 import cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils;
+import cn.iocoder.yudao.module.system.enums.permission.RoleCodeEnum;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import org.springframework.stereotype.Service;
 import jakarta.annotation.Resource;
@@ -26,6 +27,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 import cn.iocoder.yudao.module.kb.controller.admin.library.vo.*;
+import cn.iocoder.yudao.module.kb.service.kbconfig.KbProcessConfigResolver;
 import cn.iocoder.yudao.framework.common.pojo.PageResult;
 import cn.iocoder.yudao.framework.common.pojo.PageParam;
 import cn.iocoder.yudao.framework.common.util.json.JsonUtils;
@@ -61,7 +63,7 @@ public class LibraryServiceImpl implements LibraryService {
     private LevelConfigMapper levelConfigMapper;
 
     @Resource
-    private ProjectMemberService projectMemberService;
+    private SecurityFrameworkService securityFrameworkService;
 
     @Resource
     private LibraryExtService libraryExtService;
@@ -77,6 +79,9 @@ public class LibraryServiceImpl implements LibraryService {
 
     @Resource
     private FolderMapper folderMapper;
+
+    @Resource
+    private KbProcessConfigResolver kbProcessConfigResolver;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -98,7 +103,13 @@ public class LibraryServiceImpl implements LibraryService {
 
         // 插入
         LibraryDO library = BeanUtils.toBean(createReqVO, LibraryDO.class);
+        // processConfig Map -> JSON 字符串落库（覆盖 BeanUtils 的类型拷贝）
+        if (createReqVO.getProcessConfig() != null) {
+            library.setProcessConfig(JsonUtils.toJsonString(createReqVO.getProcessConfig()));
+        }
         libraryMapper.insert(library);
+        // 发布 KB 级配置变更（python-vector 检索侧按 kb_id 读取覆盖租户级配置）
+        kbProcessConfigResolver.publishKbConfig(library.getId());
 
         // 保存共享部门关联（仅共享知识库需要）
         if (createReqVO.getShareDeptIds() != null) {
@@ -118,9 +129,8 @@ public class LibraryServiceImpl implements LibraryService {
         if (createReqVO.getExtValues() != null) {
             libraryExtService.replaceExtValues(library.getId(), createReqVO.getExtValues());
         }
-        // 项目库：创建人 + 表单所选成员写入项目成员管理（只增不删）
+        // 项目库：将分类及其子分类标记为项目成果库（打开权限实时读成员字段 ext 值，无需同步成员表）
         if (ProjectCategorySupport.isMarkedProject(library.getIsProject())) {
-            syncProjectMembers(library.getId(), library.getCategoryId(), createReqVO);
             libraryMapper.updateIsProjectByCategoryIds(Collections.singleton(library.getCategoryId()), 1);
         }
         return library.getId();
@@ -140,7 +150,16 @@ public class LibraryServiceImpl implements LibraryService {
 
         // 更新
         LibraryDO updateObj = BeanUtils.toBean(updateReqVO, LibraryDO.class);
+        // processConfig：前端传 null 表示不改动（MyBatis-Plus 不更新 null 字段，保留原值）；
+        // 传空对象 {} 表示清空 KB 级配置（全部回退租户级）
+        if (updateReqVO.getProcessConfig() != null) {
+            updateObj.setProcessConfig(JsonUtils.toJsonString(updateReqVO.getProcessConfig()));
+        } else {
+            updateObj.setProcessConfig(null);
+        }
         libraryMapper.updateById(updateObj);
+        // 发布 KB 级配置变更
+        kbProcessConfigResolver.publishKbConfig(updateObj.getId());
 
         // 保存共享部门关联
         if (updateReqVO.getShareDeptIds() != null) {
@@ -156,13 +175,9 @@ public class LibraryServiceImpl implements LibraryService {
                 shareDeptMapper.insertBatch(list);
             }
         }
-        // 保存自定义字段值
+        // 保存自定义字段值（项目库打开权限实时读成员字段 ext 值，无需同步成员表）
         if (updateReqVO.getExtValues() != null) {
             libraryExtService.replaceExtValues(updateReqVO.getId(), updateReqVO.getExtValues());
-        }
-        // 项目库：把表单里新选的成员补进项目成员管理，不移除已有成员
-        if (ProjectCategorySupport.isMarkedProject(updateReqVO.getIsProject())) {
-            syncProjectMembers(updateReqVO.getId(), updateReqVO.getCategoryId(), updateReqVO);
         }
     }
 
@@ -178,8 +193,6 @@ public class LibraryServiceImpl implements LibraryService {
         // 删除关联的共享部门记录
         shareDeptMapper.delete(new LambdaQueryWrapper<ShareDeptDO>()
                 .eq(ShareDeptDO::getKbId, id));
-        // 删除关联的项目成员记录
-        projectMemberService.removeAllByKbId(id);
         // 删除自定义字段值
         libraryExtService.removeAllByKbId(id);
         // 级联删除库下全部文档与文件夹（含源文件/向量/向量任务清理，避免孤儿）
@@ -200,11 +213,10 @@ public class LibraryServiceImpl implements LibraryService {
                 validateManagementPermission(cfg, library.getOwnerId());
             }
         }
-        // 再统一删除关联的共享部门记录和项目成员记录
+        // 再统一删除关联的共享部门记录
         for (Long id : ids) {
             shareDeptMapper.delete(new LambdaQueryWrapper<ShareDeptDO>()
                     .eq(ShareDeptDO::getKbId, id));
-            projectMemberService.removeAllByKbId(id);
             libraryExtService.removeAllByKbId(id);
             // 级联删除库下全部文档与文件夹（含源文件/向量/向量任务清理，避免孤儿）
             documentService.deleteByKbId(id);
@@ -458,7 +470,17 @@ public class LibraryServiceImpl implements LibraryService {
         }
         List<LibraryDO> list = libraryMapper.selectSimpleList(isProject);
         // filterVisible 内部通过 ruleEngine 处理超管短路和规则判断
-        return filterVisible(list, userId, null);
+        List<LibraryDO> visible = filterVisible(list, userId, null);
+        if (CollUtil.isEmpty(visible)) {
+            return visible;
+        }
+        // 项目成果库按成员收敛：非成员的项目库不进精简列表（与 canOpen 语义一致），
+        // 保证检索范围/下拉选择只能选到「能打开」的库。
+        Set<Long> openable = filterOpenProjectLibraries(
+                visible.stream().map(LibraryDO::getId).collect(Collectors.toList()));
+        return visible.stream()
+                .filter(lib -> openable.contains(lib.getId()))
+                .collect(Collectors.toList());
     }
 
     @Override
@@ -494,78 +516,89 @@ public class LibraryServiceImpl implements LibraryService {
     }
 
     @Override
+    public boolean canOpenProjectLibrary(Long kbId) {
+        Long userId = SecurityFrameworkUtils.getLoginUserId();
+        if (userId == null) {
+            return false;
+        }
+        boolean admin = isAdminProjectShortcut();
+        log.debug("[项目库打开] userId={} kbId={} adminShortcut={}", userId, kbId, admin);
+        // 租户管理员/超管短路：可打开全部项目库
+        if (admin) {
+            return true;
+        }
+        LibraryDO lib = kbId == null ? null : libraryMapper.selectById(kbId);
+        if (lib == null) {
+            return false;
+        }
+        // 非项目库直接放行
+        if (lib.getIsProject() == null || lib.getIsProject() != 1) {
+            return true;
+        }
+        boolean member = isProjectMemberByField(lib, userId, libraryExtService.getExtValues(kbId));
+        log.debug("[项目库打开] userId={} kbId={} isProject=1 memberField={}", userId, kbId, member);
+        return member;
+    }
+
+    @Override
+    public Set<Long> filterOpenProjectLibraries(Collection<Long> kbIds) {
+        Set<Long> result = new HashSet<>();
+        Long userId = SecurityFrameworkUtils.getLoginUserId();
+        if (userId == null || CollUtil.isEmpty(kbIds)) {
+            return result;
+        }
+        if (isAdminProjectShortcut()) {
+            result.addAll(kbIds);
+            return result;
+        }
+        List<LibraryDO> libs = libraryMapper.selectBatchIds(kbIds);
+        Map<Long, Map<String, String>> extMap = libraryExtService.getExtValuesMap(kbIds);
+        for (LibraryDO lib : libs) {
+            if (lib == null || lib.getId() == null) {
+                continue;
+            }
+            if (lib.getIsProject() != null && lib.getIsProject() == 1) {
+                if (isProjectMemberByField(lib, userId, extMap.get(lib.getId()))) {
+                    result.add(lib.getId());
+                }
+            } else {
+                result.add(lib.getId());
+            }
+        }
+        return result;
+    }
+
+    private boolean isAdminProjectShortcut() {
+        return securityFrameworkService.hasAnyRoles(
+                RoleCodeEnum.SUPER_ADMIN.getCode(),
+                RoleCodeEnum.TENANT_ADMIN.getCode());
+    }
+
+    /**
+     * 实时判断用户是否在「分类显式指定的打开依据成员字段」的 ext 值中。
+     * 打开依据字段未在分类管理指定时 → 一律无权限（项目成果库只认显式指定；除租户管理员/超管短路）。
+     */
+    private boolean isProjectMemberByField(LibraryDO lib, Long userId, Map<String, String> ext) {
+        CategoryDO category = lib.getCategoryId() == null ? null : categoryMapper.selectById(lib.getCategoryId());
+        String key = (category == null || StrUtil.isBlank(category.getProjectMemberFieldKey()))
+                ? null : category.getProjectMemberFieldKey();
+        if (key == null) {
+            return false;
+        }
+        String raw = ext == null ? null : ext.get(key);
+        if (StrUtil.isBlank(raw)) {
+            return false;
+        }
+        return parseUserIds(raw).contains(userId);
+    }
+
+    @Override
     public void markLibrariesAsProjectByCategory(Long categoryId) {
         if (categoryId == null) {
             return;
         }
         Set<Long> categoryIds = collectSelfAndDescendantIds(categoryId);
         libraryMapper.updateIsProjectByCategoryIds(categoryIds, 1);
-    }
-
-    /**
-     * 项目成果库：把创建人和表单成员写入 kb_project_member。
-     * 只追加，不删除，避免影响项目成员管理里已配置的人。
-     */
-    private void syncProjectMembers(Long kbId, Long categoryId, LibrarySaveReqVO reqVO) {
-        Set<Long> userIds = new LinkedHashSet<>();
-        Long loginUserId = SecurityFrameworkUtils.getLoginUserId();
-        if (loginUserId != null) {
-            userIds.add(loginUserId);
-        }
-        if (CollUtil.isNotEmpty(reqVO.getMemberIds())) {
-            userIds.addAll(reqVO.getMemberIds());
-        }
-        userIds.addAll(extractMemberIdsFromExt(categoryId, reqVO.getExtValues()));
-        projectMemberService.addMembers(kbId, userIds);
-    }
-
-    /**
-     * 从分类 columnConfig 的 member 字段，以及 member/项目成员 这类 key 中解析用户ID。
-     */
-    @SuppressWarnings("unchecked")
-    private Set<Long> extractMemberIdsFromExt(Long categoryId, Map<String, String> extValues) {
-        Set<Long> ids = new LinkedHashSet<>();
-        if (extValues == null || extValues.isEmpty()) {
-            return ids;
-        }
-        Set<String> memberKeys = new HashSet<>();
-        if (categoryId != null) {
-            CategoryDO category = categoryMapper.selectById(categoryId);
-            if (category != null && category.getColumnConfig() != null) {
-                try {
-                    List<Map> cols = JsonUtils.parseArray(category.getColumnConfig(), Map.class);
-                    if (cols != null) {
-                        for (Map<?, ?> col : cols) {
-                            if (col == null) {
-                                continue;
-                            }
-                            if ("member".equals(String.valueOf(col.get("type")))
-                                    && col.get("key") != null) {
-                                memberKeys.add(String.valueOf(col.get("key")));
-                            }
-                        }
-                    }
-                } catch (Exception ex) {
-                    log.debug("[项目成员] 解析分类 columnConfig 失败 categoryId={}", categoryId, ex);
-                }
-            }
-        }
-        for (Map.Entry<String, String> entry : extValues.entrySet()) {
-            String key = entry.getKey();
-            if (!memberKeys.contains(key) && !isMemberLikeKey(key)) {
-                continue;
-            }
-            ids.addAll(parseUserIds(entry.getValue()));
-        }
-        return ids;
-    }
-
-    private boolean isMemberLikeKey(String key) {
-        if (key == null) {
-            return false;
-        }
-        String lower = key.toLowerCase(Locale.ROOT);
-        return lower.contains("member") || key.contains("项目成员");
     }
 
     private List<Long> parseUserIds(String raw) {

@@ -4,6 +4,7 @@ import cn.iocoder.yudao.module.infra.framework.file.core.client.FileClient;
 import cn.iocoder.yudao.module.infra.framework.file.core.utils.FilePathUtils;
 import cn.iocoder.yudao.module.infra.service.file.FileConfigService;
 import cn.iocoder.yudao.module.infra.service.file.FileService;
+import cn.iocoder.yudao.module.infra.dal.dataobject.file.FileDO;
 import cn.hutool.core.lang.Assert;
 import org.springframework.stereotype.Service;
 import org.springframework.validation.annotation.Validated;
@@ -47,6 +48,11 @@ public class FileApiImpl implements FileApi {
         FileClient client = fileConfigService.getFileClient(configId);
         Assert.notNull(client, "文件配置({}) 对应客户端不能为空", configId);
         client.delete(path);
+        // 同步清理 yudao 文件台账（infra_file），避免业务删除存储对象后，系统文件管理里仍残留记录
+        FileDO record = fileService.getFileByConfigIdAndPath(configId, path);
+        if (record != null) {
+            fileService.deleteFileRecord(record.getId());
+        }
     }
 
 }

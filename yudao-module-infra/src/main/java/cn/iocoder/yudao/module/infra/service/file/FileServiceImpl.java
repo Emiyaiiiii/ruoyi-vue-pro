@@ -282,4 +282,9 @@ public class FileServiceImpl implements FileService {
         return fileMapper.selectLatestByConfigIdAndPath(configId, path);
     }
 
+    @Override
+    public void deleteFileRecord(Long id) {
+        fileMapper.deleteById(id);
+    }
+
 }

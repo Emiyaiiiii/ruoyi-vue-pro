@@ -50,10 +50,13 @@ public class LibrarySaveReqVO {
     @Schema(description = "自定义字段值(key=字段key, value=字段值字符串；成员多选为 JSON 数组字符串)")
     private Map<String, String> extValues;
 
-    @Schema(description = "项目成员用户ID列表（仅项目成果库生效，写入 kb_project_member）")
+    @Schema(description = "项目成员用户ID列表（已废弃：成员改由项目成员字段 ext 值定义，打开权限实时推导）")
     private List<Long> memberIds;
 
     @Schema(description = "图片处理方案：''=按激活模型推断；none/ocr/vl_summary/vision 见 ImageStrategyEnum", example = "ocr")
     private String imageStrategy;
+
+    @Schema(description = "KB级处理配置(JSON对象)：{chunking:{strategy,chunk_size,chunk_overlap,min_chunk_size,max_chunk_size,image_strategy}, retrieval:{top_k,search_type,use_parallel,score_threshold,vector_weight,keyword_weight,parallel_workers,parallel_timeout}, rerank:{enabled,timeout,top_k}, model:{embedding_model_uid,rerank_model_uid}}；键名与系统配置一致，留空或缺失的项回退租户级配置")
+    private Map<String, Object> processConfig;
 
 }

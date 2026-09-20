@@ -63,4 +63,13 @@ public interface VectorTaskService {
      * @return 是否清理成功
      */
     boolean deleteDocumentVectors(Long docId, Long kbId);
+
+    /**
+     * 取消某文档最新的在途（PENDING/PROCESSING）向量任务（best-effort）。
+     * 用于删除文档时联动取消可能仍在 Python 侧运行/排队的任务；
+     * 无在途任务或取消失败均不抛异常，不影响文档删除主流程。
+     *
+     * @param docId 文档ID
+     */
+    void cancelActiveTaskByDocId(Long docId);
 }

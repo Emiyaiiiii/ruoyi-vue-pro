@@ -224,6 +224,9 @@ public class VectorTaskRedisEventConsumer {
             return;
         }
 
+        // 1.5 从 Redis Hash 读取处理阶段时间线（python 侧 state_bus 写入），随状态变更落库并推送
+        String stagesJson = readStagesJson(taskId);
+
         // 2. 更新 MySQL
         Integer newStatus = mapStatus(status);
         VectorTaskDO updateDO = new VectorTaskDO();
@@ -231,6 +234,7 @@ public class VectorTaskRedisEventConsumer {
         updateDO.setStatus(newStatus);
         updateDO.setProgress(progress);
         updateDO.setCurrentStep(step);
+        updateDO.setStages(stagesJson);
         if (chunkCount != null) {
             updateDO.setChunkCount(chunkCount);
         }
@@ -255,9 +259,33 @@ public class VectorTaskRedisEventConsumer {
         wsMessage.put("step", step);
         wsMessage.put("chunkCount", chunkCount);
         wsMessage.put("errorMsg", errorMsg);
+        if (stagesJson != null) {
+            wsMessage.put("stages", parseStages(stagesJson));
+        }
 
         webSocketSenderApi.sendObject(UserTypeEnum.ADMIN.getValue(),
                 "vector-task-status", wsMessage);
+    }
+
+    /**
+     * 从 Redis Hash 读取 python 侧写入的 stages 时间线（JSON 字符串）；无则返回 null。
+     */
+    private String readStagesJson(String taskId) {
+        String redisKey = vectorTaskConfig.getRedisTaskKeyPrefix() + taskId;
+        Object stages = stringRedisTemplate.opsForHash().get(redisKey, "stages");
+        return stages != null ? String.valueOf(stages) : null;
+    }
+
+    /**
+     * 将 stages JSON 字符串解析为 List（供 WebSocket 消息透传）；解析失败返回 null。
+     */
+    private List<?> parseStages(String json) {
+        try {
+            return cn.iocoder.yudao.framework.common.util.json.JsonUtils.parseArray(json, Object.class);
+        } catch (Exception e) {
+            log.warn("[VectorTaskRedisEventConsumer] stages JSON 解析失败: taskId 忽略，原样透传字符串");
+            return Collections.singletonList(json);
+        }
     }
 
     /**

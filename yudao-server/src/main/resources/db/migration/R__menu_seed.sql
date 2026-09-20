@@ -247,7 +247,6 @@ FROM (
     UNION ALL SELECT '切片方法',6,'chunk-method','','kb/chunkmethod/index','KbChunkMethod'
     UNION ALL SELECT '部门成员管理',6,'user-dept','','kb/userdept/index','UserDept'
     UNION ALL SELECT 'RAG配置',7,'rag-config','','kb/ragconfig/index','KbRagConfig'
-    UNION ALL SELECT '项目成员管理',7,'project-member','','kb/projectmember/index','ProjectMember'
     UNION ALL SELECT '模型配置',8,'model-config','','kb/modelconfig/index','KbModelConfig'
     UNION ALL SELECT '新闻管理',8,'news','','kb/news/index','KbNews'
     UNION ALL SELECT '标签管理',10,'tag','ep:price-tag','kb/tag/index','KbTag'
@@ -297,9 +296,6 @@ FROM (
     UNION ALL SELECT 'rag-config','RAG配置创建','kb:rag-config:create',2
     UNION ALL SELECT 'rag-config','RAG配置更新','kb:rag-config:update',3
     UNION ALL SELECT 'rag-config','RAG配置删除','kb:rag-config:delete',4
-    UNION ALL SELECT 'project-member','查询','kb:project-member:query',1
-    UNION ALL SELECT 'project-member','更新','kb:project-member:update',2
-    UNION ALL SELECT 'project-member','删除','kb:project-member:delete',3
     UNION ALL SELECT 'model-config','模型配置查询','kb:model-config:query',1
     UNION ALL SELECT 'model-config','模型配置创建','kb:model-config:create',2
     UNION ALL SELECT 'model-config','模型配置更新','kb:model-config:update',3

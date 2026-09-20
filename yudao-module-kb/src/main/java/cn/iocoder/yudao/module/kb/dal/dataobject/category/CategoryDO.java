@@ -57,5 +57,10 @@ public class CategoryDO extends BaseDO {
      * 该分类及其子分类下创建的知识库会自动标记为项目库，纳入项目成员管理。
      */
     private Integer isProject;
+    /**
+     * 项目成果库「打开依据成员字段」key（columnConfig 中某个 type=member 字段的 key）。
+     * 打开权限实时读该字段的 ext 值判断当前用户是否为成员；**必须显式指定，为空时项目成果库无人可打开（仅租户管理员/超管短路）**。
+     */
+    private String projectMemberFieldKey;
 
 }

@@ -25,6 +25,15 @@ VALUES
    '',1,0,'admin',NOW(),'admin',NOW(),0,1),
   (5,'语义分段','semantic','按语义相似度合并段落，需嵌入模型；未配置时退化为固定大小','semantic','{}',
    '{"strategy":"semantic","chunk_size":1000,"chunk_overlap":0,"min_chunk_size":100,"max_chunk_size":2000}',
+   '',1,0,'admin',NOW(),'admin',NOW(),0,1),
+  (6,'父-子两级','parent_child','父块提供上下文(仅存ES)、子块精确检索(向量化双写)；子块经 parent_chunk_index 关联父块','parent_child','{}',
+   '{"strategy":"parent_child","chunk_size":500,"chunk_overlap":50,"min_chunk_size":100,"max_chunk_size":2000,"parent_chunk_size":2000,"child_chunk_size":500,"child_chunk_overlap":50}',
+   '',1,0,'admin',NOW(),'admin',NOW(),0,1),
+  (7,'保护性切分','protected','表格/代码/LaTeX 块整体不切断 + 语义 overlap 对齐句子边界','protected','{}',
+   '{"strategy":"protected","chunk_size":800,"chunk_overlap":80,"min_chunk_size":100,"max_chunk_size":3000}',
+   '',1,0,'admin',NOW(),'admin',NOW(),0,1),
+  (8,'自适应切分','adaptive','按文档 profile 自动选档（短文整段/代码递归/结构化保护/通用固定）；可选 context_header 拼标题面包屑','adaptive','{}',
+   '{"strategy":"adaptive","chunk_size":800,"chunk_overlap":80,"min_chunk_size":100,"max_chunk_size":3000,"context_header":false}',
    '',1,0,'admin',NOW(),'admin',NOW(),0,1)
 ON DUPLICATE KEY UPDATE
   `name`=VALUES(`name`),

@@ -47,4 +47,7 @@ public class CategoryRespVO {
     @ExcelProperty("创建时间")
     private LocalDateTime createTime;
 
+    @Schema(description = "项目成果库「打开依据成员字段」key；必须显式指定，为空则项目成果库无人可打开")
+    private String projectMemberFieldKey;
+
 }
