@@ -65,6 +65,9 @@ public class DocumentServiceImpl implements DocumentService {
     @Resource
     private FolderService folderService;
 
+    @Resource
+    private cn.iocoder.yudao.module.kb.dal.mysql.chunk.KbChunkRevisionMapper kbChunkRevisionMapper;
+
     @Override
     public Long createDocument(DocumentSaveReqVO createReqVO) {
         // 1. 校验知识库存在
@@ -132,6 +135,12 @@ public class DocumentServiceImpl implements DocumentService {
         // 删除该库下所有文档记录与向量任务记录
         documentMapper.delete(new LambdaQueryWrapperX<DocumentDO>().eq(DocumentDO::getKbId, kbId));
         vectorTaskMapper.deleteByKbId(kbId);
+        // 删除该库下所有切片修订历史（#7）
+        try {
+            kbChunkRevisionMapper.deleteByKbId(kbId);
+        } catch (Exception e) {
+            log.warn("[deleteByKbId] 删除切片修订历史失败: kbId={}, error={}", kbId, e.getMessage());
+        }
         // 重置知识库的文档数量
         libraryMapper.updateDocCount(kbId, -documents.size());
     }
@@ -168,6 +177,12 @@ public class DocumentServiceImpl implements DocumentService {
             vectorTaskMapper.deleteByDocId(document.getId());
         } catch (Exception e) {
             log.warn("[cleanupDocumentResources] 删除向量任务记录失败: docId={}, error={}", document.getId(), e.getMessage());
+        }
+        // 4. 删除切片修订历史（#7：文档删除时同步清理，避免孤儿修订数据）
+        try {
+            kbChunkRevisionMapper.deleteByDocumentId(document.getId());
+        } catch (Exception e) {
+            log.warn("[cleanupDocumentResources] 删除切片修订历史失败: docId={}, error={}", document.getId(), e.getMessage());
         }
     }
 

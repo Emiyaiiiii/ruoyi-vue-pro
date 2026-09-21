@@ -4,6 +4,7 @@ import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.web.client.RestTemplate;
@@ -88,6 +89,24 @@ public class VectorTaskConfig {
      */
     private Integer readTimeoutMs = 10000;
 
+    // ========== chunk 编辑同步调用（重嵌入较慢，放宽超时） ==========
+
+    /**
+     * chunk 编辑调 python 的读取超时时间（毫秒）
+     */
+    private Integer chunkReadTimeoutMs = 60000;
+
+    /**
+     * chunk 编辑专用的 RestTemplate（重嵌入可能远超默认 10s，避免超时误报失败）
+     */
+    @Bean(name = "chunkRestTemplate")
+    public RestTemplate chunkRestTemplate() {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(connectTimeoutMs);
+        factory.setReadTimeout(chunkReadTimeoutMs);
+        return new RestTemplate(factory);
+    }
+
     // ========== 重试配置 ==========
 
     /**
@@ -101,6 +120,7 @@ public class VectorTaskConfig {
     private Integer retryDelayMs = 1000;
 
     @Bean
+    @Primary
     public RestTemplate restTemplate() {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(connectTimeoutMs);

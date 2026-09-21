@@ -78,4 +78,9 @@ public interface ErrorCodeConstants {
     ErrorCode TAG_NAME_DUPLICATE = new ErrorCode(45, "相同归属下已存在同名标签");
     ErrorCode TAG_PERMISSION_DENIED = new ErrorCode(46, "无权限操作该标签");
     ErrorCode CHUNK_METHOD_NO_DEFAULT = new ErrorCode(47, "尚未设置默认切片方法，请先在「切片方法」中将一个启用方法设为默认");
+
+    // ========== 切片编辑与修订 1-010-009-000 ==========
+    ErrorCode CHUNK_NOT_EXISTS = new ErrorCode(48, "切片不存在或已被删除");
+    ErrorCode CHUNK_REVISION_CONFLICT = new ErrorCode(49, "该切片已被他人修改，请刷新后重试");
+    ErrorCode CHUNK_CANNOT_EDIT = new ErrorCode(50, "父块/图片切片不支持编辑");
 }
