@@ -14,8 +14,10 @@ import java.util.stream.Collectors;
 import cn.iocoder.yudao.module.kb.controller.admin.modelconfig.vo.*;
 import cn.iocoder.yudao.module.kb.dal.dataobject.modelconfig.ModelConfigDO;
 import cn.iocoder.yudao.module.kb.dal.mysql.modelconfig.ModelConfigMapper;
+import cn.iocoder.yudao.module.kb.service.kbconfig.RagConfigRefreshEvent;
 import cn.iocoder.yudao.framework.common.pojo.PageResult;
 import cn.iocoder.yudao.framework.common.util.object.BeanUtils;
+import org.springframework.context.ApplicationEventPublisher;
 
 import static cn.iocoder.yudao.framework.common.exception.util.ServiceExceptionUtil.exception;
 import static cn.iocoder.yudao.module.kb.enums.ErrorCodeConstants.*;
@@ -33,7 +35,19 @@ public class ModelConfigServiceImpl implements ModelConfigService {
     @Resource
     private ModelConfigMapper modelConfigMapper;
 
+    @Resource
+    private ApplicationEventPublisher applicationEventPublisher;
+
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
+    /** 模型配置变更：全量重推 KB 合并配置（KB 显式 uid 引用的模型连接信息可能变化） */
+    private void publishKbConfigRefresh() {
+        try {
+            applicationEventPublisher.publishEvent(new RagConfigRefreshEvent("model"));
+        } catch (Exception ex) {
+            log.warn("[model] 发布 KB 配置刷新事件失败（不影响保存）", ex);
+        }
+    }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -61,6 +75,7 @@ public class ModelConfigServiceImpl implements ModelConfigService {
         if (modelConfig.getIsActive() != null && modelConfig.getIsActive() == 1) {
             deactivateSameTypeExcept(modelConfig.getModelType(), modelConfig.getId());
         }
+        publishKbConfigRefresh();
         return modelConfig.getId();
     }
 
@@ -87,6 +102,7 @@ public class ModelConfigServiceImpl implements ModelConfigService {
         if (willBeActive) {
             deactivateSameTypeExcept(updateObj.getModelType(), updateObj.getId());
         }
+        publishKbConfigRefresh();
     }
 
     @Override
@@ -94,6 +110,7 @@ public class ModelConfigServiceImpl implements ModelConfigService {
     public void deleteModelConfig(Long id) {
         validateExists(id);
         modelConfigMapper.deleteById(id);
+        publishKbConfigRefresh();
     }
 
     @Override
@@ -119,6 +136,7 @@ public class ModelConfigServiceImpl implements ModelConfigService {
         config.setIsActive(1);
         config.setActivatedAt(LocalDateTime.now());
         modelConfigMapper.updateById(config);
+        publishKbConfigRefresh();
     }
 
     @Override
@@ -130,6 +148,7 @@ public class ModelConfigServiceImpl implements ModelConfigService {
         }
         config.setIsActive(0);
         modelConfigMapper.updateById(config);
+        publishKbConfigRefresh();
     }
 
     @Override

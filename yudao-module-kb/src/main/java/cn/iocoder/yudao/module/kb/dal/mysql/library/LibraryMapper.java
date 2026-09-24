@@ -10,6 +10,7 @@ import cn.iocoder.yudao.module.kb.dal.dataobject.library.LibraryDO;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 import cn.iocoder.yudao.module.kb.controller.admin.library.vo.*;
 
@@ -136,5 +137,12 @@ public interface LibraryMapper extends BaseMapperX<LibraryDO> {
                 .and(w -> w.isNull(LibraryDO::getIsProject).or().ne(LibraryDO::getIsProject, isProject))
                 .set(LibraryDO::getIsProject, isProject));
     }
+
+    /**
+     * 跨租户查询所有知识库的 (tenant_id, id) 组合（KB 配置全量预热用）。
+     * 必须在租户忽略上下文（TenantUtils.executeIgnore）中调用，避免被租户拦截器改写。
+     */
+    @Select("SELECT tenant_id AS tenantId, id AS kbId FROM kb_library WHERE deleted = 0")
+    List<Map<String, Object>> selectKbTenantRows();
 
 }

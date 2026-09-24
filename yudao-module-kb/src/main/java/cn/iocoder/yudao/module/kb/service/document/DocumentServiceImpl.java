@@ -67,6 +67,10 @@ public class DocumentServiceImpl implements DocumentService {
 
     @Resource
     private cn.iocoder.yudao.module.kb.dal.mysql.chunk.KbChunkRevisionMapper kbChunkRevisionMapper;
+    @Resource
+    private cn.iocoder.yudao.module.kb.dal.mysql.wiki.WikiPageRevisionMapper wikiPageRevisionMapper;
+    @Resource
+    private cn.iocoder.yudao.module.kb.service.wiki.WikiPythonClient wikiPythonClient;
 
     @Override
     public Long createDocument(DocumentSaveReqVO createReqVO) {
@@ -141,6 +145,18 @@ public class DocumentServiceImpl implements DocumentService {
         } catch (Exception e) {
             log.warn("[deleteByKbId] 删除切片修订历史失败: kbId={}, error={}", kbId, e.getMessage());
         }
+        // 删库统一清理（python 一站式：ES 切片 + wiki 页面/issue + Milvus 向量），避免遗漏
+        try {
+            wikiPythonClient.deleteKbStorage(kbId);
+        } catch (Exception e) {
+            log.warn("[deleteByKbId] python 删库清理失败: kbId={}, error={}", kbId, e.getMessage());
+        }
+        // 修订历史薄表载体（MySQL）随库删除
+        try {
+            wikiPageRevisionMapper.deletePhysicallyByKbId(kbId);
+        } catch (Exception e) {
+            log.warn("[deleteByKbId] 删除修订历史失败: kbId={}, error={}", kbId, e.getMessage());
+        }
         // 重置知识库的文档数量
         libraryMapper.updateDocCount(kbId, -documents.size());
     }
@@ -157,6 +173,13 @@ public class DocumentServiceImpl implements DocumentService {
             vectorTaskService.cancelActiveTaskByDocId(document.getId());
         } catch (Exception e) {
             log.warn("[cleanupDocumentResources] 取消在途向量任务失败: docId={}, error={}", document.getId(), e.getMessage());
+        }
+        // 0.5 Wiki 解链（对齐 WeKnora：先清理 wiki 页、再删 chunk，因剥源需依赖页面归属）：
+        //     反查引用该文档的页面 → 仅被它引用的整页删+删修订；多文档共享页仅剥掉该来源。
+        try {
+            wikiUnlinkOnDocumentDelete(document.getKbId(), document.getId());
+        } catch (Exception e) {
+            log.warn("[cleanupDocumentResources] Wiki 解链失败: docId={}, error={}", document.getId(), e.getMessage());
         }
         // 1. 清理向量分片（含图片回链对象）
         try {
@@ -183,6 +206,18 @@ public class DocumentServiceImpl implements DocumentService {
             kbChunkRevisionMapper.deleteByDocumentId(document.getId());
         } catch (Exception e) {
             log.warn("[cleanupDocumentResources] 删除切片修订历史失败: docId={}, error={}", document.getId(), e.getMessage());
+        }
+    }
+
+    /**
+     * Wiki 文档删除联动：剥除/删除 source_refs 引用该文档的 wiki 页面。
+     * 页面已迁 ES（python 拥有 source_refs 归属），由 python 负责，Java 仅转发。
+     */
+    private void wikiUnlinkOnDocumentDelete(Long kbId, Long docId) {
+        try {
+            wikiPythonClient.unlinkDocument(kbId, docId);
+        } catch (Exception e) {
+            log.warn("[wiki-unlink] 文档删除联动失败 kbId={} docId={}: {}", kbId, docId, e.getMessage());
         }
     }
 

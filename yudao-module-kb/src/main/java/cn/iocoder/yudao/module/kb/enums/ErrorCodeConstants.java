@@ -83,4 +83,13 @@ public interface ErrorCodeConstants {
     ErrorCode CHUNK_NOT_EXISTS = new ErrorCode(48, "切片不存在或已被删除");
     ErrorCode CHUNK_REVISION_CONFLICT = new ErrorCode(49, "该切片已被他人修改，请刷新后重试");
     ErrorCode CHUNK_CANNOT_EDIT = new ErrorCode(50, "父块/图片切片不支持编辑");
+
+    // ========== Wiki 模式 1-010-010-000 ==========
+    ErrorCode WIKI_PAGE_NOT_EXISTS = new ErrorCode(51, "Wiki 页面不存在或已被删除");
+    ErrorCode WIKI_PAGE_SLUG_EXISTS = new ErrorCode(52, "该知识库已存在同名 Wiki 页面");
+    ErrorCode WIKI_PAGE_CONFLICT = new ErrorCode(53, "该 Wiki 页面已被他人修改，请刷新后重试");
+    ErrorCode WIKI_REVERT_TO_CURRENT = new ErrorCode(54, "不能回滚到当前版本");
+    ErrorCode WIKI_REVISION_NOT_EXISTS = new ErrorCode(55, "目标版本快照不存在");
+    ErrorCode WIKI_PERMISSION_DENIED = new ErrorCode(56, "无权限操作该知识库的 Wiki");
+    ErrorCode WIKI_ISSUE_STATUS_INVALID = new ErrorCode(57, "无效的问题状态（仅支持 pending/ignored/resolved）");
 }

@@ -2,7 +2,6 @@ package cn.iocoder.yudao.module.kb.service.chunk;
 
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.crypto.digest.DigestUtil;
-import cn.iocoder.yudao.framework.common.util.json.JsonUtils;
 import cn.iocoder.yudao.framework.security.core.LoginUser;
 import cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils;
 import cn.iocoder.yudao.module.kb.controller.admin.chunk.vo.ChunkItemVO;
@@ -11,12 +10,9 @@ import cn.iocoder.yudao.module.kb.controller.admin.chunk.vo.ChunkRevertReqVO;
 import cn.iocoder.yudao.module.kb.controller.admin.chunk.vo.ChunkUpdateReqVO;
 import cn.iocoder.yudao.module.kb.dal.dataobject.chunk.KbChunkRevisionDO;
 import cn.iocoder.yudao.module.kb.dal.dataobject.document.DocumentDO;
-import cn.iocoder.yudao.module.kb.dal.dataobject.modelconfig.ModelConfigDO;
 import cn.iocoder.yudao.module.kb.dal.mysql.chunk.KbChunkRevisionMapper;
 import cn.iocoder.yudao.module.kb.dal.mysql.document.DocumentMapper;
-import cn.iocoder.yudao.module.kb.dal.mysql.modelconfig.ModelConfigMapper;
 import cn.iocoder.yudao.module.kb.framework.config.VectorTaskConfig;
-import cn.iocoder.yudao.module.kb.service.kbconfig.KbProcessConfigResolver;
 import cn.iocoder.yudao.module.kb.service.library.LibraryService;
 import cn.iocoder.yudao.module.system.api.user.AdminUserApi;
 import cn.iocoder.yudao.module.system.api.user.dto.AdminUserRespDTO;
@@ -64,10 +60,6 @@ public class KbChunkServiceImpl implements KbChunkService {
     private KbChunkRevisionMapper kbChunkRevisionMapper;
     @Resource
     private DocumentMapper documentMapper;
-    @Resource
-    private ModelConfigMapper modelConfigMapper;
-    @Resource
-    private KbProcessConfigResolver kbProcessConfigResolver;
     @Resource
     private LibraryService libraryService;
     @Resource
@@ -118,11 +110,11 @@ public class KbChunkServiceImpl implements KbChunkService {
         if (StrUtil.isBlank(reqVO.getContent()) || reqVO.getContent().length() > MAX_CONTENT_LENGTH) {
             throw exception(CHUNK_CANNOT_EDIT);
         }
-        // 2. 调 python 重嵌入 + 双写（失败抛异常，不落修订）
+        // 2. 调 python 重嵌入 + 双写（失败抛异常，不落修订）。
+        //    模型配置不再随请求下发：python 端从 kb:process:config:{kb_id}.model.embedding 读取
         Map<String, Object> body = new HashMap<>();
         body.put("content", reqVO.getContent());
         body.put("kb_id", reqVO.getKbId());
-        body.put("embedding", buildEmbeddingConfig(reqVO.getKbId()));
         pythonPut("/api/v1/chunks/" + chunkId, body);
         // 3. 落修订快照（变更后内容）
         try {
@@ -171,11 +163,10 @@ public class KbChunkServiceImpl implements KbChunkService {
         if (target == null) {
             throw exception(CHUNK_REVISION_CONFLICT);
         }
-        // 3. 调 python 应用旧内容
+        // 3. 调 python 应用旧内容（模型配置由 python 端从 KB 缓存读取）
         Map<String, Object> body = new HashMap<>();
         body.put("content", target.getContent());
         body.put("kb_id", reqVO.getKbId() != null ? reqVO.getKbId() : target.getKbId());
-        body.put("embedding", buildEmbeddingConfig(reqVO.getKbId() != null ? reqVO.getKbId() : target.getKbId()));
         pythonPut("/api/v1/chunks/" + chunkId, body);
         // 4. 落修订快照（change_type=revert，内容=回滚到的目标内容）
         try {
@@ -263,42 +254,6 @@ public class KbChunkServiceImpl implements KbChunkService {
             }
         }
         kbChunkRevisionMapper.insert(revision);
-    }
-
-    /** 解析 KB 级 embedding 模型配置（对齐 VectorTaskServiceImpl.buildEmbeddingConfig：KB uid → 租户激活） */
-    private Map<String, Object> buildEmbeddingConfig(Long kbId) {
-        String kbModelUid = kbProcessConfigResolver.resolveModelUid(kbId, "embedding");
-        ModelConfigDO cfg = StrUtil.isNotBlank(kbModelUid) ? modelConfigMapper.selectByUid(kbModelUid) : null;
-        if (cfg == null) {
-            List<ModelConfigDO> active = modelConfigMapper.selectActiveByType("embedding");
-            cfg = active.isEmpty() ? null : active.get(0);
-        }
-        if (cfg == null) {
-            return Collections.emptyMap();
-        }
-        Map<String, Object> emb = new HashMap<>();
-        String adapter = "qwen";
-        if (StrUtil.isNotBlank(cfg.getConfig())) {
-            Map<?, ?> config = JsonUtils.parseObject(cfg.getConfig(), Map.class);
-            Object a = config == null ? null : config.get("adapter");
-            if (a != null) {
-                adapter = String.valueOf(a);
-            }
-        }
-        emb.put("adapter", adapter);
-        if (StrUtil.isNotBlank(cfg.getUrl())) {
-            emb.put("base_url", cfg.getUrl());
-        }
-        if (StrUtil.isNotBlank(cfg.getAppkey())) {
-            emb.put("api_key", cfg.getAppkey());
-        }
-        if (StrUtil.isNotBlank(cfg.getModel())) {
-            emb.put("model", cfg.getModel());
-        } else if (StrUtil.isNotBlank(cfg.getUid())) {
-            emb.put("model", cfg.getUid());
-        }
-        emb.put("vl_supported", Boolean.TRUE.equals(cfg.getVlSupported()));
-        return emb;
     }
 
     @SuppressWarnings("unchecked")

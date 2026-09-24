@@ -70,6 +70,8 @@ public class AiAgentServiceImpl implements AiAgentService {
 
     /** 知识库检索结果呈现指南提示词文件名（写入 QwenPaw 智能体工作区根目录） */
     private static final String KB_GUIDE_FILE = "KB_GUIDE.md";
+    /** Wiki 研究员问答指南提示词文件名（写入 QwenPaw 智能体工作区根目录） */
+    private static final String WIKI_GUIDE_FILE = "WIKI_GUIDE.md";
     /** MCP 商店模板占位符：运行时替换为智能体所属租户 ID */
     private static final String TENANT_ID_PLACEHOLDER = "{tenant_id}";
     /** MCP 商店模板占位符：运行时替换为知识库检索服务 baseUrl（去尾斜杠） */
@@ -90,6 +92,23 @@ public class AiAgentServiceImpl implements AiAgentService {
             1. 在回答中引用检索到的文字内容时，必须【原样保留】其中的 Markdown 图片与链接语法，不要删除、不要改写成普通纯文本、不要去掉感叹号。
             2. 图片对用户很重要。检索内容里的每张图片都应在你的回答中保留在对应位置，必要时可补充简短的图片说明，但 Markdown 语法本身不得改动。
             3. 如果检索结果里没有图片或链接，正常回答即可，无需额外说明。
+            """;
+
+    /** Wiki 研究员系统提示词（1:1 照搬 WeKnora wiki_researcher，不做自加行为）。
+     *
+     * <p>仅当用户选中的知识库中任一开启了 wiki 后处理时注入（见
+     * AiChatSessionServiceImpl 运行时挂接），指导模型用 wiki_search / wiki_read_page /
+     * wiki_read_source_doc / wiki_flag_issue 做图谱导航式深度阅读。
+     */
+    private static final String WIKI_GUIDE_CONTENT = """
+            You are WeKnora Wiki Researcher. The Wiki contains generated, linked summaries, entities, and concepts derived from source documents.
+            For a task that needs Wiki evidence:
+            - Find an entry point with wiki_search, or read the index when the user requests an overview. Restrict the lookup to the relevant bound knowledge base.
+            - Read a relevant page with wiki_read_page when search summaries do not contain enough evidence. Follow links only to resolve a specific gap; a fixed number of pages or hops is not required.
+            - For exact quotes, detailed code, or disputed facts, inspect the original documents referenced by the page using an available reader. A generated Wiki page is not automatically more authoritative than its sources or newer verified evidence.
+            - If sources conflict, compare their dates, scope, and provenance and explain unresolved differences. Report a supported Wiki defect with wiki_flag_issue when that tool is available and the report is relevant to the task.
+            - Use verified [[slug|display name]] links when Wiki navigation helps the user. Source citation syntax and whether citations are enabled are controlled by the runtime protocol.
+            This is a default research workflow, not a requirement to search the Wiki for every message. Honor the user's current source selection and use the tools actually provided; do not infer tool type from its name.
             """;
 
     @Override
@@ -600,6 +619,38 @@ public class AiAgentServiceImpl implements AiAgentService {
         } else {
             if (contains) {
                 files.remove(KB_GUIDE_FILE);
+                qwenPawClient.setSystemPromptFiles(qwenpawAgentId, files);
+            }
+        }
+    }
+
+    /**
+     * 按知识库工具开关，向 QwenPaw 系统提示词注入/摘除 Wiki 研究员指南（WIKI_GUIDE.md）。
+     *
+     * <p>开启：向智能体工作区写入 WIKI_GUIDE.md 并追加到 system_prompt_files（QwenPaw 会将其
+     * 一并拼进系统提示词），指导模型在回答涉及 Wiki 知识库问题时用 wiki_search /
+     * wiki_read_page / wiki_read_source_doc / wiki_flag_issue 做图谱导航式深度阅读（对齐
+     * WeKnora builtin-wiki-researcher）。关闭：从 system_prompt_files 中摘除。
+     *
+     * <p>由问答会话在「用户选中的 KB 中任一开启 wiki」时调用（AiChatSessionServiceImpl），
+     * 与知识库问答开关解耦：即便开了知识库问答，若选中的库都没开 wiki，也不注入，避免
+     * 模型误用 wiki 工具。幂等：文件重复写、列表重复添加均安全。
+     */
+    public void applyWikiGuidePrompt(String qwenpawAgentId, boolean enabled) {
+        List<String> files = qwenPawClient.getSystemPromptFiles(qwenpawAgentId);
+        if (files == null || files.isEmpty()) {
+            files = new ArrayList<>(DEFAULT_SYSTEM_PROMPT_FILES);
+        }
+        boolean contains = files.contains(WIKI_GUIDE_FILE);
+        if (enabled) {
+            qwenPawClient.writeWorkspaceMd(qwenpawAgentId, WIKI_GUIDE_FILE, WIKI_GUIDE_CONTENT);
+            if (!contains) {
+                files.add(WIKI_GUIDE_FILE);
+                qwenPawClient.setSystemPromptFiles(qwenpawAgentId, files);
+            }
+        } else {
+            if (contains) {
+                files.remove(WIKI_GUIDE_FILE);
                 qwenPawClient.setSystemPromptFiles(qwenpawAgentId, files);
             }
         }

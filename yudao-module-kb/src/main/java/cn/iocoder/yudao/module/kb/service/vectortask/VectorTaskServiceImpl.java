@@ -9,14 +9,12 @@ import cn.iocoder.yudao.framework.tenant.core.context.TenantContextHolder;
 import cn.iocoder.yudao.module.kb.controller.admin.vectortask.vo.VectorTaskPageReqVO;
 import cn.iocoder.yudao.module.kb.controller.admin.vectortask.vo.VectorTaskSubmitReqVO;
 import cn.iocoder.yudao.module.kb.dal.dataobject.document.DocumentDO;
-import cn.iocoder.yudao.module.kb.dal.dataobject.modelconfig.ModelConfigDO;
 import cn.iocoder.yudao.module.kb.dal.dataobject.chunkmethod.ChunkMethodDO;
 import cn.iocoder.yudao.module.kb.dal.dataobject.library.LibraryDO;
 import cn.iocoder.yudao.module.kb.dal.dataobject.vectortask.VectorTaskDO;
 import cn.iocoder.yudao.module.kb.dal.mysql.chunkmethod.ChunkMethodMapper;
 import cn.iocoder.yudao.module.kb.dal.mysql.document.DocumentMapper;
 import cn.iocoder.yudao.module.kb.dal.mysql.library.LibraryMapper;
-import cn.iocoder.yudao.module.kb.dal.mysql.modelconfig.ModelConfigMapper;
 import cn.iocoder.yudao.module.kb.dal.mysql.vectortask.VectorTaskMapper;
 import cn.iocoder.yudao.module.kb.enums.VectorTaskStatusEnum;
 import cn.iocoder.yudao.module.kb.enums.ImageStrategyEnum;
@@ -61,8 +59,6 @@ public class VectorTaskServiceImpl implements VectorTaskService {
     private VectorTaskConfig vectorTaskConfig;
     @Resource
     private VectorTaskPublisher vectorTaskPublisher;
-    @Resource
-    private ModelConfigMapper modelConfigMapper;
     @Resource
     private ChunkMethodMapper chunkMethodMapper;
     @Resource
@@ -275,6 +271,11 @@ public class VectorTaskServiceImpl implements VectorTaskService {
         if (errorMsg != null) {
             updateDO.setErrorMsg(errorMsg);
         }
+        try {
+            updateDO.setChunkCount(chunkCount);
+        } catch (Exception e) {
+            log.warn("[handleTaskCallback] chunkCount 设置失败", e);
+        }
         vectorTaskMapper.updateById(updateDO);
     }
 
@@ -360,32 +361,9 @@ public class VectorTaskServiceImpl implements VectorTaskService {
         }
         // 三级合并：任务参数 > KB 级 process_config.chunking > kb_chunk_method 默认 > 内置默认
         Map<String, Object> config = new HashMap<>(kbProcessConfigResolver.resolveChunkingConfig(reqVO.getKbId(), taskParams));
-        if (reqVO.getEmbeddingModel() != null) {
-            config.put("embedding_model", reqVO.getEmbeddingModel());
-        }
-        // 模型配置（覆盖 python-vector 本地配置）：embedding / llm / ocr
-        // 优先级：请求体显式传入 > KB 级 model.embedding_model_uid > kb_model_config 激活配置
-        Map<String, Object> modelConfig = new HashMap<>();
-        Map<String, Object> embedding = buildEmbeddingConfig(reqVO.getEmbeddingModel(), reqVO.getKbId());
-        if (!embedding.isEmpty()) {
-            modelConfig.put("embedding", embedding);
-        }
-        Map<String, Object> llm = buildLlmConfig(reqVO.getLlmConfig());
-        if (!llm.isEmpty()) {
-            modelConfig.put("llm", llm);
-        }
-        Map<String, Object> ocr = buildOcrConfig(reqVO.getOcrConfig());
-        if (!ocr.isEmpty()) {
-            modelConfig.put("ocr", ocr);
-        }
-        // MinerU 为文档文本解析通道（独立分类），与 ocr 图片处理无关；经 model_config.mineru 单独下发
-        Map<String, Object> mineru = buildMineruConfig();
-        if (!mineru.isEmpty()) {
-            modelConfig.put("mineru", mineru);
-        }
-        if (!modelConfig.isEmpty()) {
-            config.put("model_config", modelConfig);
-        }
+        // 模型配置不再随任务消息下发：两级优先级（KB 显式 > 租户默认）由 KbProcessConfigResolver 合并后
+        // 经 kb.process.config.changed 推送至 python-vector Redis 缓存（kb:process:config:{kb_id}），
+        // 入库/检索均从该缓存读取（KB 无配置时 python 回退 env 默认）。见 KbProcessConfigResolver.publishKbConfig。
         if (reqVO.getIndexGroup() != null) {
             config.put("index_group", reqVO.getIndexGroup());
         }
@@ -444,194 +422,5 @@ public class VectorTaskServiceImpl implements VectorTaskService {
         }
         // 3. 未显式指定，走存量布尔推断
         return "";
-    }
-
-    /**
-     * 读取 kb_model_config 中指定用途分类的默认(激活)配置；按租户自动隔离
-     */
-    private ModelConfigDO resolveActiveDefault(String modelType) {
-        List<ModelConfigDO> active = modelConfigMapper.selectActiveByType(modelType);
-        return active.isEmpty() ? null : active.get(0);
-    }
-
-    /**
-     * 解析 embedding 配置：请求体传入 -> KB 级 model.embedding_model_uid -> 否则读库默认 embedding 配置
-     */
-    private Map<String, Object> buildEmbeddingConfig(String embeddingModel, Long kbId) {
-        if (StrUtil.isNotBlank(embeddingModel)) {
-            Map<String, Object> emb = new HashMap<>();
-            emb.put("adapter", embeddingModel);
-            return emb;
-        }
-        // KB 级模型选择：process_config.model.embedding_model_uid
-        String kbModelUid = kbProcessConfigResolver.resolveModelUid(kbId, "embedding");
-        ModelConfigDO cfg = StrUtil.isNotBlank(kbModelUid) ? modelConfigMapper.selectByUid(kbModelUid) : null;
-        if (cfg == null) {
-            cfg = resolveActiveDefault("embedding");
-        }
-        if (cfg == null) {
-            return new HashMap<>();
-        }
-        // adapter 取 config.adapter（显式指定），缺省 qwen
-        String adapter = mapProviderToEmbeddingAdapter(cfg);
-        Map<String, Object> emb = new HashMap<>();
-        emb.put("adapter", adapter);
-        if (StrUtil.isNotBlank(cfg.getUrl())) {
-            emb.put("base_url", cfg.getUrl());
-        }
-        if (StrUtil.isNotBlank(cfg.getAppkey())) {
-            emb.put("api_key", cfg.getAppkey());
-        }
-        // model 优先取具体模型名，缺省回退 uid
-        if (StrUtil.isNotBlank(cfg.getModel())) {
-            emb.put("model", cfg.getModel());
-        } else if (StrUtil.isNotBlank(cfg.getUid())) {
-            emb.put("model", cfg.getUid());
-        }
-        // 维度等自定义参数从 config/metadata JSON 解析
-        putExtras(emb, cfg);
-        // 多模态(VL)支持标志，透传给 python-vector
-        emb.put("vl_supported", Boolean.TRUE.equals(cfg.getVlSupported()));
-        return emb;
-    }
-
-    /**
-     * 解析 llm 配置：请求体传入 -> 否则读库默认 llm 配置
-     */
-    private Map<String, Object> buildLlmConfig(String llmConfig) {
-        if (StrUtil.isNotBlank(llmConfig)) {
-            Map<String, Object> llm = JsonUtils.parseMap(llmConfig);
-            return llm != null ? llm : new HashMap<>();
-        }
-        ModelConfigDO cfg = resolveActiveDefault("llm");
-        if (cfg == null) {
-            return new HashMap<>();
-        }
-        Map<String, Object> llm = new HashMap<>();
-        if (StrUtil.isNotBlank(cfg.getUrl())) {
-            llm.put("base_url", cfg.getUrl());
-        }
-        if (StrUtil.isNotBlank(cfg.getAppkey())) {
-            llm.put("api_key", cfg.getAppkey());
-        }
-        // model 优先取具体模型名，缺省回退 uid
-        if (StrUtil.isNotBlank(cfg.getModel())) {
-            llm.put("model", cfg.getModel());
-        } else if (StrUtil.isNotBlank(cfg.getUid())) {
-            llm.put("model", cfg.getUid());
-        }
-        putExtras(llm, cfg);
-        // 多模态(VL)支持标志，透传给 python-vector
-        llm.put("vl_supported", Boolean.TRUE.equals(cfg.getVlSupported()));
-        return llm;
-    }
-
-    /**
-     * 解析 ocr 配置：请求体传入 -> 否则读库默认 ocr 配置
-     */
-    private Map<String, Object> buildOcrConfig(String ocrConfig) {
-        if (StrUtil.isNotBlank(ocrConfig)) {
-            Map<String, Object> ocr = JsonUtils.parseMap(ocrConfig);
-            return ocr != null ? ocr : new HashMap<>();
-        }
-        ModelConfigDO cfg = resolveActiveDefault("ocr");
-        if (cfg == null) {
-            return new HashMap<>();
-        }
-        Map<String, Object> ocr = new HashMap<>();
-        if (StrUtil.isNotBlank(cfg.getUrl())) {
-            ocr.put("ocr_api_url", cfg.getUrl());
-        }
-        // model 优先取具体模型名，缺省回退 uid
-        if (StrUtil.isNotBlank(cfg.getModel())) {
-            ocr.put("ocr_model", cfg.getModel());
-        } else if (StrUtil.isNotBlank(cfg.getUid())) {
-            ocr.put("ocr_model", cfg.getUid());
-        }
-        if (StrUtil.isNotBlank(cfg.getAppkey())) {
-            ocr.put("ocr_api_key", cfg.getAppkey());
-        }
-        putExtras(ocr, cfg);
-        // 显式标记启用 OCR，并判定 OCR 通道类型（mineru=整篇版式解析 / deepseek_ocr=逐图 OCR）
-        ocr.put("ocr_enabled", true);
-        ocr.putIfAbsent("ocr_kind", resolveOcrKind(cfg));
-        return ocr;
-    }
-
-    /**
-     * 解析 MinerU 文档解析通道配置（独立分类 model_type=mineru，与 ocr 图片处理无关）。
-     *
-     * <p>仅用于 PDF 文本层解析通道选择（MinerU vs fitz/pypdf），下发给 python 的
-     * model_config.mineru：{base_url, api_key, ...(config.mineru_mode/tier/model_version)}。
-     * 缺省读取该分类的激活(默认)配置；未配则返回空（python 回退本地解析）。
-     */
-    private Map<String, Object> buildMineruConfig() {
-        ModelConfigDO cfg = resolveActiveDefault("mineru");
-        if (cfg == null) {
-            return new HashMap<>();
-        }
-        Map<String, Object> mineru = new HashMap<>();
-        if (StrUtil.isNotBlank(cfg.getUrl())) {
-            mineru.put("base_url", cfg.getUrl());
-        }
-        if (StrUtil.isNotBlank(cfg.getAppkey())) {
-            mineru.put("api_key", cfg.getAppkey());
-        }
-        putExtras(mineru, cfg);  // 透传 mineru_mode / mineru_tier / mineru_model_version 等 config 键
-        return mineru;
-    }
-
-    /**
-     * 判定 OCR 通道类型：config JSON 显式指定优先，缺省逐图 OCR（deepseek_ocr）。
-     * Mineru（整篇版式解析）场景需在 config 中显式写 ocr_kind=mineru。
-     */
-    private String resolveOcrKind(ModelConfigDO cfg) {
-        if (StrUtil.isNotBlank(cfg.getConfig())) {
-            Map<String, Object> map = JsonUtils.parseMap(cfg.getConfig());
-            if (map != null && map.get("ocr_kind") != null) {
-                return String.valueOf(map.get("ocr_kind"));
-            }
-        }
-        return "deepseek_ocr";
-    }
-
-    /**
-     * 将 kb_model_config.config.adapter 映射为 python-vector 嵌入适配器名；
-     * config JSON 显式指定则优先，缺省 qwen（OpenAI 兼容）
-     */
-    private String mapProviderToEmbeddingAdapter(ModelConfigDO cfg) {
-        String explicit = extraAdapter(cfg);
-        if (StrUtil.isNotBlank(explicit)) {
-            return explicit;
-        }
-        return "qwen";
-    }
-
-    private String extraAdapter(ModelConfigDO cfg) {
-        if (StrUtil.isNotBlank(cfg.getConfig())) {
-            Map<String, Object> map = JsonUtils.parseMap(cfg.getConfig());
-            if (map != null && map.get("adapter") != null) {
-                return String.valueOf(map.get("adapter"));
-            }
-        }
-        return null;
-    }
-
-    /**
-     * 把 config JSON 中未消费的键合并进下发配置（用于维度等自定义字段）
-     */
-    private void putExtras(Map<String, Object> target, ModelConfigDO cfg) {
-        if (StrUtil.isBlank(cfg.getConfig())) {
-            return;
-        }
-        Map<String, Object> map = JsonUtils.parseMap(cfg.getConfig());
-        if (map == null) {
-            return;
-        }
-        for (Map.Entry<String, Object> e : map.entrySet()) {
-            if (e.getValue() != null && !target.containsKey(e.getKey()) && !"adapter".equals(e.getKey())) {
-                target.put(e.getKey(), e.getValue());
-            }
-        }
     }
 }

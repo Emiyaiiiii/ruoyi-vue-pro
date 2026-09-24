@@ -9,7 +9,9 @@ import cn.iocoder.yudao.framework.tenant.core.context.TenantContextHolder;
 import cn.iocoder.yudao.module.agent.dal.dataobject.agent.AiAgentDO;
 import cn.iocoder.yudao.module.agent.dal.mysql.agent.AiAgentMapper;
 import cn.iocoder.yudao.module.agent.framework.config.QwenPawClient;
+import cn.iocoder.yudao.module.agent.service.agent.AiAgentService;
 import cn.iocoder.yudao.module.kb.dal.dataobject.library.LibraryDO;
+import cn.iocoder.yudao.module.kb.service.kbconfig.KbProcessConfigResolver;
 import cn.iocoder.yudao.module.kb.service.library.LibraryService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
@@ -49,6 +51,10 @@ public class AiChatSessionServiceImpl implements AiChatSessionService {
     private ThreadPoolTaskExecutor chatTaskExecutor;
     @Resource
     private LibraryService libraryService;
+    @Resource
+    private AiAgentService aiAgentService;
+    @Resource
+    private KbProcessConfigResolver kbProcessConfigResolver;
 
     // ==================== 会话 ====================
 
@@ -118,6 +124,9 @@ public class AiChatSessionServiceImpl implements AiChatSessionService {
         // 知识库检索范围注入：用户勾选 kbIds 时，把「库名(id)」拼进当轮消息前缀，
         // 供 LLM 填 search_knowledge_base 的 knowledge_base_ids 参数（QwenPaw 不改，提示词注入）。
         String scopePrefix = buildKbScopePrefix(kbIds);
+        // Wiki 研究员提示词运行时挂接：选中的 KB 中任一开启 wiki → 注入 WIKI_GUIDE，
+        // 否则摘除（与知识库问答开关解耦，避免模型误用 wiki 工具）。
+        applyWikiGuideForKbs(qwenpawAgentId, kbIds);
         if (StrUtil.isNotEmpty(scopePrefix) && contentItems != null && !contentItems.isEmpty()) {
             // 若以 content 数组发送，找到首个 text 项，把前缀拼进其 text 开头
             for (Map<String, Object> item : contentItems) {
@@ -299,6 +308,38 @@ public class AiChatSessionServiceImpl implements AiChatSessionService {
         try {
             emitter.complete();
         } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * 按用户选中的 KB 集合判定是否注入 Wiki 研究员提示词（WIKI_GUIDE.md）。
+     *
+     * <p>任一选中的知识库开启了 wiki 后处理（resolvePostprocessConfig 的 wiki_enabled）即注入，
+     * 否则摘除。与「知识库问答」开关解耦：即便开了问答但选中的库都没开 wiki，也不注入，
+     * 避免模型在非 wiki 场景误调 wiki_* 工具。调用失败仅告警，不阻断问答主流程。
+     */
+    private void applyWikiGuideForKbs(String qwenpawAgentId, List<Long> kbIds) {
+        boolean wikiEnabled = false;
+        if (kbIds != null && !kbIds.isEmpty()) {
+            for (Long kbId : kbIds) {
+                if (kbId == null) {
+                    continue;
+                }
+                try {
+                    Object cfg = kbProcessConfigResolver.resolvePostprocessConfig(kbId).get("wiki_enabled");
+                    if (Boolean.TRUE.equals(cfg)) {
+                        wikiEnabled = true;
+                        break;
+                    }
+                } catch (Exception e) {
+                    log.debug("[applyWikiGuideForKbs] 判定 kb={} wiki 开关失败，忽略", kbId, e);
+                }
+            }
+        }
+        try {
+            aiAgentService.applyWikiGuidePrompt(qwenpawAgentId, wikiEnabled);
+        } catch (Exception e) {
+            log.warn("[applyWikiGuideForKbs] 注入/摘除 WIKI_GUIDE 失败，agentId={}", qwenpawAgentId, e);
         }
     }
 

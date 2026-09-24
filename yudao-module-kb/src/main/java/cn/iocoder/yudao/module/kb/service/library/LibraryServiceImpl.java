@@ -195,11 +195,13 @@ public class LibraryServiceImpl implements LibraryService {
                 .eq(ShareDeptDO::getKbId, id));
         // 删除自定义字段值
         libraryExtService.removeAllByKbId(id);
-        // 级联删除库下全部文档与文件夹（含源文件/向量/向量任务清理，避免孤儿）
+        // 级联删除库下全部文档与文件夹（含源文件/向量/向量任务清理；wiki 由 documentService.deleteByKbId 联动，避免孤儿）
         documentService.deleteByKbId(id);
         folderMapper.deleteByKbId(id);
         // 删除
         libraryMapper.deleteById(id);
+        // 发布 KB 配置删除（python-vector 删除 Redis kb:process:config:{kb_id}，与 create/update 对称）
+        kbProcessConfigResolver.publishKbConfigDelete(id);
     }
 
     @Override
@@ -218,12 +220,16 @@ public class LibraryServiceImpl implements LibraryService {
             shareDeptMapper.delete(new LambdaQueryWrapper<ShareDeptDO>()
                     .eq(ShareDeptDO::getKbId, id));
             libraryExtService.removeAllByKbId(id);
-            // 级联删除库下全部文档与文件夹（含源文件/向量/向量任务清理，避免孤儿）
+            // 级联删除库下全部文档与文件夹（含源文件/向量/向量任务清理；wiki 由 documentService.deleteByKbId 联动，避免孤儿）
             documentService.deleteByKbId(id);
             folderMapper.deleteByKbId(id);
         }
         // 最后批量删除知识库
         libraryMapper.deleteByIds(ids);
+        // 批量发布 KB 配置删除（python-vector 清理对应 Redis 缓存）
+        for (Long id : ids) {
+            kbProcessConfigResolver.publishKbConfigDelete(id);
+        }
     }
 
     /**

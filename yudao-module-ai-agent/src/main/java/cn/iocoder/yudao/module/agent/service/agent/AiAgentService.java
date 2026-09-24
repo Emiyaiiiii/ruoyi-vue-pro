@@ -172,4 +172,16 @@ public interface AiAgentService {
      */
     void deleteQwenpawMcp(Long agentId, String clientKey);
 
+    /**
+     * 按 QwenPaw 智能体 ID 注入/摘除 Wiki 研究员指南提示词（WIKI_GUIDE.md）。
+     *
+     * <p>由问答会话在「用户选中的 KB 中任一开启 wiki」时调用（对齐 WeKnora
+     * builtin-wiki-researcher）：开启则把 WeKnora wiki_researcher 系统提示词写入
+     * QwenPaw 工作区并加入 system_prompt_files；关闭则摘除。幂等。
+     *
+     * @param qwenpawAgentId QwenPaw 智能体 ID
+     * @param enabled        是否注入
+     */
+    void applyWikiGuidePrompt(String qwenpawAgentId, boolean enabled);
+
 }
