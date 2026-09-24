@@ -93,6 +93,17 @@ public interface LibraryService {
     boolean canManage(Long kbId);
 
     /**
+     * 判断当前用户是否可见该知识库（第一层列表可见性；超管/租户管理员短路放行）。
+     *
+     * <p>用于智能体问答等场景校验用户勾选的 kbIds，防止越权检索到不可见库的内容。
+     * 与列表页可见性同源（VisibilityRuleEngine.canSee）：配置缺失/无对应规则处理器 → 不可见。
+     *
+     * @param kbId 知识库ID
+     * @return true=对当前用户可见
+     */
+    boolean canSeeKb(Long kbId);
+
+    /**
      * 批量判断当前用户对已查出的知识库是否有管理权限。
      * 一次构建可见性上下文，供 C 端列表填充 can_manage。
      */

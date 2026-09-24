@@ -7,20 +7,25 @@
 ```
 ┌─────────────────────────────────────────────────────┐
 │                    第一层：列表可见性                    │
-│        KbVisibilityServiceImpl.filterVisible()         │
+│          VisibilityRuleEngine.filterVisible()         │
+│        规则引擎 + VisibilityRuleHandler 策略           │
 │    控制用户能看到哪些知识库（知识库列表页）                │
 ├─────────────────────────────────────────────────────┤
 │                    第二层：管理权限                      │
 │       LibraryServiceImpl.validateManagementPermission() │
+│              （内部委托 ruleEngine.canManage）          │
 │    控制用户能否对知识库执行增/删/改操作                   │
 ├─────────────────────────────────────────────────────┤
 │                    第三层：内容访问                      │
 │      DocumentController.validateProjectContentAccess()  │
+│        （内部委托 libraryService.canOpenProjectLibrary） │
 │    控制用户能否查看项目成果库的文档内容                   │
 └─────────────────────────────────────────────────────┘
 ```
 
-**超级管理员/租户管理员绕过机制**：三层权限校验均在最前面判断用户是否为超级管理员或租户管理员，如是则直接放行，拥有所有权限。
+**超级管理员/租户管理员绕过机制**：三层权限校验均在引擎/入口处判断用户是否为超级管理员或租户管理员，如是则直接放行，拥有所有权限。
+
+**可见性规则引擎（2026 重构）**：第一层与第二层由 `VisibilityRuleEngine` 统一承载（`service/library/rule/` 包）——`buildContext` 一次构建可见性上下文，`filterVisible`/`canSee`/`canManage`/`buildSqlConditions` 统一入口；每个 `visibility_rule` 值对应一个 `VisibilityRuleHandler` 策略实现（新增规则只需新增 Bean，不改分发逻辑）；分页查询的可见性过滤**下推到 SQL**（`toSqlCondition`，OR 组合）。
 
 ---
 
@@ -46,8 +51,8 @@
 |------|------|
 | `level_code` | 层级编码，如 `personal`、`dept`、`company` |
 | `level_name` | 层级名称，如"个人知识库"、"院级知识库" |
-| `visibility_rule` | 可见规则：1=按所有者, 2=按归属部门, 3=全员, 5=指定部门列表, 6=知识库广场 |
-| `owner_dim` | 归属维度：0=无, 1=用户, 2=部门 |
+| `visibility_rule` | 可见规则（对应 `VisibilityRuleHandler` 策略）：1=按所有者, 2=按归属部门, 3=全员, 5=指定部门列表（原 6=知识库广场已废弃，广场改为 `kb_library.is_public=1` 字段 + 独立广场视图，不走规则级过滤） |
+| `owner_dim` | 归属维度：0=无, 1=用户, 2=部门（rule=5 管理权限按此分流） |
 | `dept_scope` | 分类可见部门范围：NULL=全员, JSON数组如[101,102] |
 
 ### 2.3 知识库（kb_library）—— 权限判断的对象
@@ -63,77 +68,73 @@
 
 ## 三、三层权限校验详解
 
-### 第一层：列表可见性（KbVisibilityServiceImpl.filterVisible）
+### 第一层：列表可见性（VisibilityRuleEngine.filterVisible）
 
-**作用**：在知识库列表页，过滤出当前用户可见的知识库。
+**作用**：在知识库列表页，过滤出当前用户可见的知识库；分页场景下推 SQL 条件，不逐条 Java 过滤。
 
-**校验逻辑**：
-
-```java
-// 按 visibility_rule 分流
-switch (visibilityRule) {
-    case 1:  // 按所有者 → 仅创建者本人可见
-        return ownerId == userId;
-    case 2:  // 按归属部门 → 通过 kb_user_dept 判断用户是否属于该部门
-        return userDeptIds.contains(ownerId);
-    case 3:  // 全员 → 所有人可见
-        return true;
-    case 5:  // 指定部门列表 → 用户部门是否在 kb_share_dept 中
-        return shareDeptMapper.count(kbId, userDeptId) > 0;
-    case 6:  // 知识库广场 → 全员可见
-        return true;
-}
-```
-
-**支持一人多院**：预加载用户关联的所有部门ID（`kbUserDeptMapper.selectDeptIdsByUserId`），case 2 时逐一匹配。
-
-### 第二层：管理权限（LibraryServiceImpl.validateManagementPermission）
-
-**作用**：控制用户能否编辑、删除知识库。
-
-**校验逻辑**：
+**上下文构建**（`buildContext`，一次计算多处复用）：
 
 ```java
-// 超级管理员/租户管理员 → 直接放行
-if (isSuperAdmin || isTenantAdmin) return;
-
-switch (visibilityRule) {
-    case 1:  // 个人知识库 → 仅所有者本人可管理
-        if (ownerId != userId) 拒绝;
-    case 2:  // 院级/咨询评估
-    case 3:  // 公司级 → 该部门管理员(role=1)可管理
-        if (!kbUserDeptMapper.isAdmin(userId, ownerId)) 拒绝;
-    // 其他规则不在此处校验（由 API 层权限控制）
-}
+VisibilityContext ctx = VisibilityContext.builder()
+    .userId(userId)
+    .superAdmin(isSuper)                       // 超管/租户管理员短路
+    .userDeptIds(kbUserDeptService.getDeptIdsByUserId(userId))      // 用户关联部门
+    .visibleDeptIds(userDeptIds + 各部门祖先链)   // 含祖先部门（部门层级继承可见）
+    .build();
 ```
 
-### 第三层：内容访问（DocumentController.validateProjectContentAccess）
+**规则分发**（`VisibilityRuleEngine.canSee` → 对应 `VisibilityRuleHandler`）：
 
-**作用**：控制项目成果库的文档内容访问，仅项目成员可查看文档。
+| rule | Handler | 可见性逻辑 |
+|---|---|---|
+| 1 | `PersonalRuleHandler` | 仅所有者本人：`ownerId == userId` |
+| 2 | `DeptRuleHandler` | 归属部门可见：`ownerId ∈ 用户部门 ∪ 祖先部门`（上级部门库对下级成员可见） |
+| 3 | `CompanyRuleHandler` | 全员可见：`true` |
+| 5 | `SharedDeptRuleHandler` | 用户任一部门在 `kb_share_dept` 共享列表中：`shareDeptMapper.count > 0` |
 
-**校验逻辑**：
+> **部门层级继承**：用户可见部门 = 其所属部门 + 这些部门的祖先部门（`getDeptAncestorIds`），例如「规划处」成员可见「水利院」「公司总部」等上级部门的库。无对应 handler（如 rule=6 已废弃）或配置缺失 → 不可见（`canSee` 返回 false；`canManage` 放行交由 API 层兜底）。
+
+### 第二层：管理权限（LibraryServiceImpl.validateManagementPermission → ruleEngine.canManage）
+
+**作用**：控制用户能否编辑、删除知识库（创建/编辑/删除/上传均走此校验）。
+
+```java
+// 超管/租户管理员短路由 VisibilityRuleEngine.canManage 统一处理
+boolean canManage = ruleEngine.canManage(ctx, library);
+```
+
+| rule | 管理权限逻辑 |
+|---|---|
+| 1 | 仅所有者本人：`ownerId == userId` |
+| 2 | `ownerId` 部门的管理员（`isAdmin` 精确匹配），或该部门**祖先部门**的管理员（上级管理员可管下级库） |
+| 3 | 同 rule=2（ownerId 部门或其祖先部门管理员） |
+| 5 | 按 `ownerDim` 分流：`owner_dim=1`（用户归属）→ 仅所有者本人；`owner_dim=2`（部门归属）→ 该部门或其祖先部门管理员 |
+
+### 第三层：内容访问（DocumentController.validateProjectContentAccess → canOpenProjectLibrary）
+
+**作用**：控制项目成果库（`is_project=1`）的文档内容访问。非项目库直接放行。
 
 ```java
 // 非项目成果库 → 无额外限制
-if (isProject != 1) return;
-
-// 超级管理员/租户管理员 → 直接放行
-if (isSuperAdmin || isTenantAdmin) return;
-
-// 项目成员校验
-if (!projectMemberService.isMember(kbId, userId)) 拒绝;
+if (lib.getIsProject() != 1) return;
+// 超管/租户管理员短路
+if (admin) return;
+// 实时读「打开依据成员字段」ext 值判断（kb_library_ext）
+if (!libraryService.canOpenProjectLibrary(kbId)) 拒绝;
 ```
+
+**打开依据可配置**：项目成果库的"谁能打开"由 `kb_library_ext` 扩展字段（`open_by` 等）实时决定（成员/部门等维度），`canOpenProjectLibrary` 每次按当前 ext 值判断，不再写死为"仅项目成员"。
 
 ### 三层校验汇总表
 
 | 知识库类型 | visibility_rule | 第一层：可见性 | 第二层：管理权限 | 第三层：内容访问 |
 |-----------|:---------------:|:--------------:|:----------------:|:----------------:|
 | 个人知识库 | 1 | 仅创建者可见 | 仅创建者可管理 | — |
-| 院级知识库 | 2 | 该院成员可见 | 该院管理员可管理 | — |
-| 公司知识库 | 3 | 全员可见 | 公司管理员可管理 | — |
-| 共享知识库 | 5 | 指定部门成员可见 | 不在此层校验 | — |
-| 知识库广场 | 6 | 全员可见 | 不在此层校验 | — |
-| 项目成果库 | 任意 | 按对应规则 | 按对应规则 | 仅项目成员可查看文档 |
+| 院级知识库 | 2 | 该院成员可见（含上级部门继承） | 该院或其祖先部门管理员可管理 | — |
+| 公司知识库 | 3 | 全员可见 | 公司部门管理员可管理 | — |
+| 共享知识库 | 5 | 指定部门成员可见（按 owner_dim 定管理） | 按 owner_dim：用户→仅所有者 / 部门→部门管理员 | — |
+| 知识库广场 | —（`is_public=1` 字段） | 全员可见（独立广场视图） | 按原层级规则 | — |
+| 项目成果库 | 任意 | 按对应规则 | 按对应规则 | 按「打开依据」ext 实时判断（成员/部门等），超管短路 |
 | 超管/租户管理员 | — | 全部可见 | 全部可管理 | 全部可访问 |
 
 ---
@@ -249,15 +250,17 @@ if (!projectMemberService.isMember(kbId, userId)) 拒绝;
 
 ### 5.2 共享部门（share_dept）的使用场景
 
-- `visibility_rule=5` 时需配合使用
+- `visibility_rule=5` 时需配合使用，由 `SharedDeptRuleHandler` 实现（用户任一部门命中 `kb_share_dept` 即可见）
 - 本质是实现"跨部门可见"的扩展机制
-- 当前系统未使用该规则（所有分类均配置为 1/2/3 规则）
+- 管理权限按 `owner_dim` 分流：`owner_dim=1`（用户归属）→ 仅所有者本人；`owner_dim=2`（部门归属）→ 该部门或其祖先部门管理员
+- 默认种子数据中各分类多配置为 1/2/3 规则，5 规则按需启用
 
 ### 5.3 项目成果库（is_project）的特殊性
 
 - `is_project=1` 是一个**叠加层**，不影响原有的可见规则和管理权限
 - 在原有的三层权限之上，额外增加第四层：文档内容访问控制
-- 超级管理员/租户管理员不受项目成员限制，可查看所有项目成果库的文档
+- 打开依据可配置（`kb_library_ext` 的 `open_by` 等字段，成员/部门等维度），`canOpenProjectLibrary` 实时读取判断
+- 超级管理员/租户管理员不受打开依据限制，可查看所有项目成果库的文档
 
 ### 5.4 角色与权限对应关系
 
@@ -265,9 +268,9 @@ if (!projectMemberService.isMember(kbId, userId)) 拒绝;
 |------|-------------|-------------|-------------|
 | 超级管理员 | 全部知识库 | 全部知识库 | 全部项目成果库 |
 | 租户管理员 | 全部知识库 | 全部知识库 | 全部项目成果库 |
-| 部门管理员 | 所在部门知识库 | 所在部门知识库 | 无（需单独添加为项目成员） |
-| 部门成员 | 所在部门知识库 | 仅个人知识库 | 无（需单独添加为项目成员） |
-| 普通用户 | 仅个人知识库+公司级 | 仅个人知识库 | 无（需单独添加为项目成员） |
+| 部门管理员 | 所在部门知识库（含下级部门成员视角：上级库可见） | 所在部门及其**下级部门**的知识库（祖先链管理） | 按「打开依据」ext 判断 |
+| 部门成员 | 所在部门知识库 + 上级部门库 | 仅个人知识库 | 按「打开依据」ext 判断 |
+| 普通用户 | 仅个人知识库+公司级 | 仅个人知识库 | 按「打开依据」ext 判断 |
 
 ---
 
@@ -364,8 +367,10 @@ if (!projectMemberService.isMember(kbId, userId)) 拒绝;
 
 | 权限层 | 文件 | 关键方法 |
 |--------|------|----------|
-| 列表可见性 | `KbVisibilityServiceImpl.java` | `filterVisible()` |
-| 管理权限 | `LibraryServiceImpl.java` | `validateManagementPermission()` |
-| 内容访问 | `DocumentController.java` | `validateProjectContentAccess()` |
-| 部门关联查询 | `KbUserDeptMapper.java` | `selectDeptIdsByUserId()`, `isAdmin()` |
-| 项目成员查询 | `ProjectMemberServiceImpl.java` | `isMember()` |
+| 可见性引擎 | `service/library/rule/VisibilityRuleEngine.java` | `buildContext()`、`filterVisible()`、`canSee()`、`canManage()`、`buildSqlConditions()` |
+| 规则策略（按 rule） | `service/library/rule/`（`PersonalRuleHandler`=1 / `DeptRuleHandler`=2 / `CompanyRuleHandler`=3 / `SharedDeptRuleHandler`=5） | `canSee()`、`canManage()`、`toSqlCondition()` |
+| 管理权限 | `LibraryServiceImpl.java` | `validateManagementPermission()`（委托 `ruleEngine.canManage`）、`canManage(kbId)`、`canManageMap()` |
+| 内容访问 | `DocumentController.java` | `validateProjectContentAccess()`（委托 `libraryService.canOpenProjectLibrary`） |
+| 项目库打开 | `LibraryServiceImpl.java` | `canOpenProjectLibrary()`、`isProjectMemberByField()`（按 `kb_library_ext` 打开依据实时判断） |
+| 部门关联查询 | `KbUserDeptService` / `KbUserDeptServiceImpl` | `getDeptIdsByUserId()`、`getDeptAncestorIds()`、`isAdmin()`、`isMember()` |
+| 共享部门 | `ShareDeptMapper` | `selectCount(kbId, deptIds)` |

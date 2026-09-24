@@ -121,12 +121,14 @@ public class AiChatSessionServiceImpl implements AiChatSessionService {
         // 会话级免审批：用户在该会话内选择不再弹工具审批框时，透传 request_context.approval_level=off
         Map<String, Object> requestContext = approvalOff
                 ? java.util.Collections.singletonMap("approval_level", "off") : null;
-        // 知识库检索范围注入：用户勾选 kbIds 时，把「库名(id)」拼进当轮消息前缀，
+        // 知识库检索范围注入：用户勾选 kbIds 时，先按第一层可见性过滤（权限校验由 Java 端负责，
+        // 剔除当前用户不可见的库，防止越权检索其它租户/不可见库内容），再把「库名(id)」拼进当轮消息前缀，
         // 供 LLM 填 search_knowledge_base 的 knowledge_base_ids 参数（QwenPaw 不改，提示词注入）。
-        String scopePrefix = buildKbScopePrefix(kbIds);
+        List<Long> effectiveKbIds = filterVisibleKbIds(kbIds);
+        String scopePrefix = buildKbScopePrefix(effectiveKbIds);
         // Wiki 研究员提示词运行时挂接：选中的 KB 中任一开启 wiki → 注入 WIKI_GUIDE，
         // 否则摘除（与知识库问答开关解耦，避免模型误用 wiki 工具）。
-        applyWikiGuideForKbs(qwenpawAgentId, kbIds);
+        applyWikiGuideForKbs(qwenpawAgentId, effectiveKbIds);
         if (StrUtil.isNotEmpty(scopePrefix) && contentItems != null && !contentItems.isEmpty()) {
             // 若以 content 数组发送，找到首个 text 项，把前缀拼进其 text 开头
             for (Map<String, Object> item : contentItems) {
@@ -341,6 +343,35 @@ public class AiChatSessionServiceImpl implements AiChatSessionService {
         } catch (Exception e) {
             log.warn("[applyWikiGuideForKbs] 注入/摘除 WIKI_GUIDE 失败，agentId={}", qwenpawAgentId, e);
         }
+    }
+
+    /**
+     * 过滤当前用户不可见的知识库（第一层可见性，权限校验由 Java 端负责）。
+     *
+     * <p>kbIds 由前端勾选/请求体传入，可能含用户不可见（其它租户/无权限）的库；检索链路
+     * （python MCP）只按传入 kb_id 过滤、不做归属校验，故此处统一剔除不可见项，防止越权检索。
+     * 校验失败/库不存在按不可见处理；过滤后为空时保持「未勾选库」语义（不注入范围前缀）。
+     */
+    private List<Long> filterVisibleKbIds(List<Long> kbIds) {
+        if (kbIds == null || kbIds.isEmpty()) {
+            return kbIds;
+        }
+        List<Long> visible = new ArrayList<>();
+        for (Long kbId : kbIds) {
+            if (kbId == null) {
+                continue;
+            }
+            try {
+                if (libraryService.canSeeKb(kbId)) {
+                    visible.add(kbId);
+                } else {
+                    log.warn("[sendMessageStream] 剔除不可见知识库 kbId={}（越权检索防护）", kbId);
+                }
+            } catch (Exception e) {
+                log.debug("[sendMessageStream] 校验知识库可见性失败，按不可见剔除 kbId={}", kbId, e);
+            }
+        }
+        return visible;
     }
 
     /**

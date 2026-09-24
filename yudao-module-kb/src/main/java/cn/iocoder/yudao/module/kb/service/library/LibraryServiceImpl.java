@@ -505,6 +505,22 @@ public class LibraryServiceImpl implements LibraryService {
     }
 
     @Override
+    public boolean canSeeKb(Long kbId) {
+        if (kbId == null) return false;
+        Long userId = SecurityFrameworkUtils.getLoginUserId();
+        LibraryDO library = libraryMapper.selectById(kbId);
+        if (library == null) {
+            log.debug("[可见性校验] userId={} kbId={} 库不存在 → false", userId, kbId);
+            return false;
+        }
+        // 与列表页第一层可见性同源：超管/租户管理员短路放行；规则/配置缺失 → 不可见
+        VisibilityContext ctx = ruleEngine.buildContext(userId);
+        boolean result = ruleEngine.canSee(ctx, library);
+        log.debug("[可见性校验] userId={} kbId={} name={} → {}", userId, kbId, library.getName(), result);
+        return result;
+    }
+
+    @Override
     public Map<Long, Boolean> canManageMap(List<LibraryDO> libraries) {
         if (CollUtil.isEmpty(libraries)) {
             return Collections.emptyMap();
