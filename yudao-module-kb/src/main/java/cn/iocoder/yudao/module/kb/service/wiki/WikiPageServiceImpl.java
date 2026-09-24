@@ -124,6 +124,7 @@ public class WikiPageServiceImpl implements WikiPageService {
             vo.setSlug(StrUtil.toString(it.get("slug")));
             vo.setIssueType(StrUtil.toString(it.get("issue_type")));
             vo.setDescription(StrUtil.toString(it.get("description")));
+            vo.setSuspectedKnowledgeIds(toStringList(it.get("suspected_knowledge_ids")));
             vo.setStatus(StrUtil.toString(it.get("status")));
             vo.setReportedBy(StrUtil.toString(it.get("reported_by")));
             return vo;
