@@ -7,6 +7,7 @@ import cn.iocoder.yudao.module.kb.controller.admin.wiki.vo.WikiRevisionRespVO;
 import cn.iocoder.yudao.module.kb.controller.admin.wiki.vo.WikiRevertReqVO;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * Wiki 页面 Service（对标 WeKnora wiki_page.service）
@@ -50,4 +51,39 @@ public interface WikiPageService {
 
     /** 统计某知识库待处理问题数 */
     Long countPendingIssues(Long kbId);
+
+    /** 收尾重建：死链清理 + 交叉链接 + 入链重建 + index 兜底（python 纯算法，不调 LLM） */
+    Map<String, Object> rebuildLinks(Long kbId);
+
+    /** Wiki 健康统计：页数（按类型）/ 链接数 / 孤立页 / 死链数 / 待处理 issue 数 */
+    Map<String, Object> stats(Long kbId);
+
+    /** 最近一次 Wiki 攒批状态（阶段② WikiScheduler 批处理进度 + 待处理文档数） */
+    Map<String, Object> batchLatest(Long kbId);
+
+    /** Wiki 质量检查（孤立页/死链/空内容/失效来源/缺失交叉链接 + 健康分） */
+    Map<String, Object> lint(Long kbId);
+
+    /** 自动修复可修项：死链拆文本 / 空内容归档 / 失效来源清理（纯算法，不含 LLM） */
+    Map<String, Object> autoFix(Long kbId);
+
+    // ---- 独立目录实体（P1-1） ----
+
+    /** 目录实体树（含每目录直接挂载页数） */
+    List<Map<String, Object>> folderTree(Long kbId);
+
+    /** 创建目录 */
+    Map<String, Object> createFolder(Long kbId, String name, String parentId);
+
+    /** 重命名目录（级联子树） */
+    Map<String, Object> renameFolder(Long kbId, String folderId, String name);
+
+    /** 移动目录到新父级 */
+    Map<String, Object> moveFolder(Long kbId, String folderId, String parentId);
+
+    /** 删除目录及整棵子树（页面归位根） */
+    Map<String, Object> deleteFolder(Long kbId, String folderId);
+
+    /** 移动页面到指定目录 */
+    Map<String, Object> movePage(Long kbId, String slug, String folderId);
 }

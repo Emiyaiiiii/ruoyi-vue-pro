@@ -5,6 +5,8 @@ import cn.iocoder.yudao.framework.mybatis.core.query.LambdaQueryWrapperX;
 import cn.iocoder.yudao.module.kb.dal.dataobject.wiki.WikiPageRevisionDO;
 import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
 
 import java.util.List;
 
@@ -43,4 +45,24 @@ public interface WikiPageRevisionMapper extends BaseMapperX<WikiPageRevisionDO> 
      */
     @Delete("DELETE FROM kb_wiki_revision WHERE kb_id = #{kbId} AND deleted = b'0'")
     int deletePhysicallyByKbId(Long kbId);
+
+    // ==================== 两级保留裁剪（对齐 WeKnora WikiRevisionPruneRequest） ====================
+
+    /** 取某页当前最大修订号（裁剪阈值计算用） */
+    @Select("SELECT MAX(revision) FROM kb_wiki_revision WHERE kb_id = #{kbId} AND slug = #{slug} AND deleted = b'0'")
+    Integer selectMaxRevision(@Param("kbId") Long kbId, @Param("slug") String slug);
+
+    /**
+     * 软上限裁剪：仅物理删除「可裁剪来源」的旧快照——pipeline 生成 + 历史遗留空来源，
+     * 人工/Agent/回滚记录不受软上限影响（对齐 WeKnora WikiPrunableEditSources）。
+     */
+    @Delete("DELETE FROM kb_wiki_revision WHERE kb_id = #{kbId} AND slug = #{slug} " +
+            "AND revision <= #{threshold} AND (edit_source IS NULL OR edit_source IN ('', 'pipeline'))")
+    int deletePrunableBelow(@Param("kbId") Long kbId, @Param("slug") String slug,
+                            @Param("threshold") Integer threshold);
+
+    /** 硬上限裁剪：不分来源，物理删除全部旧快照，保证存储有界 */
+    @Delete("DELETE FROM kb_wiki_revision WHERE kb_id = #{kbId} AND slug = #{slug} AND revision <= #{threshold}")
+    int deleteBelow(@Param("kbId") Long kbId, @Param("slug") String slug,
+                    @Param("threshold") Integer threshold);
 }

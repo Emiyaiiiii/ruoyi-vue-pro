@@ -74,6 +74,14 @@ public interface ModelConfigService {
     ModelConfigTestRespVO testModelConfig(ModelConfigTestReqVO reqVO);
 
     /**
+     * 探测模型参数（OpenAI 兼容接口自动获取最大Token/上下文长度/多模态/思考能力等）
+     *
+     * @param reqVO 探测请求
+     * @return 探测结果
+     */
+    ModelConfigDetectRespVO detectModelParams(ModelConfigDetectReqVO reqVO);
+
+    /**
      * 复制模型配置
      *
      * @param reqVO 复制请求

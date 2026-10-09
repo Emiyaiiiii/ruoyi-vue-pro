@@ -52,6 +52,9 @@ public class KbProcessConfigResolver {
     private static final Set<String> POSTPROCESS_KEYS = new HashSet<>(Arrays.asList(
             "question_enabled", "summary_enabled", "graph_enabled",
             "extract_enabled", "wiki_enabled"));
+    /** postprocess.wiki 二级子对象白名单（Wiki 抽取粒度等，对齐 WeKnora WikiConfig 子集） */
+    private static final Set<String> POSTPROCESS_WIKI_KEYS = new HashSet<>(Arrays.asList(
+            "granularity", "citation_batch_runes", "citation_concurrency", "reduce_concurrency"));
 
     /** 内置默认切片参数（与 python-vector ingest/task.py 默认对齐） */
     private static final Map<String, Object> DEFAULT_CHUNKING = new LinkedHashMap<>();
@@ -180,7 +183,8 @@ public class KbProcessConfigResolver {
 
     /**
      * 合并后处理配置（#10）：KB 级 postprocess > 全部默认 false。
-     * 返回布尔开关映射：{question_enabled, summary_enabled, graph_enabled, extract_enabled, wiki_enabled}。
+     * 返回布尔开关映射：{question_enabled, summary_enabled, graph_enabled, extract_enabled, wiki_enabled}，
+     * 以及可选的二级子对象 postprocess.wiki（Wiki 抽取粒度等）。
      * 供入库后处理阶段（python-vector）按开关执行；缺模型时 python 侧静默跳过。
      */
     public Map<String, Object> resolvePostprocessConfig(Long kbId) {
@@ -188,7 +192,10 @@ public class KbProcessConfigResolver {
         for (String key : POSTPROCESS_KEYS) {
             result.put(key, false);
         }
-        mergeGroup(result, getKbProcessConfig(kbId), "postprocess", POSTPROCESS_KEYS);
+        Map<String, Object> kbConfig = getKbProcessConfig(kbId);
+        mergeGroup(result, kbConfig, "postprocess", POSTPROCESS_KEYS);
+        // 二级子对象：postprocess.wiki.{granularity/citation_batch_runes/citation_concurrency}
+        mergeNestedGroup(result, kbConfig, "postprocess", "wiki", POSTPROCESS_WIKI_KEYS);
         return result;
     }
 
@@ -488,6 +495,33 @@ public class KbProcessConfigResolver {
             if (allowedKeys.contains(key) && entry.getValue() != null) {
                 target.put(key, entry.getValue());
             }
+        }
+    }
+
+    /**
+     * 合并二级嵌套组（如 postprocess.wiki.{granularity}）：源为 Map 且子对象存在时，
+     * 按白名单过滤空值后写入 target[subGroup]；无有效键则不写入（保持缺省回退）。
+     */
+    private void mergeNestedGroup(Map<String, Object> target, Map<String, Object> kbConfig,
+                                  String group, String subGroup, Set<String> allowedKeys) {
+        Object groupObj = kbConfig.get(group);
+        if (!(groupObj instanceof Map)) {
+            return;
+        }
+        Object subObj = ((Map<?, ?>) groupObj).get(subGroup);
+        if (!(subObj instanceof Map)) {
+            return;
+        }
+        Map<String, Object> nested = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : ((Map<?, ?>) subObj).entrySet()) {
+            String key = String.valueOf(entry.getKey());
+            Object value = entry.getValue();
+            if (allowedKeys.contains(key) && value != null && !"".equals(value)) {
+                nested.put(key, value);
+            }
+        }
+        if (!nested.isEmpty()) {
+            target.put(subGroup, nested);
         }
     }
 

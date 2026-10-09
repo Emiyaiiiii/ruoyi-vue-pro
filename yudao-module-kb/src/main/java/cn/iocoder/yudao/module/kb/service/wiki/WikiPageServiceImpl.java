@@ -148,6 +148,74 @@ public class WikiPageServiceImpl implements WikiPageService {
     }
 
     @Override
+    public Map<String, Object> rebuildLinks(Long kbId) {
+        validateKbManage(kbId);
+        return wikiPythonClient.rebuildLinks(kbId);
+    }
+
+    @Override
+    public Map<String, Object> stats(Long kbId) {
+        validateKbView(kbId);
+        return wikiPythonClient.stats(kbId);
+    }
+
+    @Override
+    public Map<String, Object> batchLatest(Long kbId) {
+        validateKbView(kbId);
+        return wikiPythonClient.batchLatest(kbId);
+    }
+
+    @Override
+    public Map<String, Object> lint(Long kbId) {
+        validateKbView(kbId);
+        return wikiPythonClient.lint(kbId);
+    }
+
+    @Override
+    public Map<String, Object> autoFix(Long kbId) {
+        validateKbManage(kbId);
+        return wikiPythonClient.autoFix(kbId);
+    }
+
+    // ---- 独立目录实体（P1-1） ----
+
+    @Override
+    public List<Map<String, Object>> folderTree(Long kbId) {
+        validateKbView(kbId);
+        return wikiPythonClient.folderTree(kbId);
+    }
+
+    @Override
+    public Map<String, Object> createFolder(Long kbId, String name, String parentId) {
+        validateKbManage(kbId);
+        return wikiPythonClient.createFolder(kbId, name, parentId);
+    }
+
+    @Override
+    public Map<String, Object> renameFolder(Long kbId, String folderId, String name) {
+        validateKbManage(kbId);
+        return wikiPythonClient.renameFolder(kbId, folderId, name);
+    }
+
+    @Override
+    public Map<String, Object> moveFolder(Long kbId, String folderId, String parentId) {
+        validateKbManage(kbId);
+        return wikiPythonClient.moveFolder(kbId, folderId, parentId);
+    }
+
+    @Override
+    public Map<String, Object> deleteFolder(Long kbId, String folderId) {
+        validateKbManage(kbId);
+        return wikiPythonClient.deleteFolder(kbId, folderId);
+    }
+
+    @Override
+    public Map<String, Object> movePage(Long kbId, String slug, String folderId) {
+        validateKbManage(kbId);
+        return wikiPythonClient.movePage(kbId, slug, folderId);
+    }
+
+    @Override
     public WikiPageRespVO getPage(Long kbId, String slug) {
         validateKbView(kbId);
         Map<String, Object> page = wikiPythonClient.page(kbId, slug);
@@ -313,6 +381,37 @@ public class WikiPageServiceImpl implements WikiPageService {
         } catch (DuplicateKeyException e) {
             log.debug("[insertRevisionSnapshot] 修订快照重复（并发），忽略 kb={} slug={} rev={}", kbId, slug, rev.getRevision());
         }
+        pruneRevisions(kbId, slug);
+    }
+
+    /**
+     * 两级修订保留裁剪（对齐 WeKnora WikiRevisionPruneRequest）：
+     * <ul>
+     *   <li>软上限 50：只裁剪「可裁剪来源」（pipeline 生成 / 历史遗留空来源），
+     *       人工编辑、Agent 与回滚产生的快照不受影响；</li>
+     *   <li>硬上限 200：不分来源一律裁剪，保证纯人工维护的页面存储也有界。</li>
+     * </ul>
+     * 裁剪为物理删除（否则表仍会持续增长）；失败仅告警，不影响主流程。
+     */
+    private void pruneRevisions(Long kbId, String slug) {
+        final int softLimit = 50;   // WeKnora WikiMaxRevisionsPerPage
+        final int hardCap = 200;    // WeKnora WikiMaxRevisionsHardCap
+        try {
+            Integer maxRev = wikiPageRevisionMapper.selectMaxRevision(kbId, slug);
+            if (maxRev == null) {
+                return;
+            }
+            int softThreshold = maxRev - softLimit;
+            if (softThreshold > 0) {
+                wikiPageRevisionMapper.deletePrunableBelow(kbId, slug, softThreshold);
+            }
+            int hardThreshold = maxRev - hardCap;
+            if (hardThreshold > 0) {
+                wikiPageRevisionMapper.deleteBelow(kbId, slug, hardThreshold);
+            }
+        } catch (Exception e) {
+            log.warn("[pruneRevisions] 裁剪修订失败 kb={} slug={}: {}", kbId, slug, e.getMessage());
+        }
     }
 
     private Map<String, Object> pageBody(WikiPageSaveReqVO reqVO) {
@@ -323,7 +422,8 @@ public class WikiPageServiceImpl implements WikiPageService {
         body.put("summary", reqVO.getSummary());
         body.put("aliases", parseAliases(reqVO.getAliases()));
         body.put("page_type", StrUtil.isBlank(reqVO.getPageType()) ? "manual" : reqVO.getPageType());
-        body.put("folder_path", new ArrayList<String>());
+        // 不写 folder_path/folder_id：由 python 侧保留既有目录归属（编辑正文不应把页面移出目录）。
+        // 新建页面时 python 侧无既有页，自然落到根目录。
         return body;
     }
 
@@ -342,6 +442,9 @@ public class WikiPageServiceImpl implements WikiPageService {
         vo.setSummary(StrUtil.toString(p.get("summary")));
         vo.setAliases(JsonUtils.toJsonString(p.get("aliases")));
         vo.setPageType(StrUtil.toString(p.get("page_type")));
+        // 目录实体归属：ES folder_id 为字符串 id（空/缺失 → 根目录）
+        Object fid = p.get("folder_id");
+        vo.setFolderId(fid == null ? null : StrUtil.toString(fid));
         vo.setCategoryPath(JsonUtils.toJsonString(p.get("folder_path")));
         vo.setDepth(toInt(p.get("depth")));
         // 链接/来源直接透传数组（对齐 WeKnora：in_links/out_links/source_refs 为字符串数组，前端按数组消费）

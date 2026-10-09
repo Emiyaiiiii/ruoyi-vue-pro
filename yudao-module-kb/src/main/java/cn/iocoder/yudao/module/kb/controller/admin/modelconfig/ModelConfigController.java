@@ -112,6 +112,13 @@ public class ModelConfigController {
         return success(modelConfigService.testModelConfig(reqVO));
     }
 
+    @PostMapping("/detect-params")
+    @Operation(summary = "探测大模型配置参数（OpenAI 兼容接口自动获取模型参数）")
+    @PreAuthorize("@ss.hasPermission('kb:model-config:test')")
+    public CommonResult<ModelConfigDetectRespVO> detectModelParams(@Valid @RequestBody ModelConfigDetectReqVO reqVO) {
+        return success(modelConfigService.detectModelParams(reqVO));
+    }
+
     @PostMapping("/copy")
     @Operation(summary = "复制大模型配置")
     @PreAuthorize("@ss.hasPermission('kb:model-config:copy')")

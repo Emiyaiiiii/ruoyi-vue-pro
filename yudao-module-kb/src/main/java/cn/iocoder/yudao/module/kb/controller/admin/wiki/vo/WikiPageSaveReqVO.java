@@ -39,8 +39,8 @@ public class WikiPageSaveReqVO {
     @Schema(description = "页面类型: manual/entity/concept/root")
     private String pageType;
 
-    @Schema(description = "所属目录ID(0=根)")
-    private Long folderId;
+    @Schema(description = "所属目录实体ID（空=根；目录实体 id 为 ES 侧生成的字符串）")
+    private String folderId;
 
     @Schema(description = "状态: draft/published/archived")
     private String status;

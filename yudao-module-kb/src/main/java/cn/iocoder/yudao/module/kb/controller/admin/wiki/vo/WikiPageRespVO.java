@@ -37,8 +37,8 @@ public class WikiPageRespVO {
     @Schema(description = "页面类型: summary/entity/concept/manual/root")
     private String pageType;
 
-    @Schema(description = "所属目录ID(0=根)")
-    private Long folderId;
+    @Schema(description = "所属目录实体ID（空=根；目录实体 id 为 ES 侧生成的字符串）")
+    private String folderId;
 
     @Schema(description = "目录层级路径(json)")
     private String categoryPath;
