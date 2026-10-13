@@ -584,6 +584,28 @@ public class QwenPawClient {
     }
 
     /**
+     * 设置 MCP 客户端的访问策略（default_effect），实现免审批自动调用检索工具。
+     *
+     * <p>对应 QwenPaw {@code PUT /api/mcp/policy/{clientKey}}，通过 X-Agent-Id 请求头指定 agent；
+     * default_effect=allow 表示该 MCP 下所有工具默认直接执行、不再弹审批。
+     * 幂等：重复设置同策略安全。
+     */
+    public void setMcpPolicy(String agentId, String clientKey, String defaultEffect) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("default_effect", defaultEffect);
+        body.put("client_overrides", new ArrayList<>());
+        body.put("tool_defaults", new ArrayList<>());
+        body.put("tool_overrides", new ArrayList<>());
+        body.put("unmanaged_rules_count", 0);
+        HttpHeaders headers = buildHeaders();
+        if (agentId != null && !agentId.isEmpty()) {
+            headers.set("X-Agent-Id", agentId);
+        }
+        HttpEntity<String> entity = new HttpEntity<>(toJson(body), headers);
+        exchange("/api/mcp/policy/" + encode(clientKey), HttpMethod.PUT, entity);
+    }
+
+    /**
      * 删除 MCP client
      */
     public void deleteMcp(String agentId, String clientKey) {
