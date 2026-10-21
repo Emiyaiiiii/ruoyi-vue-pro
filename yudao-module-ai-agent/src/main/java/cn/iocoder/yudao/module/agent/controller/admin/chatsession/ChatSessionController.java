@@ -12,6 +12,7 @@ import org.springframework.http.MediaTypeFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
+import jakarta.annotation.security.PermitAll;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -81,6 +82,27 @@ public class ChatSessionController {
         return success(chatSessionService.getChat(agentId, chatId));
     }
 
+    @PostMapping("/{chatId}/share")
+    @Operation(summary = "创建会话分享",
+            description = "为指定会话生成不透明分享 token（含有效期），返回后由前端拼成 /thread/{token} 链接。"
+                    + "需登录且对会话有访问权限。")
+    @Parameter(name = "chatId", description = "QwenPaw 会话 ID（UUID）", required = true)
+    @Parameter(name = "agentId", description = "智能体 ID", required = true)
+    @PreAuthorize("@ss.hasPermission('ai-agent:chat-session:query')")
+    public CommonResult<Map<String, Object>> createShare(@PathVariable("chatId") String chatId,
+                                                          @RequestParam("agentId") Long agentId) {
+        return success(chatSessionService.createShare(agentId, chatId));
+    }
+
+    @PermitAll
+    @GetMapping("/share/{token}")
+    @Operation(summary = "匿名获取分享会话内容",
+            description = "按分享 token 返回会话标题与消息列表，无需登录。链接由 createShare 生成。")
+    @Parameter(name = "token", description = "分享 token", required = true)
+    public CommonResult<Map<String, Object>> getSharedChat(@PathVariable("token") String token) {
+        return success(chatSessionService.getSharedChat(token));
+    }
+
     @DeleteMapping("/delete-chat")
     @Operation(summary = "删除 QwenPaw 会话")
     @PreAuthorize("@ss.hasPermission('ai-agent:chat-session:delete')")
@@ -97,6 +119,84 @@ public class ChatSessionController {
                                                         @RequestParam("chatId") String chatId,
                                                         @RequestParam("name") String name) {
         return success(chatSessionService.renameChat(agentId, chatId, name));
+    }
+
+    // ==================== 会话分组 ====================
+
+    @GetMapping("/groups")
+    @Operation(summary = "列出智能体下的会话分组")
+    @Parameter(name = "agentId", description = "智能体 ID（芋道 Java 主键）", required = true)
+    @PreAuthorize("@ss.hasPermission('ai-agent:chat-session:query')")
+    public CommonResult<List<Map<String, Object>>> listGroups(@RequestParam("agentId") Long agentId) {
+        return success(chatSessionService.listChatGroups(agentId));
+    }
+
+    @PostMapping("/groups")
+    @Operation(summary = "创建会话分组", description = "请求体 {\"name\": ...}")
+    @PreAuthorize("@ss.hasPermission('ai-agent:chat-session:create')")
+    public CommonResult<Map<String, Object>> createGroup(@RequestParam("agentId") Long agentId,
+                                                         @RequestBody Map<String, Object> body) {
+        String name = body.get("name") != null ? String.valueOf(body.get("name")) : null;
+        return success(chatSessionService.createChatGroup(agentId, name));
+    }
+
+    @PutMapping("/groups")
+    @Operation(summary = "更新会话分组名称", description = "请求体 {\"name\": ...}")
+    @PreAuthorize("@ss.hasPermission('ai-agent:chat-session:update')")
+    public CommonResult<Map<String, Object>> updateGroup(@RequestParam("agentId") Long agentId,
+                                                         @RequestParam("groupId") String groupId,
+                                                         @RequestBody Map<String, Object> body) {
+        String name = body.get("name") != null ? String.valueOf(body.get("name")) : null;
+        return success(chatSessionService.updateChatGroup(agentId, groupId, name));
+    }
+
+    @DeleteMapping("/groups")
+    @Operation(summary = "删除会话分组")
+    @PreAuthorize("@ss.hasPermission('ai-agent:chat-session:delete')")
+    public CommonResult<Boolean> deleteGroup(@RequestParam("agentId") Long agentId,
+                                             @RequestParam("groupId") String groupId) {
+        chatSessionService.deleteChatGroup(agentId, groupId);
+        return success(true);
+    }
+
+    @PutMapping("/groups/order")
+    @Operation(summary = "调整会话分组顺序",
+            description = "请求体 {\"groupIds\": [...]}；QwenPaw 侧字段名为 group_ids，由客户端完成映射。")
+    @PreAuthorize("@ss.hasPermission('ai-agent:chat-session:update')")
+    public CommonResult<Boolean> reorderGroups(@RequestParam("agentId") Long agentId,
+                                               @RequestBody Map<String, Object> body) {
+        List<String> groupIds = new ArrayList<>();
+        if (body != null && body.get("groupIds") instanceof List) {
+            for (Object id : (List<?>) body.get("groupIds")) {
+                if (id != null) {
+                    groupIds.add(String.valueOf(id));
+                }
+            }
+        }
+        chatSessionService.reorderChatGroups(agentId, groupIds);
+        return success(true);
+    }
+
+    @PutMapping("/update-chat")
+    @Operation(summary = "更新会话所属分组（移动到分组）",
+            description = "请求体 {\"groupId\": ...}；groupId 可为 null 表示移出分组。")
+    @PreAuthorize("@ss.hasPermission('ai-agent:chat-session:update')")
+    public CommonResult<Map<String, Object>> updateChat(@RequestParam("agentId") Long agentId,
+                                                        @RequestParam("chatId") String chatId,
+                                                        @RequestBody Map<String, Object> body) {
+        String groupId = body != null && body.get("groupId") != null ? String.valueOf(body.get("groupId")) : null;
+        return success(chatSessionService.updateChatGroupId(agentId, chatId, groupId));
+    }
+
+    @PutMapping("/update-pin")
+    @Operation(summary = "设置会话置顶（置顶/取消置顶）",
+            description = "请求体 {\"pinned\": true/false}；透传 QwenPaw ChatUpdate 的 pinned 字段。")
+    @PreAuthorize("@ss.hasPermission('ai-agent:chat-session:update')")
+    public CommonResult<Map<String, Object>> updateChatPinned(@RequestParam("agentId") Long agentId,
+                                                              @RequestParam("chatId") String chatId,
+                                                              @RequestBody Map<String, Object> body) {
+        boolean pinned = body != null && Boolean.TRUE.equals(body.get("pinned"));
+        return success(chatSessionService.setChatPinned(agentId, chatId, pinned));
     }
 
     // ==================== 对话 ====================
@@ -147,7 +247,11 @@ public class ChatSessionController {
         }
         // 会话级免审批：用户在审批框选"本次会话不再审批"后置 true，透传 approval_level=off
         boolean approvalOff = body != null && Boolean.TRUE.equals(body.get("approvalOff"));
-        return chatSessionService.sendMessageStream(agentId, chatId, sessionId, message, contentItems, kbIds, approvalOff);
+        // 问答框审批模式：strict 每次询问 / auto 智能 / off 免审批（优先于 approvalOff）
+        String approvalLevel = body != null && body.get("approvalLevel") instanceof String
+                ? (String) body.get("approvalLevel") : null;
+        return chatSessionService.sendMessageStream(agentId, chatId, sessionId, message,
+                contentItems, kbIds, approvalOff, approvalLevel);
     }
 
     @GetMapping(value = "/reconnect-stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)

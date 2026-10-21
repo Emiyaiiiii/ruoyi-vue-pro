@@ -41,6 +41,20 @@ public interface AiAgentService {
     AiAgentDO getAgent(Long id);
 
     /**
+     * 校验并返回智能体（只读场景）：存在 + 已注册 QwenPaw，且当前用户「本人 / 超管 / 公开(visibility=1)」可见。
+     *
+     * <p>用于他人公开智能体的查看/预览历史等只读操作。
+     */
+    AiAgentDO getAgentForRead(Long id);
+
+    /**
+     * 校验并返回智能体（写操作场景）：存在 + 已注册 QwenPaw，且当前用户「本人 / 超管」。
+     *
+     * <p>用于新建会话、发送对话、改配置等写操作；他人公开智能体只读，不可写。
+     */
+    AiAgentDO getAgentForWrite(Long id);
+
+    /**
      * 分页查询智能体
      */
     PageResult<AiAgentDO> getAgentPage(AgentPageReqVO pageReqVO);
@@ -49,6 +63,19 @@ public interface AiAgentService {
      * 查询当前登录用户的智能体列表
      */
     List<AiAgentDO> getMyAgents();
+
+    /**
+     * 查询「当前用户可见」的启用智能体列表（水利智囊 - 智能体页签）：
+     * 公开的（visibility=1，同租户所有用户）+ 我自己创建的。
+     */
+    List<AiAgentDO> getVisibleAgentList(Long userId);
+
+    /**
+     * 校验智能体是否「可被当前用户关注」：公开（visibility=1）、或当前用户自己创建的、或超管。
+     *
+     * @return 智能体 DO
+     */
+    AiAgentDO validateFollowable(Long id);
 
     /**
      * 获取当前登录用户的默认智能体；不存在则按默认模板自动创建一个（懒加载）。
@@ -134,9 +161,17 @@ public interface AiAgentService {
     List<Map<String, Object>> listAgentQwenpawSkills(Long agentId);
 
     /**
-     * 列出 QwenPaw 全局技能池（内置 + 自定义技能）
+     * 获得智能体可用的斜杠操作指令（/clean、/new 等，QwenPaw commands/available 透传，区别于 skill 指令）
      */
-    List<Map<String, Object>> listQwenpawSkillPool();
+    List<Map<String, Object>> listAgentQwenpawCommands(Long agentId);
+
+    /**
+     * 列出 QwenPaw 全局技能池（内置 + 自定义技能）
+     *
+     * <p>按技能商场（skill-meta）可见性过滤：仅返回公开 + 当前用户个人的技能，
+     * 保证「个人/公共」区分——他人个人的技能模板不出现在安装列表中
+     */
+    List<Map<String, Object>> listQwenpawSkillPool(Long userId);
 
     /**
      * 获取 QwenPaw 技能池中某个技能的详情（含 YAML 定义）
@@ -152,6 +187,16 @@ public interface AiAgentService {
      * 卸载智能体上安装的技能
      */
     void uninstallQwenpawSkill(Long agentId, String skillName);
+
+    /**
+     * 读取智能体已安装技能的详情（含 SKILL.md 内容；QwenPaw 工作区实例，非技能池模板）
+     */
+    Map<String, Object> getAgentSkillDetail(Long agentId, String skillName);
+
+    /**
+     * 保存智能体已安装技能的 SKILL.md 内容（仅作用于该智能体，不回写技能池/商场模板）
+     */
+    Map<String, Object> saveAgentSkillContent(Long agentId, String skillName, String content);
 
     /**
      * 注册 MCP 到智能体（QwenPaw 侧）

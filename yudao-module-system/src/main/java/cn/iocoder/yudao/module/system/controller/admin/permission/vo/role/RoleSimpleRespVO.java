@@ -15,4 +15,7 @@ public class RoleSimpleRespVO {
     @Schema(description = "角色名称", requiredMode = Schema.RequiredMode.REQUIRED, example = "芋道")
     private String name;
 
+    @Schema(description = "角色标识码", requiredMode = Schema.RequiredMode.REQUIRED, example = "super_admin")
+    private String code;
+
 }

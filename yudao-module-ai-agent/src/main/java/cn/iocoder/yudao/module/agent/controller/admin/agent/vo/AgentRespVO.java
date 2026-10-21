@@ -59,6 +59,21 @@ public class AgentRespVO {
     @Schema(description = "是否为默认智能体: 1=是, null=否", example = "1")
     private Integer isDefault;
 
+    @Schema(description = "可见性: 0=个人, 1=公开", example = "1")
+    private Integer visibility;
+
+    @Schema(description = "创建者昵称/用户名（水利智囊展示出品方）")
+    private String ownerName;
+
+    @Schema(description = "关注人数", example = "12")
+    private Long followersCount;
+
+    @Schema(description = "当前登录用户是否已关注", example = "true")
+    private Boolean isFollowed;
+
+    @Schema(description = "当前登录用户是否为该智能体创建者（可编辑/删除）", example = "true")
+    private Boolean isOwner;
+
     @Schema(description = "创建时间")
     private LocalDateTime createTime;
 

@@ -54,6 +54,9 @@ public class AgentSaveReqVO {
     @Schema(description = "排序", example = "0")
     private Integer sortOrder;
 
+    @Schema(description = "可见性: 0=个人(默认), 1=公开(同租户其他用户可在水利智囊查看/关注)", example = "1")
+    private Integer visibility;
+
     @Schema(description = "初始技能（仅创建时生效，从 QwenPaw 技能池按 name 安装）", example = "[\"QA_source_index\",\"pdf\"]")
     private List<String> initialSkills;
 

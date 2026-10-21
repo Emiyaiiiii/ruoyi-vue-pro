@@ -2,6 +2,7 @@ package cn.iocoder.yudao.module.kb.controller.admin.frontend;
 
 import cn.iocoder.yudao.framework.common.pojo.PageParam;
 import cn.iocoder.yudao.framework.common.pojo.PageResult;
+import cn.iocoder.yudao.framework.common.util.json.JsonUtils;
 import cn.iocoder.yudao.framework.mybatis.core.query.LambdaQueryWrapperX;
 import cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils;
 import cn.iocoder.yudao.module.kb.controller.admin.frontend.vo.FrontendKnowledgeBaseSaveReqVO;
@@ -11,9 +12,14 @@ import cn.iocoder.yudao.module.kb.controller.admin.frontend.vo.FrontendResult;
 import cn.iocoder.yudao.module.kb.controller.admin.library.vo.LibraryPageReqVO;
 import cn.iocoder.yudao.module.kb.controller.admin.library.vo.LibrarySaveReqVO;
 import cn.iocoder.yudao.module.kb.dal.dataobject.category.CategoryDO;
+import cn.iocoder.yudao.module.kb.dal.dataobject.chunkmethod.ChunkMethodDO;
 import cn.iocoder.yudao.module.kb.dal.dataobject.levelconfig.LevelConfigDO;
 import cn.iocoder.yudao.module.kb.dal.dataobject.library.LibraryDO;
 import cn.iocoder.yudao.module.kb.dal.mysql.category.CategoryMapper;
+import cn.iocoder.yudao.module.kb.dal.mysql.chunkmethod.ChunkMethodMapper;
+import cn.iocoder.yudao.module.kb.dal.mysql.document.DocumentMapper;
+import cn.iocoder.yudao.module.kb.dal.mysql.folder.FolderMapper;
+import cn.iocoder.yudao.module.kb.dal.mysql.follow.FollowMapper;
 import cn.iocoder.yudao.module.kb.dal.mysql.levelconfig.LevelConfigMapper;
 import cn.iocoder.yudao.module.kb.dal.mysql.library.LibraryMapper;
 import cn.iocoder.yudao.module.kb.service.follow.FollowService;
@@ -29,6 +35,7 @@ import org.springframework.web.bind.annotation.*;
 
 import jakarta.annotation.Resource;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -52,11 +59,30 @@ public class FrontendKnowledgeController {
 
     private static final DateTimeFormatter DATETIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
+    /** ext_values 保留 key：标签（JSON 数组字符串） */
+    private static final String EXT_TAGS = "__tags";
+    /** ext_values 保留 key：分类类型 */
+    private static final String EXT_CATEGORY_TYPE = "__category_type";
+    /** ext_values 保留 key：所属部门 */
+    private static final String EXT_ORGANIZATION = "__organization";
+
     @Resource
     private LibraryMapper libraryMapper;
 
     @Resource
+    private DocumentMapper documentMapper;
+
+    @Resource
+    private FolderMapper folderMapper;
+
+    @Resource
+    private FollowMapper followMapper;
+
+    @Resource
     private CategoryMapper categoryMapper;
+
+    @Resource
+    private ChunkMethodMapper chunkMethodMapper;
 
     @Resource
     private FollowService followService;
@@ -88,17 +114,18 @@ public class FrontendKnowledgeController {
             @RequestParam(value = "category", required = false) String category,
             @RequestParam(value = "sortField", required = false) String sortField,
             @RequestParam(value = "sortOrder", required = false) String sortOrder,
-            @RequestParam(value = "ordering", required = false) String ordering) {
+            @RequestParam(value = "ordering", required = false) String ordering,
+            @RequestParam(value = "is_public", required = false) Boolean isPublic) {
         PageParam pageParam = buildPageParam(page, pageSize);
         Long userId = SecurityFrameworkUtils.getLoginUserId();
-        return toListResult(queryByCategory(category, pageParam, search, userId, sortField, sortOrder, ordering));
+        return toListResult(queryByCategory(category, pageParam, search, userId, sortField, sortOrder, ordering, isPublic));
     }
 
     /**
-     * 按分类获取知识库（对应 /knowledge/bases/{category}/）
+     * 按分类获取知识库（对应 /knowledge/bases/{category}，不带尾斜杠，避免与详情 /{id}/ 冲突）
      * 分类取值：public / my-public / my-follows / personal-kbase 等
      */
-    @GetMapping({"/knowledge/bases/{category}", "/knowledge/bases/{category}/"})
+    @GetMapping({"/knowledge/bases/{category}"})
     @Operation(summary = "前端知识库分类列表")
     public FrontendResult<List<FrontendKnowledgeBaseVO>> basesByCategory(
             @PathVariable String category,
@@ -110,7 +137,7 @@ public class FrontendKnowledgeController {
             @RequestParam(value = "ordering", required = false) String ordering) {
         PageParam pageParam = buildPageParam(page, pageSize);
         Long userId = SecurityFrameworkUtils.getLoginUserId();
-        return toListResult(queryByCategory(category, pageParam, search, userId, sortField, sortOrder, ordering));
+        return toListResult(queryByCategory(category, pageParam, search, userId, sortField, sortOrder, ordering, null));
     }
 
     /**
@@ -131,8 +158,12 @@ public class FrontendKnowledgeController {
      */
     @PostMapping({"/knowledge/bases/", "/knowledge/bases"})
     @Operation(summary = "前端新建知识库")
-    public FrontendResult<Long> create(@RequestBody FrontendKnowledgeBaseSaveReqVO req) {
-        return FrontendResult.ok(libraryService.createLibrary(buildSaveVO(req, null)));
+    public FrontendResult<Map<String, Object>> create(@RequestBody FrontendKnowledgeBaseSaveReqVO req) {
+        Long id = libraryService.createLibrary(buildSaveVO(req, null));
+        Map<String, Object> data = new HashMap<>();
+        data.put("id", id);
+        data.put("owner", SecurityFrameworkUtils.getLoginUserId());
+        return FrontendResult.ok(data);
     }
 
     /**
@@ -143,6 +174,27 @@ public class FrontendKnowledgeController {
     public FrontendResult<Boolean> update(@PathVariable("id") Long id, @RequestBody FrontendKnowledgeBaseSaveReqVO req) {
         libraryService.updateLibrary(buildSaveVO(req, id));
         return FrontendResult.ok(true);
+    }
+
+    /**
+     * 知识库详情（对应 /knowledge/bases/{id}/，与分类列表路径区分：详情带尾斜杠、分类不带）
+     */
+    @GetMapping({"/knowledge/bases/{id}/"})
+    @Operation(summary = "前端知识库详情")
+    public FrontendResult<FrontendKnowledgeBaseVO> detail(@PathVariable("id") Long id) {
+        LibraryDO lib = libraryService.getLibrary(id);
+        if (lib == null) {
+            return FrontendResult.error("知识库不存在");
+        }
+        Map<String, String> extValues = libraryExtService.getExtValuesMap(Collections.singletonList(id))
+                .getOrDefault(id, Collections.emptyMap());
+        String ownerName = resolveOwnerName(lib);
+        boolean canManage = libraryService.canManage(id);
+        Set<Long> openableIds = libraryService.filterOpenProjectLibraries(Collections.singletonList(id));
+        FrontendKnowledgeBaseVO vo = toVO(lib, extValues, ownerName, canManage, openableIds);
+        enrichStats(Collections.singletonList(lib), Collections.singletonList(vo));
+        enrichChunkConfig(lib, vo);
+        return FrontendResult.ok(vo);
     }
 
     /**
@@ -214,9 +266,9 @@ public class FrontendKnowledgeController {
      * </ul>
      */
     private PageResult<LibraryDO> queryByCategory(String category, PageParam pageParam, String search, Long userId,
-                                                  String sortField, String sortOrder, String ordering) {
+                                                  String sortField, String sortOrder, String ordering, Boolean isPublic) {
         if (category == null || category.isEmpty()) {
-            return queryPublic(pageParam, search, sortField, sortOrder, ordering);
+            return queryPublic(pageParam, search, sortField, sortOrder, ordering, isPublic);
         }
         // 分类主键 → 复用知识库大屏的 getLibraryPage（含可见性规则）
         if (category.matches("\\d+")) {
@@ -235,7 +287,7 @@ public class FrontendKnowledgeController {
             return queryMyFollows(pageParam, userId);
         }
         // 知识库广场 / 院级 / 公司 / 咨询评估 等 → 广场公开库
-        return queryPublic(pageParam, search, sortField, sortOrder, ordering);
+        return queryPublic(pageParam, search, sortField, sortOrder, ordering, isPublic);
     }
 
     /** 按分类主键查询知识库列表（复用知识库大屏逻辑，含可见性过滤与排序） */
@@ -251,11 +303,17 @@ public class FrontendKnowledgeController {
     }
 
     private PageResult<LibraryDO> queryPublic(PageParam pageParam, String search,
-                                              String sortField, String sortOrder, String ordering) {
+                                              String sortField, String sortOrder, String ordering, Boolean isPublic) {
         LibraryPageReqVO reqVO = new LibraryPageReqVO();
         reqVO.setPageNo(pageParam.getPageNo());
         reqVO.setPageSize(pageParam.getPageSize());
-        reqVO.setIsPublic(1);
+        // is_public 参数存在时以其为准（前端"公开/私有"筛选），缺省只看公开
+        // 三目表达式一边为基本类型一边为 null 时会按基本类型推导，false 分支拆箱抛 NPE，禁止写成 (isPublic ? 1 : null)
+        if (isPublic == null) {
+            reqVO.setIsPublic(1);
+        } else {
+            reqVO.setIsPublic(isPublic ? 1 : 0);
+        }
         reqVO.setStatus(0);
         reqVO.setName(search);
         applySort(reqVO, sortField, sortOrder, ordering);
@@ -355,6 +413,7 @@ public class FrontendKnowledgeController {
         if (id != null) {
             LibraryDO existing = libraryService.getLibrary(id);
             if (existing != null) {
+                save.setName(existing.getName());
                 save.setCategoryId(existing.getCategoryId());
                 save.setKbLevelId(existing.getKbLevelId());
                 save.setOwnerId(existing.getOwnerId());
@@ -390,6 +449,67 @@ public class FrontendKnowledgeController {
             save.setIsPublic(req.getIsPublic() ? 1 : 0);
         }
 
+        // 业务字段（标签/分类类型/所属部门）落到 ext_values 保留 key，
+        // 详情/列表回显时再解析回顶层字段，避免与自定义字段冲突
+        Map<String, String> ext = new HashMap<>();
+        if (save.getExtValues() != null) {
+            ext.putAll(save.getExtValues());
+        }
+        if (req.getTags() != null) {
+            ext.put(EXT_TAGS, JsonUtils.toJsonString(req.getTags()));
+        }
+        if (req.getCategoryType() != null) {
+            ext.put(EXT_CATEGORY_TYPE, String.valueOf(req.getCategoryType()));
+        }
+        if (req.getOrganization() != null) {
+            ext.put(EXT_ORGANIZATION, String.valueOf(req.getOrganization()));
+        }
+        if (!ext.isEmpty()) {
+            save.setExtValues(ext);
+        }
+
+        // KB 级处理配置：优先采用前端全量 process_config（含 chunking/retrieval/rerank/model/postprocess），
+        // 再以 chunking_method_id / chunking_params 覆盖 chunking 组（兼容旧版 chunk-config 接口语义）。
+        // 更新时以现有库 processConfig 为基础，避免未传入的组被清空。
+        if (req.getProcessConfig() != null || (req.getChunkingParams() != null && !req.getChunkingParams().isEmpty())
+                || req.getChunkingMethodId() != null) {
+            Map<String, Object> process = new HashMap<>();
+            if (id != null) {
+                LibraryDO existing = libraryService.getLibrary(id);
+                if (existing != null && existing.getProcessConfig() != null
+                        && !existing.getProcessConfig().isEmpty()) {
+                    try {
+                        process = JsonUtils.parseObject(existing.getProcessConfig(), Map.class);
+                    } catch (Exception ignored) {
+                    }
+                }
+            }
+            if (process == null) {
+                process = new HashMap<>();
+            }
+            // 全量覆盖：前端显式传入的组直接替换
+            if (req.getProcessConfig() != null) {
+                process.putAll(req.getProcessConfig());
+            }
+            @SuppressWarnings("unchecked")
+            Map<String, Object> chunking = (Map<String, Object>) process.computeIfAbsent("chunking", k -> new HashMap<String, Object>());
+            if (req.getChunkingMethodId() != null) {
+                ChunkMethodDO method = chunkMethodMapper.selectById(req.getChunkingMethodId());
+                if (method != null) {
+                    chunking.put("strategy", method.getCode());
+                }
+            }
+            if (req.getChunkingParams() != null) {
+                // 按所选切片方法重建切片参数：清除旧方法的残留参数，但保留 strategy（方法码）
+                // 与 image_strategy（图片处理方案，独立于切片方法，不随切片参数重建而清除）
+                if (req.getChunkingMethodId() != null) {
+                    chunking.keySet().removeIf(k -> !"strategy".equals(k) && !"image_strategy".equals(k));
+                }
+                chunking.putAll(req.getChunkingParams());
+            }
+            save.setProcessConfig(process);
+        }
+
         // 分类：解析主键/名称 → categoryId，并据此补全层级配置 kbLevelId
         Long categoryId = resolveCategoryId(req.getCategory());
         if (categoryId != null) {
@@ -418,6 +538,11 @@ public class FrontendKnowledgeController {
             }
         }
         return save;
+    }
+
+    /** 解析单个知识库的所有者显示名（按 ownerDim 区分用户昵称/部门名） */
+    private String resolveOwnerName(LibraryDO lib) {
+        return resolveOwnerNames(Collections.singletonList(lib)).get(lib.getOwnerId());
     }
 
     /**
@@ -451,7 +576,36 @@ public class FrontendKnowledgeController {
                 .map(lib -> toVO(lib, extMap.get(lib.getId()), ownerNames.get(lib.getOwnerId()),
                         Boolean.TRUE.equals(canManageMap.get(lib.getId())), openableIds))
                 .collect(Collectors.toList());
+        enrichStats(libs, list);
         return FrontendResult.okList(list, page.getTotal());
+    }
+
+    /**
+     * 批量填充卡片统计字段：关注数 / 文件数 / 存储用量（MB）/ 更新时间。
+     * 用一次 groupBy 聚合替代逐库 N+1 查询。
+     */
+    private void enrichStats(List<LibraryDO> libs, List<FrontendKnowledgeBaseVO> vos) {
+        if (libs == null || libs.isEmpty()) {
+            return;
+        }
+        List<Long> kbIds = libs.stream().map(LibraryDO::getId).collect(Collectors.toList());
+        Map<Long, Long> followCountMap = followMapper.selectFollowCountMap(kbIds);
+        Map<Long, Long> storageBytesMap = documentMapper.selectStorageBytesMap(kbIds);
+        // 文件夹数按 KB 聚合（kb_document_folder），与 document_count（文档数）为不同指标
+        Map<Long, Long> folderCountMap = folderMapper.selectFolderCountMap(kbIds);
+        for (int i = 0; i < libs.size(); i++) {
+            LibraryDO lib = libs.get(i);
+            FrontendKnowledgeBaseVO vo = vos.get(i);
+            Long kbId = lib.getId();
+            vo.setFollowersCount(followCountMap.getOrDefault(kbId, 0L));
+            vo.setFolderCount(folderCountMap.getOrDefault(kbId, 0L));
+            long bytes = storageBytesMap.getOrDefault(kbId, 0L);
+            // 保留两位小数，避免前端 MB 分支显示长浮点
+            vo.setUsedStorageMb(Math.round(bytes / 1024.0 / 1024.0 * 100.0) / 100.0);
+            if (lib.getUpdateTime() != null) {
+                vo.setUpdatedAt(lib.getUpdateTime().format(DATETIME));
+            }
+        }
     }
 
     /**
@@ -554,6 +708,72 @@ public class FrontendKnowledgeController {
         if (lib.getCreateTime() != null) {
             vo.setCreatedAt(lib.getCreateTime().format(DATETIME));
         }
+        // 从 ext_values 保留 key 解析业务字段
+        vo.setTags(parseTagsFromExt(extValues != null ? extValues.get(EXT_TAGS) : null));
+        if (extValues != null) {
+            if (extValues.get(EXT_CATEGORY_TYPE) != null) {
+                vo.setCategoryType(parseLongSafe(extValues.get(EXT_CATEGORY_TYPE)));
+            }
+            if (extValues.get(EXT_ORGANIZATION) != null) {
+                vo.setOrganization(parseLongSafe(extValues.get(EXT_ORGANIZATION)));
+            }
+        }
+        // 是否已关注
+        if (lib.getId() != null) {
+            vo.setIsFollow(followService.isFollowing(lib.getId(), SecurityFrameworkUtils.getLoginUserId()));
+        }
         return vo;
+    }
+
+    private List<String> parseTagsFromExt(String raw) {
+        if (raw == null || raw.isEmpty()) {
+            return Collections.emptyList();
+        }
+        try {
+            List<String> tags = JsonUtils.parseArray(raw, String.class);
+            return tags == null ? Collections.emptyList() : tags;
+        } catch (Exception ignored) {
+            return Collections.emptyList();
+        }
+    }
+
+    private Long parseLongSafe(String raw) {
+        try {
+            return Long.parseLong(raw);
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    /** 详情接口补充切片配置：输出 process_config 及 strategy 反查的切片方法信息（前端表单回显用，仅详情调用，无列表 N+1） */
+    private void enrichChunkConfig(LibraryDO lib, FrontendKnowledgeBaseVO vo) {
+        Map<String, Object> process = parseJsonMap(lib.getProcessConfig());
+        vo.setProcessConfig(process);
+        Object chunking = process != null ? process.get("chunking") : null;
+        if (!(chunking instanceof Map)) {
+            return;
+        }
+        Object strategy = ((Map<?, ?>) chunking).get("strategy");
+        if (strategy == null) {
+            return;
+        }
+        ChunkMethodDO method = chunkMethodMapper.selectByCode(String.valueOf(strategy));
+        if (method == null) {
+            return;
+        }
+        vo.setChunkingMethodId(method.getId());
+        vo.setParametersTemplate(parseJsonMap(method.getParametersTemplate()));
+        vo.setDefaultParameters(parseJsonMap(method.getDefaultParameters()));
+    }
+
+    private Map<String, Object> parseJsonMap(String json) {
+        if (json == null || json.isEmpty()) {
+            return null;
+        }
+        try {
+            return JsonUtils.parseObject(json, Map.class);
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 }

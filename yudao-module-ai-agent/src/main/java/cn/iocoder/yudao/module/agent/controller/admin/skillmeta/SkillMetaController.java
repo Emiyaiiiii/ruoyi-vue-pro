@@ -8,6 +8,8 @@ import cn.iocoder.yudao.module.agent.controller.admin.skillmeta.vo.SkillMetaPage
 import cn.iocoder.yudao.module.agent.controller.admin.skillmeta.vo.SkillMetaRespVO;
 import cn.iocoder.yudao.module.agent.controller.admin.skillmeta.vo.SkillMetaSaveReqVO;
 import cn.iocoder.yudao.module.agent.dal.dataobject.skillmeta.AiSkillMetaDO;
+import cn.iocoder.yudao.module.agent.enums.AiMetaTypeEnum;
+import cn.iocoder.yudao.module.agent.service.follow.AiMetaFollowService;
 import cn.iocoder.yudao.module.agent.service.skillmeta.AiSkillMetaService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -20,7 +22,12 @@ import org.springframework.web.multipart.MultipartFile;
 
 import jakarta.annotation.Resource;
 import jakarta.validation.Valid;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static cn.iocoder.yudao.framework.common.pojo.CommonResult.success;
 
@@ -38,6 +45,9 @@ public class SkillMetaController {
 
     @Resource
     private AiSkillMetaService skillMetaService;
+
+    @Resource
+    private AiMetaFollowService metaFollowService;
 
     @PostMapping("/create")
     @Operation(summary = "创建技能商店项（仅 Java 侧元数据）")
@@ -77,7 +87,7 @@ public class SkillMetaController {
     @PreAuthorize("@ss.hasPermission('ai-agent:skill-meta:query')")
     public CommonResult<PageResult<SkillMetaRespVO>> getSkillMetaPage(@Valid SkillMetaPageReqVO pageReqVO) {
         PageResult<AiSkillMetaDO> pageResult = skillMetaService.getSkillMetaPage(pageReqVO);
-        return success(BeanUtils.toBean(pageResult, SkillMetaRespVO.class));
+        return success(new PageResult<>(toRespList(pageResult.getList()), pageResult.getTotal()));
     }
 
     @GetMapping("/visible-list")
@@ -86,7 +96,43 @@ public class SkillMetaController {
     public CommonResult<List<SkillMetaRespVO>> getVisibleSkillMetaList() {
         Long userId = SecurityFrameworkUtils.getLoginUserId();
         List<AiSkillMetaDO> list = skillMetaService.getVisibleSkillMetaList(userId);
-        return success(BeanUtils.toBean(list, SkillMetaRespVO.class));
+        return success(toRespList(list));
+    }
+
+    @GetMapping("/hot")
+    @Operation(summary = "获得技能热榜（按关注数倒序取前 N 个）")
+    @Parameter(name = "limit", description = "返回条数，默认 10", example = "10")
+    @PreAuthorize("@ss.hasPermission('ai-agent:skill-meta:query')")
+    public CommonResult<List<SkillMetaRespVO>> getHotSkillMetaList(
+            @RequestParam(value = "limit", defaultValue = "10") Integer limit) {
+        Long userId = SecurityFrameworkUtils.getLoginUserId();
+        List<SkillMetaRespVO> list = toRespList(skillMetaService.getVisibleSkillMetaList(userId));
+        // 关注数倒序，同数按 id 倒序，保证榜单稳定
+        list.sort((a, b) -> {
+            int byFollow = Long.compare(b.getFollowersCount(), a.getFollowersCount());
+            return byFollow != 0 ? byFollow : Long.compare(b.getId(), a.getId());
+        });
+        int capped = limit == null || limit < 1 ? 10 : Math.min(limit, 50);
+        return success(list.size() > capped ? list.subList(0, capped) : list);
+    }
+
+    @PostMapping("/{id}/follow")
+    @Operation(summary = "关注技能")
+    @Parameter(name = "id", description = "技能商店项ID", required = true)
+    @PreAuthorize("@ss.hasPermission('ai-agent:skill-meta:create')")
+    public CommonResult<Boolean> followSkillMeta(@PathVariable("id") Long id) {
+        skillMetaService.getSkillMeta(id); // 存在性校验
+        metaFollowService.follow(AiMetaTypeEnum.SKILL.getType(), id, SecurityFrameworkUtils.getLoginUserId());
+        return success(true);
+    }
+
+    @DeleteMapping("/{id}/follow")
+    @Operation(summary = "取消关注技能")
+    @Parameter(name = "id", description = "技能商店项ID", required = true)
+    @PreAuthorize("@ss.hasPermission('ai-agent:skill-meta:delete')")
+    public CommonResult<Boolean> unfollowSkillMeta(@PathVariable("id") Long id) {
+        metaFollowService.unfollow(AiMetaTypeEnum.SKILL.getType(), id, SecurityFrameworkUtils.getLoginUserId());
+        return success(true);
     }
 
     @PostMapping("/upload")
@@ -110,6 +156,27 @@ public class SkillMetaController {
             log.error("[uploadSkill] 上传失败", e);
             return CommonResult.error(500, "上传失败：" + e.getMessage());
         }
+    }
+
+    /**
+     * DO → VO，并批量补充关注数（followersCount）与当前用户是否已关注（isFollowed）
+     */
+    private List<SkillMetaRespVO> toRespList(List<AiSkillMetaDO> list) {
+        List<SkillMetaRespVO> vos = BeanUtils.toBean(list, SkillMetaRespVO.class);
+        if (vos.isEmpty()) {
+            return vos;
+        }
+        List<Long> ids = list.stream().map(AiSkillMetaDO::getId).collect(Collectors.toList());
+        Map<Long, Long> countMap = metaFollowService.getFollowCountMap(AiMetaTypeEnum.SKILL.getType(), ids);
+        Long userId = SecurityFrameworkUtils.getLoginUserId();
+        Set<Long> followedIds = userId == null ? Collections.emptySet()
+                : new HashSet<>(metaFollowService.getFollowedIds(AiMetaTypeEnum.SKILL.getType(), userId));
+        for (int i = 0; i < list.size(); i++) {
+            Long id = list.get(i).getId();
+            vos.get(i).setFollowersCount(countMap.getOrDefault(id, 0L));
+            vos.get(i).setIsFollowed(followedIds.contains(id));
+        }
+        return vos;
     }
 
 }

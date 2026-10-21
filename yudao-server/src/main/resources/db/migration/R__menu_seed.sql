@@ -279,6 +279,9 @@ FROM (
     UNION ALL SELECT 'library','更新','kb:library:update',3
     UNION ALL SELECT 'library','删除','kb:library:delete',4
     UNION ALL SELECT 'library','导出','kb:library:export',5
+    UNION ALL SELECT 'library','知识库关注','kb:follow:create',6
+    UNION ALL SELECT 'library','知识库取消关注','kb:follow:delete',7
+    UNION ALL SELECT 'library','知识库关注查询','kb:follow:query',8
     UNION ALL SELECT 'document','查询','kb:document:query',1
     UNION ALL SELECT 'document','创建','kb:document:create',2
     UNION ALL SELECT 'document','更新','kb:document:update',3

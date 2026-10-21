@@ -3,6 +3,7 @@ package cn.iocoder.yudao.module.kb.controller.admin.frontend.vo;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -45,5 +46,27 @@ public class FrontendKnowledgeBaseSaveReqVO {
     /** 旧版扩展信息（Python 端 structured 字段，当前已由 columnConfig 自定义字段替代，暂不处理） */
     @JsonProperty("extra_info")
     private Map<String, Object> extraInfo;
+
+    /** 标签列表 */
+    private List<String> tags;
+
+    /** 分类类型（cascader 第一级：分类主键），可选 */
+    @JsonProperty("category_type")
+    private Long categoryType;
+
+    /** 所属部门 ID（院级库归属，可选） */
+    private Long organization;
+
+    /** 切片方法 ID（后端解析为 strategy code 写入 processConfig.chunking） */
+    @JsonProperty("chunking_method_id")
+    private Long chunkingMethodId;
+
+    /** 切片参数（与知识库一并提交，合并进 processConfig.chunking） */
+    @JsonProperty("chunking_params")
+    private Map<String, Object> chunkingParams;
+
+    /** 全量 KB 处理配置（chunking/retrieval/rerank/model/postprocess），与知识库大屏一致；chunking 组可由 chunking_method_id/chunking_params 覆盖 */
+    @JsonProperty("process_config")
+    private Map<String, Object> processConfig;
 
 }

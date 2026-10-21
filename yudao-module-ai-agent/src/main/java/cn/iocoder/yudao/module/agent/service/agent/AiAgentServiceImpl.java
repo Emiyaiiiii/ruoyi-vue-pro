@@ -171,6 +171,9 @@ public class AiAgentServiceImpl implements AiAgentService {
         if (agent.getApprovalLevel() == null) {
             agent.setApprovalLevel("auto");
         }
+        if (agent.getVisibility() == null) {
+            agent.setVisibility(0); // 默认个人，不会出现在智囊公开展示中
+        }
         agent.setQwenpawAgentId(qwenpawAgentId);
         agentMapper.insert(agent);
 
@@ -289,8 +292,21 @@ public class AiAgentServiceImpl implements AiAgentService {
     @Transactional(rollbackFor = Exception.class)
     public void deleteAgent(Long id) {
         AiAgentDO agent = validateExists(id);
-        // 本地 MCP 绑定已废弃（对齐 skills，QwenPaw 为权威源），删除 agent 时由 QwenPaw 一并清空其 MCP/Skills/Chat
+        // 保护：每个用户至少保留一个【启用】的智能体（含默认），最后一个不允许删除
+        boolean isLastEnabled = agentMapper.selectEnabledByUserId(agent.getUserId()).stream()
+                .noneMatch(a -> !a.getId().equals(id));
+        if (isLastEnabled) {
+            throw exception(AGENT_LAST_ONE_CANNOT_DELETE);
+        }
+        // 保护：删除默认智能体时，自动将最早创建的启用智能体提升为默认（对齐 bootstrapUserDefaultAgents 的提升口径），
+        // 避免 UNIQUE(user_id, is_default) 冲突（旧默认本条删除前仍在库，提升前先物理删除旧默认）
+        boolean isDefaultAgent = Integer.valueOf(1).equals(agent.getIsDefault());
         agentMapper.deleteById(id);
+        if (isDefaultAgent) {
+            agentMapper.selectEnabledByUserId(agent.getUserId()).stream()
+                    .min(Comparator.comparing(AiAgentDO::getId))
+                    .ifPresent(next -> setDefaultFlag(next.getId(), agent.getUserId()));
+        }
 
         // 同步删除 QwenPaw agent（其下的所有 chat 会被 QwenPaw 一并清空）
         try {
@@ -319,6 +335,47 @@ public class AiAgentServiceImpl implements AiAgentService {
     }
 
     @Override
+    public AiAgentDO getAgentForRead(Long id) {
+        AiAgentDO agent = agentMapper.selectById(id);
+        if (agent == null) {
+            throw exception(AGENT_NOT_EXISTS);
+        }
+        requireQwenpawAgentId(agent);
+        // 公开 / 本人 / 超管 可读
+        if (isSuperAdmin() || Integer.valueOf(1).equals(agent.getVisibility())) {
+            return agent;
+        }
+        Long userId = SecurityFrameworkUtils.getLoginUserId();
+        if (userId != null && userId.equals(agent.getUserId())) {
+            return agent;
+        }
+        throw exception(AGENT_PERMISSION_DENIED);
+    }
+
+    @Override
+    public AiAgentDO getAgentForWrite(Long id) {
+        AiAgentDO agent = agentMapper.selectById(id);
+        if (agent == null) {
+            throw exception(AGENT_NOT_EXISTS);
+        }
+        requireQwenpawAgentId(agent);
+        // 他人公开智能体只读：非本人/非超管禁止写操作
+        if (!isSuperAdmin()) {
+            Long userId = SecurityFrameworkUtils.getLoginUserId();
+            if (userId == null || !userId.equals(agent.getUserId())) {
+                throw exception(AGENT_READ_ONLY);
+            }
+        }
+        return agent;
+    }
+
+    private void requireQwenpawAgentId(AiAgentDO agent) {
+        if (agent.getQwenpawAgentId() == null || agent.getQwenpawAgentId().isEmpty()) {
+            throw exception(QWENPAW_AGENT_NOT_FOUND);
+        }
+    }
+
+    @Override
     public PageResult<AiAgentDO> getAgentPage(AgentPageReqVO pageReqVO) {
         // 非超管/租户管理员：强制只看当前用户的智能体，实现用户级隔离
         if (!isSuperAdmin()) {
@@ -336,6 +393,30 @@ public class AiAgentServiceImpl implements AiAgentService {
         // 懒加载：保证每个用户至少有一个默认智能体，列表页因此永远非空
         getOrCreateDefaultAgent(userId, TenantContextHolder.getTenantId());
         return agentMapper.selectEnabledByUserId(userId);
+    }
+
+    @Override
+    public List<AiAgentDO> getVisibleAgentList(Long userId) {
+        // 未登录兜底：只看公开的（userId 传 null，selectVisibleList 用 0L 占位避免命中他人私有）
+        Long effectiveUserId = userId == null ? 0L : userId;
+        return agentMapper.selectVisibleList(effectiveUserId);
+    }
+
+    @Override
+    public AiAgentDO validateFollowable(Long id) {
+        AiAgentDO agent = agentMapper.selectById(id);
+        if (agent == null) {
+            throw exception(AGENT_NOT_EXISTS);
+        }
+        // 公开 / 自己创建 / 超管 均可关注；否则按个人私有无权访问
+        if (isSuperAdmin() || Integer.valueOf(1).equals(agent.getVisibility())) {
+            return agent;
+        }
+        Long userId = SecurityFrameworkUtils.getLoginUserId();
+        if (userId != null && userId.equals(agent.getUserId())) {
+            return agent;
+        }
+        throw exception(AGENT_PERMISSION_DENIED);
     }
 
     @Override
@@ -362,7 +443,7 @@ public class AiAgentServiceImpl implements AiAgentService {
     public void setDefaultAgent(Long agentId) {
         Long userId = SecurityFrameworkUtils.getLoginUserId();
         validateExists(agentId); // 顺带做用户级权限校验
-        agentMapper.clearDefaultByUserId(userId);
+        agentMapper.clearDefaultIncludeDeleted(userId); // 含已删行，释放 uk_user_default
         setDefaultFlag(agentId, userId);
     }
 
@@ -488,8 +569,27 @@ public class AiAgentServiceImpl implements AiAgentService {
     }
 
     @Override
-    public List<Map<String, Object>> listQwenpawSkillPool() {
-        return qwenPawClient.listSkillPool();
+    public List<Map<String, Object>> listAgentQwenpawCommands(Long agentId) {
+        AiAgentDO agent = validateExists(agentId);
+        return qwenPawClient.listAgentCommands(agent.getQwenpawAgentId());
+    }
+
+    @Override
+    public List<Map<String, Object>> listQwenpawSkillPool(Long userId) {
+        List<Map<String, Object>> pool = qwenPawClient.listSkillPool();
+        // 商场模板个人/公共区分（对齐 MCP 商场 visible-list 语义）：仅返回公开 + 本人上传的技能
+        Set<String> visibleNames = new HashSet<>();
+        for (AiSkillMetaDO meta : skillMetaService.getVisibleSkillMetaList(userId)) {
+            visibleNames.add(meta.getSkillName());
+        }
+        List<Map<String, Object>> filtered = new ArrayList<>();
+        for (Map<String, Object> skill : pool) {
+            String name = String.valueOf(skill.getOrDefault("name", ""));
+            if (!name.isEmpty() && visibleNames.contains(name)) {
+                filtered.add(skill);
+            }
+        }
+        return filtered;
     }
 
     @Override
@@ -514,6 +614,18 @@ public class AiAgentServiceImpl implements AiAgentService {
     public void uninstallQwenpawSkill(Long agentId, String skillName) {
         AiAgentDO agent = validateExists(agentId);
         qwenPawClient.uninstallSkill(agent.getQwenpawAgentId(), skillName);
+    }
+
+    @Override
+    public Map<String, Object> getAgentSkillDetail(Long agentId, String skillName) {
+        AiAgentDO agent = validateExists(agentId);
+        return qwenPawClient.getAgentSkillDetail(agent.getQwenpawAgentId(), skillName);
+    }
+
+    @Override
+    public Map<String, Object> saveAgentSkillContent(Long agentId, String skillName, String content) {
+        AiAgentDO agent = validateExists(agentId);
+        return qwenPawClient.saveSkillContent(agent.getQwenpawAgentId(), skillName, content);
     }
 
     @Override
@@ -709,6 +821,9 @@ public class AiAgentServiceImpl implements AiAgentService {
      * 否则会触发 UNIQUE(user_id, is_default) 冲突。
      */
     private void setDefaultFlag(Long agentId, Long userId) {
+        // 先清掉该用户全部默认标记（含已逻辑删除的行——它们仍占据 uk_user_default 唯一键，
+        // 不清理会导致已删过默认的用户再设默认时 Duplicate entry）
+        agentMapper.clearDefaultIncludeDeleted(userId);
         AiAgentDO update = new AiAgentDO();
         update.setId(agentId);
         update.setIsDefault(1);
@@ -740,6 +855,8 @@ public class AiAgentServiceImpl implements AiAgentService {
         agent.setModelProvider(defaultProperties.getModelProvider());
         agent.setModelName(defaultProperties.getModelName());
         agent.setQwenpawAgentId(buildQwenpawAgentId(userId));
+        // 同 setDefaultFlag：insert 前先清掉含已删行的默认标记，避免已删默认占据 uk_user_default
+        agentMapper.clearDefaultIncludeDeleted(userId);
         try {
             agentMapper.insert(agent);
         } catch (DuplicateKeyException e) {

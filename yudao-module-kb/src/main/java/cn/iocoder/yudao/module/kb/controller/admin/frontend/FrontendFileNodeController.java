@@ -1,5 +1,6 @@
 package cn.iocoder.yudao.module.kb.controller.admin.frontend;
 
+import cn.iocoder.yudao.module.infra.api.file.FileApi;
 import cn.iocoder.yudao.module.kb.controller.admin.document.vo.DocumentSaveReqVO;
 import cn.iocoder.yudao.module.kb.controller.admin.folder.vo.FolderSaveReqVO;
 import cn.iocoder.yudao.module.kb.controller.admin.frontend.vo.FrontendFileNodeBatchDeleteReqVO;
@@ -69,6 +70,9 @@ public class FrontendFileNodeController {
     private VectorTaskService vectorTaskService;
 
     @Resource
+    private FileApi fileApi;
+
+    @Resource
     private FolderMapper folderMapper;
 
     @Resource
@@ -93,7 +97,8 @@ public class FrontendFileNodeController {
             @RequestParam(value = "page_size", defaultValue = "10") Integer pageSize,
             @RequestParam(value = "parent_id", required = false) Long parentId,
             @RequestParam(value = "search", required = false) String search,
-            @RequestParam(value = "tags", required = false) String tags) {
+            @RequestParam(value = "tags", required = false) String tags,
+            @RequestParam(value = "ordering", required = false) String ordering) {
         FrontendResult<FrontendFileNodePageVO> denied = requireCanView(kbId);
         if (denied != null) {
             return denied;
@@ -118,13 +123,7 @@ public class FrontendFileNodeController {
                 .sorted(Comparator.comparing(DocumentDO::getId, Comparator.nullsLast(Comparator.reverseOrder())))
                 .collect(Collectors.toList());
 
-        List<FrontendFileNodeVO> items = new ArrayList<>();
-        for (FolderDO f : folders) {
-            items.add(toFolderVO(f, kbId));
-        }
-        for (DocumentDO d : documents) {
-            items.add(toDocumentVO(d, kbId));
-        }
+        List<FrontendFileNodeVO> items = mergeSortedNodes(folders, documents, kbId, ordering);
 
         int total = items.size();
         int from = (pageNo - 1) * size;
@@ -135,6 +134,55 @@ public class FrontendFileNodeController {
         vo.setItems(slice);
         vo.setPagination(new FrontendFileNodePageVO.Pagination((long) total, pageNo, size));
         return FrontendResult.ok(vo);
+    }
+
+    /**
+     * 文件夹内容（对应 /file-nodes/folder-contents/，文件夹+文档混合分页，data 直接为数组 + 顶层 total）
+     */
+    @GetMapping({"/folder-contents", "/folder-contents/"})
+    @Operation(summary = "前端文件夹内容分页列表")
+    public FrontendResult<List<FrontendFileNodeVO>> folderContents(
+            @PathVariable("kbId") Long kbId,
+            @RequestParam(value = "page", defaultValue = "1") Integer page,
+            @RequestParam(value = "page_size", defaultValue = "10") Integer pageSize,
+            @RequestParam(value = "parent_id", required = false) Long parentId,
+            @RequestParam(value = "search", required = false) String search,
+            @RequestParam(value = "ordering", required = false) String ordering) {
+        FrontendResult<List<FrontendFileNodeVO>> denied = requireCanView(kbId);
+        if (denied != null) {
+            return denied;
+        }
+        int pageNo = page == null || page < 1 ? 1 : page;
+        int size = pageSize == null || pageSize < 1 ? 10 : pageSize;
+        // 根目录：parent_id 传空串（''）/ null / 'root' / 'undefined' 均视为根
+        Long parent;
+        if (parentId == null) {
+            parent = FolderDO.PARENT_ID_ROOT;
+        } else {
+            parent = parentId;
+        }
+
+        List<FolderDO> folders = folderMapper.selectByKbId(kbId).stream()
+                .filter(f -> Objects.equals(f.getParentId(), parent))
+                .filter(f -> matchesSearch(f.getName(), search))
+                .sorted(Comparator.comparing(f -> f.getSort() == null ? 0 : f.getSort()))
+                .collect(Collectors.toList());
+        List<DocumentDO> documents = documentMapper.selectList(DocumentDO::getKbId, kbId).stream()
+                .filter(d -> Objects.equals(d.getFolderId(), parent))
+                .filter(d -> matchesSearch(d.getFileName(), search))
+                .sorted(Comparator.comparing(DocumentDO::getId, Comparator.nullsLast(Comparator.reverseOrder())))
+                .collect(Collectors.toList());
+
+        List<FrontendFileNodeVO> items = mergeSortedNodes(folders, documents, kbId, ordering);
+
+        int total = items.size();
+        int from = (pageNo - 1) * size;
+        int to = Math.min(from + size, total);
+        List<FrontendFileNodeVO> slice = from >= total ? Collections.emptyList() : items.subList(from, to);
+        FrontendResult<List<FrontendFileNodeVO>> result = FrontendResult.okList(slice, (long) total);
+        result.setPage(pageNo);
+        result.setPageSize(size);
+        return result;
     }
 
     /**
@@ -314,13 +362,14 @@ public class FrontendFileNodeController {
     public FrontendResult<Long> upload(@PathVariable("kbId") Long kbId,
                                        @RequestParam("file") MultipartFile file,
                                        @RequestParam(value = "parent_id", required = false) Long parentId,
+                                       @RequestParam(value = "relative_path", required = false) String relativePath,
                                        @RequestParam(value = "tags", required = false) String tags,
                                        @RequestParam(value = "description", required = false) String description) {
         FrontendResult<Long> denied = requireCanManage(kbId);
         if (denied != null) {
             return denied;
         }
-        return FrontendResult.ok(documentService.uploadAndCreate(file, kbId, parentId, description, tags));
+        return FrontendResult.ok(documentService.uploadAndCreate(file, kbId, parentId, relativePath, description, tags));
     }
 
     /** 与后台知识库大屏一致：仅 canManage 可改文件；无权限返回错误结果，不抛给 yudao 通用包装。 */
@@ -442,6 +491,52 @@ public class FrontendFileNodeController {
 
     // ---------- 映射 ----------
 
+    /**
+     * 合并文件夹+文档为节点列表，并应用前端 ordering 排序（文件夹优先，同类型内按名称/时间排序）。
+     * 支持 name/-name、updated_at/-updated_at、created_at/-created_at；空/其他值保持默认（文件夹 sort 升序 + 文档 id 倒序）。
+     */
+    private List<FrontendFileNodeVO> mergeSortedNodes(List<FolderDO> folders, List<DocumentDO> documents,
+                                                      Long kbId, String ordering) {
+        List<FrontendFileNodeVO> folderNodes = folders.stream().map(f -> toFolderVO(f, kbId)).collect(Collectors.toList());
+        List<FrontendFileNodeVO> docNodes = documents.stream().map(d -> toDocumentVO(d, kbId)).collect(Collectors.toList());
+
+        if (ordering == null || ordering.isEmpty()) {
+            List<FrontendFileNodeVO> items = new ArrayList<>();
+            items.addAll(folderNodes);
+            items.addAll(docNodes);
+            return items;
+        }
+        boolean desc = ordering.startsWith("-");
+        String field = desc ? ordering.substring(1) : ordering;
+        Comparator<FrontendFileNodeVO> cmp;
+        switch (field) {
+            case "name":
+                cmp = Comparator.comparing(n -> n.getName() == null ? "" : n.getName(), String.CASE_INSENSITIVE_ORDER);
+                break;
+            case "updated_at":
+                cmp = Comparator.comparing(FrontendFileNodeVO::getUpdatedAt,
+                        Comparator.nullsLast(Comparator.naturalOrder()));
+                break;
+            case "created_at":
+                cmp = Comparator.comparing(FrontendFileNodeVO::getCreatedAt,
+                        Comparator.nullsLast(Comparator.naturalOrder()));
+                break;
+            default:
+                cmp = Comparator.comparing(n -> n.getName() == null ? "" : n.getName(), String.CASE_INSENSITIVE_ORDER);
+        }
+        if (desc) {
+            cmp = cmp.reversed();
+        }
+        List<FrontendFileNodeVO> items = new ArrayList<>();
+        items.addAll(folderNodes);
+        items.addAll(docNodes);
+        // 文件夹优先，同类型内按字段排序
+        items.sort(Comparator
+                .comparing((FrontendFileNodeVO n) -> "folder".equals(n.getItemType()) ? 0 : 1)
+                .thenComparing(cmp));
+        return items;
+    }
+
     private List<FrontendFolderTreeNodeVO> buildFolderTreeNodes(List<FolderDO> folders) {
         return folders.stream().map(f -> {
             FrontendFolderTreeNodeVO n = new FrontendFolderTreeNodeVO();
@@ -458,8 +553,10 @@ public class FrontendFileNodeController {
         vo.setId(f.getId());
         vo.setName(f.getName());
         vo.setItemType("folder");
+        vo.setType("folder");
         vo.setTags(Collections.emptyList());
         vo.setCreatedAt(format(f.getCreateTime()));
+        vo.setUpdatedAt(format(f.getUpdateTime()));
         vo.setKnowledgeBaseId(kbId);
         FrontendFileNodeVO.Thumbnail t = new FrontendFileNodeVO.Thumbnail();
         t.setType("folder");
@@ -472,10 +569,16 @@ public class FrontendFileNodeController {
         vo.setId(d.getId());
         vo.setName(d.getFileName());
         vo.setItemType("document");
+        vo.setType("document");
         vo.setDocId(d.getId());
+        // 暴露任务ID，前端可据此查询处理进度（对齐管理端 /kb/vector-task/get）
+        vo.setVectorTaskId(d.getVectorTaskId());
         vo.setExtension(d.getFileType());
-        vo.setUrl(d.getFileUrl());
+        vo.setExt(d.getFileType());
+        // 预签名 URL 有时效，库存 fileUrl（上传时生成）早已过期；每次下发前按 filePath 实时重签（1 小时）
+        vo.setUrl(presignFileUrl(d));
         vo.setFilePath(d.getFilePath());
+        vo.setSize(d.getFileSize());
         if (d.getFileSize() != null) {
             vo.setFileSizeMb(String.format("%.2f", d.getFileSize() / 1024.0 / 1024.0));
         }
@@ -483,11 +586,27 @@ public class FrontendFileNodeController {
         vo.setStatus(toStatus(d.getVectorStatus()));
         vo.setStatusDisplay(toStatusDisplay(d.getVectorStatus()));
         vo.setCreatedAt(format(d.getCreateTime()));
+        vo.setUpdatedAt(format(d.getUpdateTime()));
         vo.setKnowledgeBaseId(kbId);
         FrontendFileNodeVO.Thumbnail t = new FrontendFileNodeVO.Thumbnail();
         t.setType(d.getFileType());
         vo.setThumbnail(t);
         return vo;
+    }
+
+    /**
+     * 按存储路径实时签发 1 小时有效的 GET 预签名 URL；
+     * 签发失败或无路径时降级回库存 fileUrl（可能已过期，但好于空链）。
+     */
+    private String presignFileUrl(DocumentDO d) {
+        if (d.getFilePath() == null || d.getFilePath().isEmpty()) {
+            return d.getFileUrl();
+        }
+        try {
+            return fileApi.presignGetUrl(d.getFilePath(), 3600);
+        } catch (Exception e) {
+            return d.getFileUrl();
+        }
     }
 
     private String toStatus(Integer vectorStatus) {

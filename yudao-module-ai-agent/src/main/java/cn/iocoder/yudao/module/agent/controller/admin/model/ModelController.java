@@ -69,6 +69,35 @@ public class ModelController {
         return success(modelService.discoverModels(providerId));
     }
 
+    @GetMapping("/provider/pool")
+    @Operation(summary = "分页查询 Provider 的模型池（发现目录 / 已选模型）")
+    @PreAuthorize("@ss.hasPermission('ai-agent:model:query')")
+    public CommonResult<Map<String, Object>> getModelPool(
+            @RequestParam("providerId") String providerId,
+            @RequestParam(value = "offset", defaultValue = "0") Integer offset,
+            @RequestParam(value = "limit", defaultValue = "30") Integer limit,
+            @RequestParam(value = "tab", defaultValue = "all") String tab,
+            @RequestParam(value = "search", defaultValue = "") String search) {
+        return success(modelService.getModelPool(providerId, offset, limit, tab, search));
+    }
+
+    @PutMapping("/model/pool")
+    @Operation(summary = "选择/取消选择模型池中的某个模型（写入/移出可用模型）")
+    @PreAuthorize("@ss.hasPermission('ai-agent:model:update')")
+    public CommonResult<ProviderRespVO> updateModelPool(@RequestParam("providerId") String providerId,
+                                                        @RequestParam("modelId") String modelId,
+                                                        @RequestParam("selected") Boolean selected) {
+        return success(modelService.updateModelPool(providerId, modelId, Boolean.TRUE.equals(selected)));
+    }
+
+    @PutMapping("/provider/pool/selection")
+    @Operation(summary = "批量选择/取消选择整个模型池")
+    @PreAuthorize("@ss.hasPermission('ai-agent:model:update')")
+    public CommonResult<Map<String, Object>> selectAllModels(@RequestParam("providerId") String providerId,
+                                                             @RequestParam("selected") Boolean selected) {
+        return success(modelService.selectAllModels(providerId, Boolean.TRUE.equals(selected)));
+    }
+
     @PostMapping("/add")
     @Operation(summary = "向 Provider 添加模型")
     @PreAuthorize("@ss.hasPermission('ai-agent:model:create')")

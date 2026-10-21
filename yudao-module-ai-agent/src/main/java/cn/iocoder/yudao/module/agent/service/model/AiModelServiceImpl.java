@@ -82,6 +82,50 @@ public class AiModelServiceImpl implements AiModelService {
     }
 
     @Override
+    public Map<String, Object> getModelPool(String providerId, int offset, int limit, String tab, String search) {
+        Map<String, Object> raw = qwenPawClient.getModelPool(providerId, offset, limit, tab, search);
+        Map<String, Object> result = new LinkedHashMap<>();
+        // 统一转 camelCase，并给每个模型标注是否已选中（source=discovered 表示仅候选未选中）
+        List<Map<String, Object>> models = new ArrayList<>();
+        for (Map<String, Object> model : toMapList(raw.get("models"))) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("id", getString(model, "id"));
+            item.put("name", getString(model, "name"));
+            item.put("supportsMultimodal", getBool(model, "supports_multimodal"));
+            item.put("supportsImage", getBool(model, "supports_image"));
+            item.put("supportsVideo", getBool(model, "supports_video"));
+            item.put("isFree", getBool(model, "is_free"));
+            String source = getString(model, "source");
+            item.put("source", source);
+            item.put("selected", !"discovered".equals(source));
+            models.add(item);
+        }
+        result.put("models", models);
+        result.put("total", getInt(raw, "total"));
+        result.put("selectedCount", getInt(raw, "selected_count"));
+        result.put("candidateCount", getInt(raw, "candidate_count"));
+        result.put("families", raw.get("families"));
+        result.put("offset", getInt(raw, "offset"));
+        result.put("limit", getInt(raw, "limit"));
+        return result;
+    }
+
+    @Override
+    public ProviderRespVO updateModelPool(String providerId, String modelId, boolean selected) {
+        Map<String, Object> raw = qwenPawClient.updateModelPool(providerId, modelId, selected);
+        return convertToProviderVO(raw);
+    }
+
+    @Override
+    public Map<String, Object> selectAllModels(String providerId, boolean selected) {
+        Map<String, Object> raw = qwenPawClient.selectAllModels(providerId, selected);
+        // 返回精简结果，避免把整份 Provider 全量模型塞回前端
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("selectedCount", toMapList(raw.get("models")).size() + toMapList(raw.get("extra_models")).size());
+        return result;
+    }
+
+    @Override
     public ProviderRespVO addModel(AddModelReqVO reqVO) {
         Map<String, Object> modelInfo = new LinkedHashMap<>();
         modelInfo.put("id", reqVO.getModelId());

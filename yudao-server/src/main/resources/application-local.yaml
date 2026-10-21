@@ -289,7 +289,7 @@ justauth:
 yudao:
   kb:
     vector:
-      python-service-url: http://localhost:8100
+      python-service-url: http://ckb-vector:8100
       task-timeout-minutes: 30
       # 通信超时配置
       connect-timeout-ms: 5000

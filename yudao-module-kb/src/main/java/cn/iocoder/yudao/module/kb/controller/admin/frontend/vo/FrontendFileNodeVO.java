@@ -28,6 +28,9 @@ public class FrontendFileNodeVO {
     @JsonProperty("item_type")
     private String itemType;
 
+    /** 节点类型别名（=item_type，兼容前端判 type==='folder'） */
+    private String type;
+
     /** 缩略图/类型图标（placeholder 为前端静态图标，暂不返回，由 P4 补齐） */
     private Thumbnail thumbnail;
 
@@ -37,6 +40,13 @@ public class FrontendFileNodeVO {
     /** 创建时间 */
     @JsonProperty("created_at")
     private String createdAt;
+
+    /** 更新时间（兼容前端读 updated_at / modified_at） */
+    @JsonProperty("updated_at")
+    private String updatedAt;
+
+    /** 文件大小（字节；文件夹为 null） */
+    private Long size;
 
     /** 文档处理状态：pending/processing/completed/failed（文件夹为 null） */
     private String status;
@@ -49,8 +59,15 @@ public class FrontendFileNodeVO {
     @JsonProperty("doc_id")
     private Long docId;
 
+    /** 向量处理任务 ID（仅文档节点），用于查询任务进度 */
+    @JsonProperty("vector_task_id")
+    private String vectorTaskId;
+
     /** 文件扩展名（仅文档节点） */
     private String extension;
+
+    /** 文件扩展名别名（=extension，兼容前端读 ext / file_extension） */
+    private String ext;
 
     /** 文件访问 URL（仅文档节点） */
     private String url;

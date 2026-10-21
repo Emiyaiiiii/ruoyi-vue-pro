@@ -26,6 +26,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CompletableFuture;
 
 import static cn.iocoder.yudao.module.agent.enums.ErrorCodeConstants.*;
@@ -56,11 +57,30 @@ public class AiChatSessionServiceImpl implements AiChatSessionService {
     @Resource
     private KbProcessConfigResolver kbProcessConfigResolver;
 
+    // ==================== 会话分享（公开访问） ====================
+    // 分享 token -> 会话映射（内存态，服务重启后失效；如需持久化可改为写入 QwenPaw 会话 spec 或落库）。
+    // token 为不透明随机串，作为"能力令牌"：持有即可匿名读取对应会话，无需登录。
+    private final Map<String, ShareEntry> shareTokens = new ConcurrentHashMap<>();
+    /** 分享 token 默认有效期：30 天 */
+    private static final long SHARE_TOKEN_TTL_MS = 30L * 24 * 60 * 60 * 1000;
+
+    private static final class ShareEntry {
+        final String qwenpawAgentId;
+        final String chatId;
+        final long expireAt;
+
+        ShareEntry(String qwenpawAgentId, String chatId, long expireAt) {
+            this.qwenpawAgentId = qwenpawAgentId;
+            this.chatId = chatId;
+            this.expireAt = expireAt;
+        }
+    }
+
     // ==================== 会话 ====================
 
     @Override
     public List<Map<String, Object>> listChats(Long agentId) {
-        AiAgentDO agent = validateAgent(agentId);
+        AiAgentDO agent = validateAgentReadable(agentId);
         return qwenPawClient.listChatsForAgent(agent.getQwenpawAgentId());
     }
 
@@ -77,8 +97,47 @@ public class AiChatSessionServiceImpl implements AiChatSessionService {
 
     @Override
     public Map<String, Object> getChat(Long agentId, String chatId) {
-        AiAgentDO agent = validateAgent(agentId);
+        AiAgentDO agent = validateAgentReadable(agentId);
         return qwenPawClient.getChat(agent.getQwenpawAgentId(), chatId);
+    }
+
+    @Override
+    public Map<String, Object> createShare(Long agentId, String chatId) {
+        AiAgentDO agent = validateAgent(agentId);
+        // 校验会话确实存在，避免为不存在的会话生成分享链接
+        qwenPawClient.getChat(agent.getQwenpawAgentId(), chatId);
+        String token = UUID.randomUUID().toString().replace("-", "");
+        long expireAt = System.currentTimeMillis() + SHARE_TOKEN_TTL_MS;
+        shareTokens.put(token, new ShareEntry(agent.getQwenpawAgentId(), chatId, expireAt));
+        Map<String, Object> result = new HashMap<>(4);
+        result.put("token", token);
+        result.put("expireAt", expireAt);
+        return result;
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> getSharedChat(String token) {
+        ShareEntry entry = shareTokens.get(token);
+        if (entry == null || entry.expireAt < System.currentTimeMillis()) {
+            if (entry != null) {
+                shareTokens.remove(token);
+            }
+            throw ServiceExceptionUtil.exception(CHAT_SHARE_INVALID);
+        }
+        Map<String, Object> chat = qwenPawClient.getChat(entry.qwenpawAgentId, entry.chatId);
+        Map<String, Object> result = new HashMap<>(8);
+        result.put("title", chat.get("name"));
+        Object createdAt = chat.get("created_at");
+        if (createdAt == null) {
+            createdAt = chat.get("createdAt");
+        }
+        result.put("createdAt", createdAt);
+        // 直接透传 QwenPaw 原始消息数组，前端用与 ChatPanel 完全相同的 normalizeQwenPawMessage 归一化，
+        // 从而保证思考(reasoning)/工具调用(tool_calls)/附件/气泡等展示与系统内完全一致。
+        Object rawMessages = chat.get("messages");
+        result.put("messages", rawMessages instanceof List ? rawMessages : new ArrayList<>());
+        return result;
     }
 
     @Override
@@ -91,6 +150,50 @@ public class AiChatSessionServiceImpl implements AiChatSessionService {
     public Map<String, Object> renameChat(Long agentId, String chatId, String name) {
         AiAgentDO agent = validateAgent(agentId);
         return qwenPawClient.updateChatName(agent.getQwenpawAgentId(), chatId, name);
+    }
+
+    @Override
+    public Map<String, Object> setChatPinned(Long agentId, String chatId, boolean pinned) {
+        AiAgentDO agent = validateAgent(agentId);
+        return qwenPawClient.updateChatPinned(agent.getQwenpawAgentId(), chatId, pinned);
+    }
+
+    // ==================== 会话分组 ====================
+
+    @Override
+    public List<Map<String, Object>> listChatGroups(Long agentId) {
+        AiAgentDO agent = validateAgent(agentId);
+        return qwenPawClient.listChatGroups(agent.getQwenpawAgentId());
+    }
+
+    @Override
+    public Map<String, Object> createChatGroup(Long agentId, String name) {
+        AiAgentDO agent = validateAgent(agentId);
+        return qwenPawClient.createChatGroup(agent.getQwenpawAgentId(), name);
+    }
+
+    @Override
+    public Map<String, Object> updateChatGroup(Long agentId, String groupId, String name) {
+        AiAgentDO agent = validateAgent(agentId);
+        return qwenPawClient.updateChatGroup(agent.getQwenpawAgentId(), groupId, name);
+    }
+
+    @Override
+    public void deleteChatGroup(Long agentId, String groupId) {
+        AiAgentDO agent = validateAgent(agentId);
+        qwenPawClient.deleteChatGroup(agent.getQwenpawAgentId(), groupId);
+    }
+
+    @Override
+    public void reorderChatGroups(Long agentId, List<String> groupIds) {
+        AiAgentDO agent = validateAgent(agentId);
+        qwenPawClient.reorderChatGroups(agent.getQwenpawAgentId(), groupIds);
+    }
+
+    @Override
+    public Map<String, Object> updateChatGroupId(Long agentId, String chatId, String groupId) {
+        AiAgentDO agent = validateAgent(agentId);
+        return qwenPawClient.updateChatGroupId(agent.getQwenpawAgentId(), chatId, groupId);
     }
 
     // ==================== 对话 ====================
@@ -115,12 +218,27 @@ public class AiChatSessionServiceImpl implements AiChatSessionService {
     @Override
     public SseEmitter sendMessageStream(Long agentId, String chatId, String sessionId, String message,
                                         List<Map<String, Object>> contentItems, List<Long> kbIds, boolean approvalOff) {
+        return sendMessageStream(agentId, chatId, sessionId, message, contentItems, kbIds, approvalOff, null);
+    }
+
+    @Override
+    public SseEmitter sendMessageStream(Long agentId, String chatId, String sessionId, String message,
+                                        List<Map<String, Object>> contentItems, List<Long> kbIds,
+                                        boolean approvalOff, String approvalLevel) {
         AiAgentDO agent = validateAgent(agentId);
         String qwenpawAgentId = agent.getQwenpawAgentId();
         String userId = currentUserId();
-        // 会话级免审批：用户在该会话内选择不再弹工具审批框时，透传 request_context.approval_level=off
-        Map<String, Object> requestContext = approvalOff
-                ? java.util.Collections.singletonMap("approval_level", "off") : null;
+        // 审批级别：问答框模式（strict/auto/off）优先；兼容旧 approvalOff=true → off。
+        // 仅接受合法值，非法值忽略（回落 QwenPaw 智能体自身配置）。
+        String level = null;
+        if ("strict".equalsIgnoreCase(approvalLevel) || "auto".equalsIgnoreCase(approvalLevel)
+                || "off".equalsIgnoreCase(approvalLevel)) {
+            level = approvalLevel.toLowerCase();
+        } else if (approvalOff) {
+            level = "off";
+        }
+        Map<String, Object> requestContext = level == null
+                ? null : java.util.Collections.singletonMap("approval_level", level);
         // 知识库检索范围注入：用户勾选 kbIds 时，先按第一层可见性过滤（权限校验由 Java 端负责，
         // 剔除当前用户不可见的库，防止越权检索其它租户/不可见库内容），再把「库名(id)」拼进当轮消息前缀，
         // 供 LLM 填 search_knowledge_base 的 knowledge_base_ids 参数（QwenPaw 不改，提示词注入）。
@@ -139,8 +257,20 @@ public class AiChatSessionServiceImpl implements AiChatSessionService {
             }
         }
         final String sendText = StrUtil.isNotEmpty(scopePrefix) ? scopePrefix + message : message;
-        // sessionId 为空时兜底生成（首次发问无预创建 chat 的场景）
-        String effectiveSessionId = (sessionId != null && !sessionId.isEmpty()) ? sessionId : UUID.randomUUID().toString();
+        // sessionId 为空时兜底：
+        // - 若已携带 chatId，则复用该会话在 QwenPaw 侧的 session_id，确保三元组 (session_id,user_id,channel) 一致，
+        //   命中预创建会话，避免 QwenPaw get_or_create_chat 又新建一个空会话（C 端"新建对话后发送"场景）；
+        // - 否则（首次发问无 chatId 的管理端场景）生成新 session_id，由 QwenPaw 自动开新会话。
+        String effectiveSessionId;
+        if (sessionId != null && !sessionId.isEmpty()) {
+            effectiveSessionId = sessionId;
+        } else if (chatId != null && !chatId.isEmpty()) {
+            Map<String, Object> existingChat = qwenPawClient.getChat(qwenpawAgentId, chatId);
+            Object sid = existingChat != null ? existingChat.get("session_id") : null;
+            effectiveSessionId = sid != null ? String.valueOf(sid) : UUID.randomUUID().toString();
+        } else {
+            effectiveSessionId = UUID.randomUUID().toString();
+        }
         SseEmitter emitter = new SseEmitter(0L);
         Long tenantId = TenantContextHolder.getTenantId();
 
@@ -173,8 +303,59 @@ public class AiChatSessionServiceImpl implements AiChatSessionService {
 
     @Override
     public List<Map<String, Object>> listProviders(Long agentId) {
-        validateAgent(agentId);
-        return qwenPawClient.listProviders();
+        AiAgentDO agent = validateAgent(agentId);
+        List<Map<String, Object>> providers = qwenPawClient.listProviders(agent.getQwenpawAgentId());
+        // 对话页「模型选择」只展示「已配置」的 provider：
+        // 与管理端模型管理页（AiModelServiceImpl.convertToProviderVO）的 configured 口径保持一致，
+        // 避免把未配置 api_key/base_url、已禁用的 provider 列出。
+        List<Map<String, Object>> eligible = new ArrayList<>();
+        for (Map<String, Object> provider : providers) {
+            if (isEligibleProvider(provider)) {
+                eligible.add(provider);
+            }
+        }
+        return eligible;
+    }
+
+    /**
+     * 判断 provider 是否「已配置」，可作为对话页模型选择的候选。
+     *
+     * <p>口径与管理端模型管理页 configured 一致：
+     * <ol>
+     *   <li>显式 disabled 或无任何模型（models + extra_models 均为空）的排除；</li>
+     *   <li>内嵌本地 provider（qwenpaw-local / copaw-local）恒为已配置；</li>
+     *   <li>自定义 provider 且 base_url 非空即视为已配置；</li>
+     *   <li>require_api_key === false（免费/本地服务商）视为已配置；</li>
+     *   <li>其余需 api_key 的 provider：需 api_key 非空（QwenPaw 返回为脱敏后的非空串）。</li>
+     * </ol>
+     */
+    private boolean isEligibleProvider(Map<String, Object> provider) {
+        if (provider == null) {
+            return false;
+        }
+        if (Boolean.FALSE.equals(provider.get("enabled"))) {
+            return false;
+        }
+        if (sizeOfList(provider.get("models")) + sizeOfList(provider.get("extra_models")) == 0) {
+            return false;
+        }
+        String providerId = StrUtil.toStringOrNull(provider.get("id"));
+        if ("qwenpaw-local".equals(providerId) || "copaw-local".equals(providerId)) {
+            return true;
+        }
+        if (Boolean.TRUE.equals(provider.get("is_custom"))
+                && StrUtil.isNotBlank(StrUtil.toStringOrNull(provider.get("base_url")))) {
+            return true;
+        }
+        if (Boolean.FALSE.equals(provider.get("require_api_key"))) {
+            return true;
+        }
+        return StrUtil.isNotBlank(StrUtil.toStringOrNull(provider.get("api_key")));
+    }
+
+    /** 安全取列表长度（非 List 或 null 返回 0） */
+    private int sizeOfList(Object value) {
+        return value instanceof List ? ((List<?>) value).size() : 0;
     }
 
     @Override
@@ -248,17 +429,22 @@ public class AiChatSessionServiceImpl implements AiChatSessionService {
     // ==================== 私有辅助 ====================
 
     /**
-     * 校验智能体存在并返回 DO（命中芋道租户隔离）
+     * 校验智能体存在并返回 DO（写操作：仅创建者 / 超管）。
+     *
+     * <p>他人公开智能体「只读」：任何写操作（新建会话、发送对话、改配置等）一律拒绝，
+     * 抛出 {@link ErrorCodeConstants#AGENT_READ_ONLY}。
      */
     private AiAgentDO validateAgent(Long agentId) {
-        AiAgentDO agent = agentMapper.selectById(agentId);
-        if (agent == null) {
-            throw ServiceExceptionUtil.exception(AGENT_NOT_EXISTS);
-        }
-        if (agent.getQwenpawAgentId() == null || agent.getQwenpawAgentId().isEmpty()) {
-            throw ServiceExceptionUtil.exception(QWENPAW_AGENT_NOT_FOUND);
-        }
-        return agent;
+        return aiAgentService.getAgentForWrite(agentId);
+    }
+
+    /**
+     * 校验智能体存在并返回 DO（只读场景：本人 / 超管 / 公开智能体 可见）。
+     *
+     * <p>用于查看、预览他人公开智能体的会话历史等只读操作。
+     */
+    private AiAgentDO validateAgentReadable(Long agentId) {
+        return aiAgentService.getAgentForRead(agentId);
     }
 
     /**

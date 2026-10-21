@@ -9,7 +9,11 @@ import cn.iocoder.yudao.module.agent.controller.admin.agent.vo.AgentPageReqVO;
 import cn.iocoder.yudao.module.agent.controller.admin.agent.vo.AgentRespVO;
 import cn.iocoder.yudao.module.agent.controller.admin.agent.vo.AgentSaveReqVO;
 import cn.iocoder.yudao.module.agent.dal.dataobject.agent.AiAgentDO;
+import cn.iocoder.yudao.module.agent.enums.AiMetaTypeEnum;
 import cn.iocoder.yudao.module.agent.service.agent.AiAgentService;
+import cn.iocoder.yudao.module.agent.service.follow.AiMetaFollowService;
+import cn.iocoder.yudao.module.system.api.user.AdminUserApi;
+import cn.iocoder.yudao.module.system.api.user.dto.AdminUserRespDTO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -19,8 +23,14 @@ import org.springframework.web.bind.annotation.*;
 
 import jakarta.annotation.Resource;
 import jakarta.validation.Valid;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static cn.iocoder.yudao.framework.common.pojo.CommonResult.success;
 
@@ -37,6 +47,12 @@ public class AgentController {
 
     @Resource
     private AiAgentService agentService;
+
+    @Resource
+    private AiMetaFollowService metaFollowService;
+
+    @Resource
+    private AdminUserApi adminUserApi;
 
     @PostMapping("/create")
     @Operation(summary = "创建智能体")
@@ -97,7 +113,43 @@ public class AgentController {
     @PreAuthorize("@ss.hasPermission('ai-agent:agent:query')")
     public CommonResult<List<AgentRespVO>> getMyAgents() {
         List<AiAgentDO> list = agentService.getMyAgents();
-        return success(BeanUtils.toBean(list, AgentRespVO.class));
+        return success(toRespList(list));
+    }
+
+    @PostMapping("/{id}/follow")
+    @Operation(summary = "关注智能体（返回最新关注数，便于前端实时刷新）")
+    @Parameter(name = "id", description = "智能体ID", required = true)
+    @PreAuthorize("@ss.hasPermission('ai-agent:agent:create')")
+    public CommonResult<Long> followAgent(@PathVariable("id") Long id) {
+        // 公开智能体允许被其他用户关注；校验存在性 + 公开/本人/超管
+        agentService.validateFollowable(id);
+        metaFollowService.follow(AiMetaTypeEnum.AGENT.getType(), id, SecurityFrameworkUtils.getLoginUserId());
+        return success(getFollowCount(id));
+    }
+
+    @GetMapping("/visible-list")
+    @Operation(summary = "获得当前用户可见的智能体列表（水利智囊用：公开 + 自己的）")
+    @PreAuthorize("@ss.hasPermission('ai-agent:agent:query')")
+    public CommonResult<List<AgentRespVO>> getVisibleAgentList() {
+        Long userId = SecurityFrameworkUtils.getLoginUserId();
+        List<AiAgentDO> list = agentService.getVisibleAgentList(userId);
+        return success(toRespList(list));
+    }
+
+    @DeleteMapping("/{id}/follow")
+    @Operation(summary = "取消关注智能体（返回最新关注数）")
+    @Parameter(name = "id", description = "智能体ID", required = true)
+    @PreAuthorize("@ss.hasPermission('ai-agent:agent:delete')")
+    public CommonResult<Long> unfollowAgent(@PathVariable("id") Long id) {
+        metaFollowService.unfollow(AiMetaTypeEnum.AGENT.getType(), id, SecurityFrameworkUtils.getLoginUserId());
+        return success(getFollowCount(id));
+    }
+
+    /** 查询某智能体最新关注数 */
+    private Long getFollowCount(Long id) {
+        Map<Long, Long> countMap = metaFollowService.getFollowCountMap(
+                AiMetaTypeEnum.AGENT.getType(), Collections.singleton(id));
+        return countMap.getOrDefault(id, 0L);
     }
 
     @GetMapping("/my-default")
@@ -124,6 +176,45 @@ public class AgentController {
     @PreAuthorize("@ss.hasPermission('ai-agent:agent:create')")
     public CommonResult<Map<String, Object>> bootstrapDefaultAgents() {
         return success(agentService.bootstrapUserDefaultAgents());
+    }
+
+    /**
+     * DO → VO，并批量补充创建者昵称（ownerName）、是否本人（isOwner）、
+     * 关注数（followersCount）与当前用户是否已关注（isFollowed）
+     */
+    private List<AgentRespVO> toRespList(List<AiAgentDO> list) {
+        List<AgentRespVO> vos = BeanUtils.toBean(list, AgentRespVO.class);
+        if (vos.isEmpty()) {
+            return vos;
+        }
+        List<Long> ids = list.stream().map(AiAgentDO::getId).collect(Collectors.toList());
+        Map<Long, Long> countMap = metaFollowService.getFollowCountMap(AiMetaTypeEnum.AGENT.getType(), ids);
+        Long userId = SecurityFrameworkUtils.getLoginUserId();
+        Set<Long> followedIds = userId == null ? Collections.emptySet()
+                : new HashSet<>(metaFollowService.getFollowedIds(AiMetaTypeEnum.AGENT.getType(), userId));
+        // 批量解析创建者昵称/用户名，避免 N+1
+        Set<Long> ownerIds = list.stream().map(AiAgentDO::getUserId).filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<Long, String> ownerNameMap = new HashMap<>();
+        for (Long ownerId : ownerIds) {
+            try {
+                AdminUserRespDTO user = adminUserApi.getUser(ownerId);
+                if (user != null) {
+                    ownerNameMap.put(ownerId, user.getNickname());
+                }
+            } catch (Exception ignore) {
+                // 单个用户查询失败不影响整体列表
+            }
+        }
+        for (int i = 0; i < list.size(); i++) {
+            AiAgentDO agent = list.get(i);
+            Long id = agent.getId();
+            vos.get(i).setFollowersCount(countMap.getOrDefault(id, 0L));
+            vos.get(i).setIsFollowed(followedIds.contains(id));
+            vos.get(i).setOwnerName(ownerNameMap.get(agent.getUserId()));
+            vos.get(i).setIsOwner(userId != null && userId.equals(agent.getUserId()));
+        }
+        return vos;
     }
 
 }

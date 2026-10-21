@@ -1,6 +1,7 @@
 package cn.iocoder.yudao.module.agent.controller.admin.agent;
 
 import cn.iocoder.yudao.framework.common.pojo.CommonResult;
+import cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils;
 import cn.iocoder.yudao.module.agent.service.agent.AiAgentService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -98,11 +99,19 @@ public class AgentRemoteController {
         return success(agentService.listAgentQwenpawSkills(agentId));
     }
 
+    @GetMapping("/commands")
+    @Operation(summary = "获得智能体可用的斜杠操作指令（/clean、/new 等，QwenPaw commands/available 透传，区别于 skill 指令）")
+    @Parameter(name = "agentId", description = "智能体ID", required = true)
+    @PreAuthorize("@ss.hasPermission('ai-agent:agent:query')")
+    public CommonResult<List<Map<String, Object>>> listCommands(@RequestParam("agentId") Long agentId) {
+        return success(agentService.listAgentQwenpawCommands(agentId));
+    }
+
     @GetMapping("/skill-pool")
-    @Operation(summary = "列出 QwenPaw 全局技能池（内置 + 自定义技能）")
+    @Operation(summary = "列出 QwenPaw 全局技能池（内置 + 自定义技能，按个人/公共可见性过滤）")
     @PreAuthorize("@ss.hasPermission('ai-agent:agent:query')")
     public CommonResult<List<Map<String, Object>>> listSkillPool() {
-        return success(agentService.listQwenpawSkillPool());
+        return success(agentService.listQwenpawSkillPool(SecurityFrameworkUtils.getLoginUserId()));
     }
 
     @GetMapping("/skill-pool/{skillName}")
@@ -133,6 +142,27 @@ public class AgentRemoteController {
                                                 @RequestParam("skillName") String skillName) {
         agentService.uninstallQwenpawSkill(agentId, skillName);
         return success(true);
+    }
+
+    @GetMapping("/skill/detail")
+    @Operation(summary = "读取智能体已安装技能的详情（含 SKILL.md 内容；QwenPaw 工作区实例，非技能池模板）")
+    @Parameter(name = "agentId", description = "智能体ID", required = true)
+    @Parameter(name = "skillName", description = "技能名称", required = true)
+    @PreAuthorize("@ss.hasPermission('ai-agent:agent:query')")
+    public CommonResult<Map<String, Object>> getSkillDetail(@RequestParam("agentId") Long agentId,
+                                                            @RequestParam("skillName") String skillName) {
+        return success(agentService.getAgentSkillDetail(agentId, skillName));
+    }
+
+    @PutMapping("/skill/save")
+    @Operation(summary = "保存智能体已安装技能的 SKILL.md 内容（仅作用于该智能体，不回写技能池/商场模板）")
+    @Parameter(name = "agentId", description = "智能体ID", required = true)
+    @PreAuthorize("@ss.hasPermission('ai-agent:agent:update')")
+    public CommonResult<Map<String, Object>> saveSkillContent(@RequestParam("agentId") Long agentId,
+                                                              @RequestBody Map<String, Object> body) {
+        String skillName = body.get("skillName") == null ? "" : String.valueOf(body.get("skillName"));
+        String content = body.get("content") == null ? "" : String.valueOf(body.get("content"));
+        return success(agentService.saveAgentSkillContent(agentId, skillName, content));
     }
 
     @PostMapping("/mcp/register")

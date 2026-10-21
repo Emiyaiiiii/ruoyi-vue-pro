@@ -9,15 +9,10 @@ import cn.iocoder.yudao.framework.tenant.core.context.TenantContextHolder;
 import cn.iocoder.yudao.module.kb.controller.admin.vectortask.vo.VectorTaskPageReqVO;
 import cn.iocoder.yudao.module.kb.controller.admin.vectortask.vo.VectorTaskSubmitReqVO;
 import cn.iocoder.yudao.module.kb.dal.dataobject.document.DocumentDO;
-import cn.iocoder.yudao.module.kb.dal.dataobject.chunkmethod.ChunkMethodDO;
-import cn.iocoder.yudao.module.kb.dal.dataobject.library.LibraryDO;
 import cn.iocoder.yudao.module.kb.dal.dataobject.vectortask.VectorTaskDO;
-import cn.iocoder.yudao.module.kb.dal.mysql.chunkmethod.ChunkMethodMapper;
 import cn.iocoder.yudao.module.kb.dal.mysql.document.DocumentMapper;
-import cn.iocoder.yudao.module.kb.dal.mysql.library.LibraryMapper;
 import cn.iocoder.yudao.module.kb.dal.mysql.vectortask.VectorTaskMapper;
 import cn.iocoder.yudao.module.kb.enums.VectorTaskStatusEnum;
-import cn.iocoder.yudao.module.kb.enums.ImageStrategyEnum;
 import cn.iocoder.yudao.module.kb.framework.config.VectorTaskConfig;
 import cn.iocoder.yudao.module.kb.service.kbconfig.KbProcessConfigResolver;
 import lombok.extern.slf4j.Slf4j;
@@ -59,10 +54,6 @@ public class VectorTaskServiceImpl implements VectorTaskService {
     private VectorTaskConfig vectorTaskConfig;
     @Resource
     private VectorTaskPublisher vectorTaskPublisher;
-    @Resource
-    private ChunkMethodMapper chunkMethodMapper;
-    @Resource
-    private LibraryMapper libraryMapper;
     @Resource
     private KbProcessConfigResolver kbProcessConfigResolver;
     @Resource
@@ -373,54 +364,6 @@ public class VectorTaskServiceImpl implements VectorTaskService {
                 config.put("parse_options", parseOptions);
             }
         }
-        // 图片处理方案：任务参数 > KB 级 process_config.chunking.image_strategy > kb_library.image_strategy(旧字段)
-        // > kb_chunk_method 默认参数；全部缺失时回退空串（python 端按存量布尔推断）。
-        // resolver 已处理 KB 级与全局默认，这里仅在未合并到时补旧字段兜底。
-        Object mergedImageStrategy = config.get("image_strategy");
-        if (mergedImageStrategy == null || StrUtil.isBlank(String.valueOf(mergedImageStrategy))) {
-            config.put("image_strategy", resolveLegacyImageStrategy(reqVO.getKbId()));
-        }
         return config;
-    }
-
-    // ==================== 模型配置解析（请求体优先，读库默认兜底） ====================
-
-    /**
-     * 读取 kb_chunk_method 默认方法的 defaultParameters 作为切片兜底参数；
-     * 无默认方法时返回空 Map，交由 python-vector 本地缺省值兜底。
-     */
-    private Map<String, Object> resolveDefaultChunkMethodConfig() {
-        ChunkMethodDO method = chunkMethodMapper.selectDefaultMethod();
-        if (method == null || StrUtil.isBlank(method.getDefaultParameters())) {
-            return new HashMap<>();
-        }
-        Map<String, Object> params = JsonUtils.parseMap(method.getDefaultParameters());
-        return params != null ? params : new HashMap<>();
-    }
-
-    /**
-     * 解析图片处理方案的旧字段兜底（kb_library.image_strategy 存量字段）。
-     *
-     * <p>KB 级 process_config.chunking.image_strategy 已由 KbProcessConfigResolver 合并；
-     * 此处仅在未合并到时回退旧库字段：kb_library.image_strategy > kb_chunk_method 默认
-     * default_parameters.image_strategy > 空字符串（python 端按存量布尔推断）。
-     */
-    private String resolveLegacyImageStrategy(Long kbId) {
-        // 1. 旧库字段：kb_library.image_strategy
-        if (kbId != null) {
-            LibraryDO lib = libraryMapper.selectById(kbId);
-            if (lib != null && StrUtil.isNotBlank(lib.getImageStrategy())
-                    && ImageStrategyEnum.getByCode(lib.getImageStrategy()) != null) {
-                return lib.getImageStrategy();
-            }
-        }
-        // 2. 全局缺省（kb_chunk_method 默认方法 default_parameters.image_strategy）
-        Map<String, Object> def = resolveDefaultChunkMethodConfig();
-        Object global = def.get("image_strategy");
-        if (global != null && ImageStrategyEnum.getByCode(String.valueOf(global)) != null) {
-            return String.valueOf(global);
-        }
-        // 3. 未显式指定，走存量布尔推断
-        return "";
     }
 }

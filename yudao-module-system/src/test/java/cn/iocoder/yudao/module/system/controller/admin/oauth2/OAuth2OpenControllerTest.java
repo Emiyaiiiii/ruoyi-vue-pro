@@ -87,7 +87,7 @@ public class OAuth2OpenControllerTest extends BaseMockitoUnitTest {
 
         // 调用
         CommonResult<OAuth2OpenAccessTokenRespVO> result = oauth2OpenController.postAccessToken(request, granType,
-                code, redirectUri, state, null, null, null, null);
+                code, redirectUri, state, null, null, null, null, null);
         // 断言
         assertEquals(0, result.getCode());
         assertPojoEquals(accessTokenDO, result.getData());
@@ -115,7 +115,7 @@ public class OAuth2OpenControllerTest extends BaseMockitoUnitTest {
 
         // 调用
         CommonResult<OAuth2OpenAccessTokenRespVO> result = oauth2OpenController.postAccessToken(request, granType,
-                null, null, null, username, password, scope, null);
+                null, null, null, username, password, scope, null, null);
         // 断言
         assertEquals(0, result.getCode());
         assertPojoEquals(accessTokenDO, result.getData());
@@ -141,7 +141,7 @@ public class OAuth2OpenControllerTest extends BaseMockitoUnitTest {
 
         // 调用
         CommonResult<OAuth2OpenAccessTokenRespVO> result = oauth2OpenController.postAccessToken(request, granType,
-                null, null, null, null, password, null, refreshToken);
+                null, null, null, null, password, null, refreshToken, null);
         // 断言
         assertEquals(0, result.getCode());
         assertPojoEquals(accessTokenDO, result.getData());
@@ -153,7 +153,7 @@ public class OAuth2OpenControllerTest extends BaseMockitoUnitTest {
         // 调用，并断言
         assertServiceException(() -> oauth2OpenController.postAccessToken(null,
                         OAuth2GrantTypeEnum.IMPLICIT.getGrantType(), null, null, null,
-                        null, null, null, null),
+                        null, null, null, null, null),
                 new ErrorCode(400, "Token 接口不支持 implicit 授权模式"));
     }
 

@@ -1,12 +1,14 @@
 package cn.iocoder.yudao.module.kb.dal.mysql.document;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 import cn.iocoder.yudao.framework.common.pojo.PageResult;
 import cn.iocoder.yudao.framework.mybatis.core.query.LambdaQueryWrapperX;
 import cn.iocoder.yudao.framework.mybatis.core.mapper.BaseMapperX;
 import cn.iocoder.yudao.module.kb.dal.dataobject.document.DocumentDO;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Select;
 import cn.iocoder.yudao.module.kb.controller.admin.document.vo.*;
 
 /**
@@ -45,6 +47,45 @@ public interface DocumentMapper extends BaseMapperX<DocumentDO> {
                 .eqIfPresent(DocumentDO::getStatus, reqVO.getStatus())
                 .betweenIfPresent(DocumentDO::getCreateTime, reqVO.getCreateTime())
                 .orderByDesc(DocumentDO::getId));
+    }
+
+    /**
+     * 贡献排行：按文档上传人（creator）聚合文档数，倒序取前 N。
+     * 多租户条件由租户插件自动追加（kb_document 启用租户）。
+     */
+    @Select("SELECT creator AS creatorId, COUNT(*) AS docCount FROM kb_document " +
+            "WHERE deleted = 0 AND creator IS NOT NULL GROUP BY creator ORDER BY docCount DESC LIMIT #{limit}")
+    List<Map<String, Object>> selectContributionRank(int limit);
+
+    /**
+     * 按知识库批量汇总文件字节数（前端卡片 used_storage_mb 用）
+     *
+     * @param kbIds 知识库ID集合
+     * @return kbId → 文件总字节数
+     */
+    default Map<Long, Long> selectStorageBytesMap(Collection<Long> kbIds) {
+        if (kbIds == null || kbIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        return selectList(new LambdaQueryWrapperX<DocumentDO>()
+                .in(DocumentDO::getKbId, kbIds)).stream()
+                .filter(d -> d.getFileSize() != null)
+                .collect(Collectors.groupingBy(DocumentDO::getKbId,
+                        Collectors.summingLong(DocumentDO::getFileSize)));
+    }
+
+    /**
+     * 按知识库批量统计文档数（智库总览 doc_count 用）
+     *
+     * @param kbIds 知识库ID集合
+     * @return 文档总数
+     */
+    default long selectCountByKbIds(Collection<Long> kbIds) {
+        if (kbIds == null || kbIds.isEmpty()) {
+            return 0L;
+        }
+        return selectCount(new LambdaQueryWrapperX<DocumentDO>()
+                .in(DocumentDO::getKbId, kbIds));
     }
 
 }

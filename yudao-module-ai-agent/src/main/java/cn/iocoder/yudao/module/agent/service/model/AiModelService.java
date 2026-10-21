@@ -41,6 +41,23 @@ public interface AiModelService {
     List<ModelInfoVO> discoverModels(String providerId);
 
     /**
+     * 分页查询 Provider 的模型池（发现目录 / 已选模型）
+     *
+     * @param tab all / candidates / selected
+     */
+    Map<String, Object> getModelPool(String providerId, int offset, int limit, String tab, String search);
+
+    /**
+     * 选择/取消选择模型池中的某个模型（写入/移出 models）
+     */
+    ProviderRespVO updateModelPool(String providerId, String modelId, boolean selected);
+
+    /**
+     * 批量选择/取消选择整个模型池
+     */
+    Map<String, Object> selectAllModels(String providerId, boolean selected);
+
+    /**
      * 向 Provider 添加模型
      */
     ProviderRespVO addModel(AddModelReqVO reqVO);

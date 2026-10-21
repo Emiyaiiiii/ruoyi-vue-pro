@@ -17,6 +17,8 @@ public interface ErrorCodeConstants {
     ErrorCode AGENT_ALREADY_ENABLED = new ErrorCode(1_020_001_004, "智能体已启用");
     ErrorCode AGENT_ALREADY_DISABLED = new ErrorCode(1_020_001_005, "智能体已停用");
     ErrorCode AGENT_PERMISSION_DENIED = new ErrorCode(1_020_001_006, "无权访问该智能体");
+    ErrorCode AGENT_READ_ONLY = new ErrorCode(1_020_001_007, "该智能体为他人公开，仅可查看，不能对话或编辑");
+    ErrorCode AGENT_LAST_ONE_CANNOT_DELETE = new ErrorCode(1_020_001_008, "至少保留一个可用的智能体，无法删除");
 
     // ========== MCP 商店 1-020-002-000 ==========
     ErrorCode MCP_META_NOT_EXISTS = new ErrorCode(1_020_002_000, "MCP 商店项不存在");
@@ -46,5 +48,6 @@ public interface ErrorCodeConstants {
     ErrorCode QWENPAW_CHAT_CREATE_FAILED = new ErrorCode(1_020_008_003, "QwenPaw 会话创建失败，请稍后重试");
     ErrorCode CHAT_SESSION_STREAMING = new ErrorCode(1_020_008_004, "当前会话正在生成中，请勿重复发送");
     ErrorCode QWENPAW_MCP_CONNECTING = new ErrorCode(1_020_008_005, "MCP 服务连接中，请稍后重试");
+    ErrorCode CHAT_SHARE_INVALID = new ErrorCode(1_020_008_006, "分享链接无效或已过期");
 
 }

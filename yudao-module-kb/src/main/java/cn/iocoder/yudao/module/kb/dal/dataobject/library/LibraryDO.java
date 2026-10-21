@@ -66,10 +66,6 @@ public class LibraryDO extends BaseDO {
      * 是否项目成果库: 0=否, 1=是
      */
     private Integer isProject;
-    /**
-     * 图片处理方案：''=按激活模型推断；none/ocr/vl_summary/vision 见 ImageStrategyEnum
-     */
-    private String imageStrategy;
 
     /**
      * KB级处理配置(JSON)：{chunking, retrieval, rerank, model} 四组；

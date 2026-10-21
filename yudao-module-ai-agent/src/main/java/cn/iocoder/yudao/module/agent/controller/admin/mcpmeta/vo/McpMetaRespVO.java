@@ -56,11 +56,20 @@ public class McpMetaRespVO {
     @Schema(description = "状态: 0=停用, 1=启用", example = "1")
     private Integer status;
 
+    @Schema(description = "归属用户ID（type=1 个人 MCP 时为创建者）", example = "1024")
+    private Long ownerUserId;
+
     @Schema(description = "排序", example = "0")
     private Integer sortOrder;
 
     @Schema(description = "是否默认挂载到新建智能体: 0=否, 1=是", example = "0")
     private Integer isInitial;
+
+    @Schema(description = "关注人数", example = "12")
+    private Long followersCount;
+
+    @Schema(description = "当前登录用户是否已关注", example = "true")
+    private Boolean isFollowed;
 
     @Schema(description = "创建时间")
     private LocalDateTime createTime;

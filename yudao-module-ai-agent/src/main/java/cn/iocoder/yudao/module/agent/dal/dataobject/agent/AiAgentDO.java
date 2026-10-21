@@ -106,4 +106,12 @@ public class AiAgentDO extends BaseDO {
      */
     private Integer isDefault;
 
+    /**
+     * 可见性: 0=个人(默认，仅创建者可管理), 1=公开(同租户其他用户可在水利智囊查看/关注)
+     *
+     * <p>仅影响"水利智囊 - 智能体"页签的展示与关注；编辑/删除始终仅创建者可用
+     * （见 AiAgentServiceImpl#validateAgentAccess）。数据库默认 0，存量智能体保持私有。
+     */
+    private Integer visibility;
+
 }

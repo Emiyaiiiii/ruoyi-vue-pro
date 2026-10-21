@@ -7,8 +7,9 @@ import cn.iocoder.yudao.framework.mybatis.core.query.LambdaQueryWrapperX;
 import cn.iocoder.yudao.framework.mybatis.core.mapper.BaseMapperX;
 import cn.iocoder.yudao.module.agent.dal.dataobject.agent.AiAgentDO;
 import cn.iocoder.yudao.module.agent.controller.admin.agent.vo.AgentPageReqVO;
-import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Update;
 
 /**
  * 智能体实例 Mapper
@@ -85,14 +86,30 @@ public interface AiAgentMapper extends BaseMapperX<AiAgentDO> {
     }
 
     /**
-     * 清除某用户的默认智能体标记（即将 is_default 重置为 NULL）。
+     * 查询「当前用户可见」的启用智能体列表（水利智囊 - 智能体页签）：
+     * 公开的（visibility=1，同租户所有用户）+ 我自己创建的（user_id=userId）。
      *
-     * <p>多租户下 user_id 全局唯一、默认 agent 每人最多 1 条，故重置该用户全部记录为 NULL 是安全的。
+     * <p>租户隔离由 BaseMapperX 的 tenant 拦截器自动注入；
+     * 排序：公开优先，再按创建时间倒序（新创建靠前）。
      */
-    default void clearDefaultByUserId(Long userId) {
-        update(null, new LambdaUpdateWrapper<AiAgentDO>()
-                .eq(AiAgentDO::getUserId, userId)
-                .set(AiAgentDO::getIsDefault, null));
+    default List<AiAgentDO> selectVisibleList(Long userId) {
+        return selectList(new LambdaQueryWrapperX<AiAgentDO>()
+                .eq(AiAgentDO::getStatus, 1)
+                .and(w -> w.eq(AiAgentDO::getVisibility, 1)
+                        .or().eq(AiAgentDO::getUserId, userId))
+                .orderByDesc(AiAgentDO::getVisibility)
+                .orderByDesc(AiAgentDO::getCreateTime));
     }
+
+    /**
+     * 清除某用户的默认标记，【含已逻辑删除的记录】。
+     *
+     * <p>逻辑删除的行仍占据 uk_user_default 唯一键（deleted 标记不在索引内），若用户删除过
+     * 默认智能体，上面带 deleted=0 过滤的清理无法释放唯一键，后续设置/创建默认必撞
+     * Duplicate entry。此处用原生 SQL 绕过逻辑删除过滤，把该用户全部 is_default=1 的行
+     * （含已删）重置为 NULL（NULL 不参与唯一性约束）。
+     */
+    @Update("UPDATE ai_agent SET is_default = NULL WHERE user_id = #{userId} AND is_default = 1")
+    int clearDefaultIncludeDeleted(@Param("userId") Long userId);
 
 }

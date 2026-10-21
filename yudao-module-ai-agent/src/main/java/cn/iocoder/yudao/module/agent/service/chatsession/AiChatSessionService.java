@@ -41,6 +41,23 @@ public interface AiChatSessionService {
     Map<String, Object> getChat(Long agentId, String chatId);
 
     /**
+     * 创建分享：生成不透明分享 token（含有效期），用于匿名访问该会话
+     *
+     * @param agentId 芋道智能体主键 ID
+     * @param chatId  QwenPaw 会话 ID
+     * @return {token, expireAt}
+     */
+    Map<String, Object> createShare(Long agentId, String chatId);
+
+    /**
+     * 按分享 token 匿名获取会话内容（标题 + 消息列表），无需登录
+     *
+     * @param token 分享 token
+     * @return {title, createdAt, messages:[{id, isUser, text}]}
+     */
+    Map<String, Object> getSharedChat(String token);
+
+    /**
      * 删除 QwenPaw 会话
      */
     void deleteChat(Long agentId, String chatId);
@@ -49,6 +66,66 @@ public interface AiChatSessionService {
      * 重命名 QwenPaw 会话
      */
     Map<String, Object> renameChat(Long agentId, String chatId, String name);
+
+    /**
+     * 设置会话置顶（置顶/取消置顶），透传 QwenPaw ChatUpdate 的 pinned 字段
+     *
+     * @param agentId 芋道智能体主键 ID
+     * @param chatId  QwenPaw 会话 ID（UUID）
+     * @param pinned  true 置顶 / false 取消置顶
+     */
+    Map<String, Object> setChatPinned(Long agentId, String chatId, boolean pinned);
+
+    // ==================== 会话分组 ====================
+
+    /**
+     * 列出指定智能体下的会话分组
+     *
+     * @param agentId 芋道智能体主键 ID
+     */
+    List<Map<String, Object>> listChatGroups(Long agentId);
+
+    /**
+     * 创建会话分组
+     *
+     * @param agentId 芋道智能体主键 ID
+     * @param name    分组名称
+     */
+    Map<String, Object> createChatGroup(Long agentId, String name);
+
+    /**
+     * 更新会话分组名称
+     *
+     * @param agentId 芋道智能体主键 ID
+     * @param groupId QwenPaw 分组 ID
+     * @param name    新的分组名称
+     */
+    Map<String, Object> updateChatGroup(Long agentId, String groupId, String name);
+
+    /**
+     * 删除会话分组
+     *
+     * @param agentId 芋道智能体主键 ID
+     * @param groupId QwenPaw 分组 ID
+     */
+    void deleteChatGroup(Long agentId, String groupId);
+
+    /**
+     * 调整会话分组顺序
+     *
+     * @param agentId  芋道智能体主键 ID
+     * @param groupIds 分组 ID 顺序列表（前端字段名 groupIds）
+     */
+    void reorderChatGroups(Long agentId, List<String> groupIds);
+
+    /**
+     * 更新会话所属分组（前端"移动到分组"，groupId 为 null 表示移出分组）
+     *
+     * @param agentId 芋道智能体主键 ID
+     * @param chatId  QwenPaw 会话 ID
+     * @param groupId 目标分组 ID；null 表示移出分组
+     */
+    Map<String, Object> updateChatGroupId(Long agentId, String chatId, String groupId);
 
     // ==================== 对话 ====================
 
@@ -103,6 +180,17 @@ public interface AiChatSessionService {
      */
     SseEmitter sendMessageStream(Long agentId, String chatId, String sessionId, String message,
                                  List<Map<String, Object>> contentItems, List<Long> kbIds, boolean approvalOff);
+
+    /**
+     * SSE 流式发送消息（在 {@link #sendMessageStream(Long, String, String, String, List, List, boolean)}
+     * 基础上支持问答框审批模式：strict 每次询问 / auto 智能 / off 免审批）
+     *
+     * @param approvalOff   会话级免审批开关（兼容旧调用，等价 approvalLevel="off"）
+     * @param approvalLevel 问答框选择的审批模式，非空且合法时优先于 approvalOff
+     */
+    SseEmitter sendMessageStream(Long agentId, String chatId, String sessionId, String message,
+                                 List<Map<String, Object>> contentItems, List<Long> kbIds,
+                                 boolean approvalOff, String approvalLevel);
 
     /**
      * 重新挂载到 QwenPaw 正在运行的流（页面切回/标签切换时使用）

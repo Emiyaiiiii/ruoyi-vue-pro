@@ -48,6 +48,7 @@ public class QwenPawClient {
     private static final String API_AGENTS = "/api/agents";
     private static final String API_MODELS = "/api/models";
     private static final String API_CHATS = "/chats";
+    private static final String API_WORKSPACE = "/workspace";
     private static final String API_TOOLS = "/tools";
     private static final String API_MCP = "/mcp";
     private static final String API_SKILLS = "/skills";
@@ -488,6 +489,31 @@ public class QwenPawClient {
     }
 
     /**
+     * 获取智能体可用的全部斜杠操作指令（/clean、/new 等内置系统指令 + 插件注册指令），
+     * 与「skill 指令」区分：操作指令是对话框级命令，skill 指令是安装到智能体的技能。
+     *
+     * <p>对应 QwenPaw {@code GET /api/agents/{agentId}/workspace/commands/available}，
+     * 返回 {@code {"commands": [{name, description, category}]}}。
+     */
+    @SuppressWarnings("unchecked")
+    public List<Map<String, Object>> listAgentCommands(String agentId) {
+        String path = API_AGENTS + "/" + encode(agentId) + API_WORKSPACE + "/commands/available";
+        ResponseEntity<String> resp = get(path);
+        try {
+            Object value = objectMapper.readValue(resp.getBody(), Object.class);
+            if (value instanceof Map) {
+                Object commands = ((Map<?, ?>) value).get("commands");
+                if (commands instanceof List) {
+                    return toMapList(commands);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("[listAgentCommands] 响应解析失败，agentId={}, 响应={}", agentId, resp.getBody());
+        }
+        return new ArrayList<>();
+    }
+
+    /**
      * 主动向渠道发送消息
      *
      * <p>对应 QwenPaw {@code POST /api/messages/send}，通过 X-Agent-Id 请求头指定 agent。
@@ -919,10 +945,72 @@ public class QwenPawClient {
         delete(API_AGENTS + "/" + encode(agentId) + API_SKILLS + "/" + encode(skillName));
     }
 
+    /**
+     * 获取智能体已安装技能的详情（含 SKILL.md 内容）
+     *
+     * <p>对应 QwenPaw {@code GET /api/agents/{agentId}/skills/{skillName}}，
+     * 读取的是智能体工作区实例而非技能池模板。
+     * 注意：SKILL.md 主文件不能通过 files/{path} 端点读取（该端点仅允许 references/、scripts/ 前缀）。
+     */
+    public Map<String, Object> getAgentSkillDetail(String agentId, String skillName) {
+        String path = API_AGENTS + "/" + encode(agentId) + API_SKILLS + "/" + encode(skillName);
+        return parseJsonObject(get(path).getBody());
+    }
+
+    /**
+     * 保存智能体已安装技能的 SKILL.md 内容
+     *
+     * <p>对应 QwenPaw {@code PUT /api/agents/{agentId}/skills/save}，
+     * body 为 {@code SaveSkillRequest}（name/content，config 缺省时保留原配置）。
+     * 仅修改智能体工作区实例，不回写技能池/商场模板。
+     */
+    public Map<String, Object> saveSkillContent(String agentId, String skillName, String content) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("name", skillName);
+        body.put("content", content == null ? "" : content);
+        String resp = putJson(API_AGENTS + "/" + encode(agentId) + API_SKILLS + "/save", toJson(body));
+        return parseJsonObject(resp);
+    }
+
     // ==================== 模型/Provider 管理 ====================
 
     /**
      * 列出所有 Provider（含其下模型列表）
+     *
+     * @return 原始 JSON 解析后的 List，每个元素为一个 Provider 信息
+     */
+    @SuppressWarnings("unchecked")
+    public List<Map<String, Object>> listProviders(String agentId) {
+        // QwenPaw 的 /api/models 需要 X-Agent-Id 头才能返回该智能体可用的模型/Provider；
+        // 不带此头时 QwenPaw 返回空列表（与前端直连时手动带 x-agent-id 行为一致）。
+        HttpHeaders headers = buildHeaders();
+        if (agentId != null && !agentId.isEmpty()) {
+            headers.set("X-Agent-Id", agentId);
+        }
+        HttpEntity<Void> entity = new HttpEntity<>(headers);
+        ResponseEntity<String> resp = restTemplate.exchange(url(API_MODELS), HttpMethod.GET, entity, String.class);
+        try {
+            Object value = objectMapper.readValue(resp.getBody(), Object.class);
+            if (value instanceof List) {
+                return toMapList(value);
+            }
+            if (value instanceof Map) {
+                // 兼容 {providers: [...]} 包装
+                Object providers = ((Map<?, ?>) value).get("providers");
+                if (providers instanceof List) {
+                    return toMapList(providers);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("[listProviders] 响应解析失败，响应={}", resp.getBody());
+        }
+        return new ArrayList<>();
+    }
+
+    /**
+     * 列出所有 Provider（含其下模型列表，全局视角，不含 X-Agent-Id）
+     *
+     * <p>供管理端「模型管理」页使用：拉取平台全局可配置的 Provider 列表。
      *
      * @return 原始 JSON 解析后的 List，每个元素为一个 Provider 信息
      */
@@ -994,6 +1082,52 @@ public class QwenPawClient {
             log.warn("[discoverModels] 响应解析失败，响应={}", resp);
         }
         return new ArrayList<>();
+    }
+
+    /**
+     * 查询 Provider 的模型池（发现目录 + 已选模型，分页）
+     *
+     * <p>QwenPaw v2.2.2 起模型分两层：发现目录(pool) 与 已配置模型(models)。
+     * pool 仅用于“添加模型”时选择，选择后才进入 models；选择器/默认 LLM 只认 models。
+     *
+     * @param providerId Provider ID
+     * @param offset     偏移
+     * @param limit      每页数量（1-100）
+     * @param tab        all / candidates / selected
+     * @param search     搜索关键字
+     */
+    public Map<String, Object> getModelPool(String providerId, int offset, int limit, String tab, String search) {
+        StringBuilder path = new StringBuilder(API_MODELS + "/" + encode(providerId) + "/pool");
+        path.append("?offset=").append(offset).append("&limit=").append(limit);
+        if (tab != null && !tab.isEmpty()) {
+            path.append("&tab=").append(encode(tab));
+        }
+        if (search != null && !search.isEmpty()) {
+            path.append("&search=").append(encode(search));
+        }
+        ResponseEntity<String> resp = get(path.toString());
+        return parseJsonObject(resp.getBody());
+    }
+
+    /**
+     * 选择/取消选择模型池中的某个模型（写入/移出 models）
+     */
+    public Map<String, Object> updateModelPool(String providerId, String modelId, boolean selected) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("selected", selected);
+        // QwenPaw 该路由为 {model_id:path}，模型 ID 可能含 '/'（如 openrouter/kilo），用 encodePath 保留分隔符
+        String resp = putJson(API_MODELS + "/" + encode(providerId) + "/models/" + encodePath(modelId) + "/pool", toJson(body));
+        return parseJsonObject(resp);
+    }
+
+    /**
+     * 批量选择/取消选择整个模型池
+     */
+    public Map<String, Object> selectAllModels(String providerId, boolean selected) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("selected", selected);
+        String resp = putJson(API_MODELS + "/" + encode(providerId) + "/pool/selection", toJson(body));
+        return parseJsonObject(resp);
     }
 
     /**
@@ -1183,6 +1317,44 @@ public class QwenPawClient {
     public Map<String, Object> updateChatName(String agentId, String chatId, String name) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("name", name);
+        String path = API_AGENTS + "/" + encode(agentId) + API_CHATS + "/" + encode(chatId);
+        String resp = putJson(path, toJson(body));
+        return parseJsonObject(resp);
+    }
+
+    /**
+     * 更新会话所属分组（前端"移动到分组"）
+     *
+     * <p>对应 QwenPaw {@code PUT /api/agents/{agentId}/chats/{chatId}}，
+     * body 仅放 {@code {"group_id": ...}}，groupId 为 null 表示移出分组。
+     *
+     * @param agentId QwenPaw 智能体 ID
+     * @param chatId  QwenPaw 会话 ID
+     * @param groupId 目标分组 ID；null 表示移出分组
+     * @return 更新后的会话 spec
+     */
+    public Map<String, Object> updateChatGroupId(String agentId, String chatId, String groupId) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("group_id", groupId);
+        String path = API_AGENTS + "/" + encode(agentId) + API_CHATS + "/" + encode(chatId);
+        String resp = putJson(path, toJson(body));
+        return parseJsonObject(resp);
+    }
+
+    /**
+     * 设置会话置顶（前端"置顶/取消置顶"）
+     *
+     * <p>对应 QwenPaw {@code PUT /api/agents/{agentId}/chats/{chatId}}，
+     * body 仅放 {@code {"pinned": true/false}}（ChatUpdate 的可变字段）。
+     *
+     * @param agentId QwenPaw 智能体 ID
+     * @param chatId  QwenPaw 会话 ID
+     * @param pinned  true 置顶 / false 取消置顶
+     * @return 更新后的会话 spec
+     */
+    public Map<String, Object> updateChatPinned(String agentId, String chatId, boolean pinned) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("pinned", pinned);
         String path = API_AGENTS + "/" + encode(agentId) + API_CHATS + "/" + encode(chatId);
         String resp = putJson(path, toJson(body));
         return parseJsonObject(resp);
@@ -1453,7 +1625,292 @@ public class QwenPawClient {
         }
     }
 
+    // ==================== 工作区文件（透传）====================
+
+    /**
+     * 列出智能体工作区目录树
+     *
+     * <p>对应 QwenPaw {@code GET /api/agents/{agentId}/workspace/tree}
+     *
+     * @param path   目录相对路径（相对 root），可为 null
+     * @param cursor 分页游标，可为 null
+     * @param root   根目录标识（如 project），可为 null
+     * @param limit  每页数量，可为 null
+     */
+    public Map<String, Object> listWorkspaceTree(String agentId, String path, String cursor, String root, Integer limit) {
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("path", path);
+        params.put("cursor", cursor);
+        params.put("root", root);
+        params.put("limit", limit);
+        String urlPath = API_AGENTS + "/" + encode(agentId) + API_WORKSPACE + "/tree" + buildQueryString(params);
+        return parseJsonObject(get(urlPath).getBody());
+    }
+
+    /**
+     * 读取工作区文件元数据（大小/修改时间/类型等）
+     *
+     * <p>对应 QwenPaw {@code GET /api/agents/{agentId}/workspace/file-metadata}
+     */
+    public Map<String, Object> readWorkspaceFileMetadata(String agentId, String path, String root) {
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("path", path);
+        params.put("root", root);
+        String urlPath = API_AGENTS + "/" + encode(agentId) + API_WORKSPACE + "/file-metadata" + buildQueryString(params);
+        return parseJsonObject(get(urlPath).getBody());
+    }
+
+    /**
+     * 读取工作区文件内容（支持分页）
+     *
+     * <p>对应 QwenPaw {@code GET /api/agents/{agentId}/workspace/file-content}
+     *
+     * @param offset 起始偏移量，可为 null
+     * @param limit  读取长度，可为 null
+     */
+    public Map<String, Object> readWorkspaceFileContent(String agentId, String path, String root, Integer offset, Integer limit) {
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("path", path);
+        params.put("root", root);
+        params.put("offset", offset);
+        params.put("limit", limit);
+        String urlPath = API_AGENTS + "/" + encode(agentId) + API_WORKSPACE + "/file-content" + buildQueryString(params);
+        return parseJsonObject(get(urlPath).getBody());
+    }
+
+    /**
+     * 写入工作区文件内容（覆盖）
+     *
+     * <p>对应 QwenPaw {@code PUT /api/agents/{agentId}/workspace/file-content}，
+     * body 为 {@code {path, content, root}}。
+     */
+    public Map<String, Object> writeWorkspaceFileContent(String agentId, String path, String content, String root) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("path", path);
+        body.put("content", content == null ? "" : content);
+        if (root != null && !root.isEmpty()) {
+            body.put("root", root);
+        }
+        String urlPath = API_AGENTS + "/" + encode(agentId) + API_WORKSPACE + "/file-content";
+        return parseJsonObject(putJson(urlPath, toJson(body)));
+    }
+
+    /**
+     * 下载工作区文件字节流
+     *
+     * <p>对应 QwenPaw {@code GET /api/agents/{agentId}/workspace/download?path=}。
+     */
+    public byte[] downloadWorkspaceFile(String agentId, String path) {
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("path", path);
+        String urlPath = API_AGENTS + "/" + encode(agentId) + API_WORKSPACE + "/download" + buildQueryString(params);
+        HttpEntity<Void> entity = new HttpEntity<>(buildHeaders());
+        try {
+            ResponseEntity<byte[]> resp = restTemplate.exchange(url(urlPath), HttpMethod.GET, entity, byte[].class);
+            return resp.getBody() == null ? new byte[0] : resp.getBody();
+        } catch (HttpStatusCodeException e) {
+            log.warn("[downloadWorkspaceFile] QwenPaw 返回非 2xx，agentId={}, path={}, code={}",
+                    agentId, path, e.getStatusCode().value());
+            throw new ServiceException(QWENPAW_CONNECT_FAILED);
+        } catch (ResourceAccessException e) {
+            log.warn("[downloadWorkspaceFile] QwenPaw 连接失败，agentId={}, path={}", agentId, path, e);
+            throw new ServiceException(QWENPAW_CONNECT_FAILED);
+        }
+    }
+
+    /**
+     * 上传文件到工作区
+     *
+     * <p>对应 QwenPaw {@code POST /api/agents/{agentId}/workspace/upload}，
+     * multipart 字段 {@code file}，query 携带 {@code path}、{@code root}。
+     *
+     * @param data     文件字节
+     * @param fileName 文件名
+     * @param path     目标相对路径（可为 null）
+     * @param root     根目录标识（可为 null）
+     */
+    public Map<String, Object> uploadWorkspaceFile(String agentId, byte[] data, String fileName, String path, String root) {
+        HttpHeaders headers = buildHeaders();
+        headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+        MultiValueMap<String, Object> multipartBody = new LinkedMultiValueMap<>();
+        ByteArrayResource resource = new ByteArrayResource(data) {
+            @Override
+            public String getFilename() {
+                return fileName != null && !fileName.isEmpty() ? fileName : "file";
+            }
+        };
+        multipartBody.add("file", resource);
+
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("path", path);
+        params.put("root", root);
+        String urlPath = API_AGENTS + "/" + encode(agentId) + API_WORKSPACE + "/upload" + buildQueryString(params);
+        HttpEntity<MultiValueMap<String, Object>> entity = new HttpEntity<>(multipartBody, headers);
+        return parseJsonObject(exchange(urlPath, HttpMethod.POST, entity));
+    }
+
+    // ==================== 记忆文件（透传）====================
+
+    /**
+     * 列出智能体的记忆 Markdown 文件
+     *
+     * <p>对应 QwenPaw {@code GET /api/agents/{agentId}/workspace/memory}
+     *
+     * @param section 记忆分区：daily / digest，可为 null
+     */
+    public List<Map<String, Object>> listMemoryFiles(String agentId, String section) {
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("section", section);
+        String urlPath = API_AGENTS + "/" + encode(agentId) + API_WORKSPACE + "/memory" + buildQueryString(params);
+        ResponseEntity<String> resp = get(urlPath);
+        try {
+            Object value = objectMapper.readValue(resp.getBody(), Object.class);
+            return toMapListOrEmpty(value, "files", "memories", "items");
+        } catch (Exception e) {
+            log.warn("[listMemoryFiles] 响应解析失败，agentId={}, section={}", agentId, section, e);
+        }
+        return new ArrayList<>();
+    }
+
+    /**
+     * 读取指定记忆 Markdown 文件内容
+     *
+     * <p>对应 QwenPaw {@code GET /api/agents/{agentId}/workspace/memory/{mdPath}}
+     *
+     * @param mdPath  记忆文件相对路径（分段编码，保留 '/'）
+     * @param section 记忆分区：daily / digest，可为 null
+     */
+    public Map<String, Object> readMemoryFile(String agentId, String mdPath, String section) {
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("section", section);
+        String urlPath = API_AGENTS + "/" + encode(agentId) + API_WORKSPACE + "/memory/"
+                + encodePath(mdPath) + buildQueryString(params);
+        return parseJsonObject(get(urlPath).getBody());
+    }
+
+    /**
+     * 写入指定记忆 Markdown 文件内容（覆盖）
+     *
+     * <p>对应 QwenPaw {@code PUT /api/agents/{agentId}/workspace/memory/{mdPath}}，
+     * body 为 {@code {content}}。
+     */
+    public Map<String, Object> writeMemoryFile(String agentId, String mdPath, String content, String section) {
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("section", section);
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("content", content == null ? "" : content);
+        String urlPath = API_AGENTS + "/" + encode(agentId) + API_WORKSPACE + "/memory/"
+                + encodePath(mdPath) + buildQueryString(params);
+        return parseJsonObject(putJson(urlPath, toJson(body)));
+    }
+
+    // ==================== 会话分组（透传）====================
+
+    /**
+     * 列出智能体的会话分组
+     *
+     * <p>对应 QwenPaw {@code GET /api/agents/{agentId}/chats/groups}。
+     */
+    public List<Map<String, Object>> listChatGroups(String agentId) {
+        String urlPath = API_AGENTS + "/" + encode(agentId) + API_CHATS + "/groups";
+        ResponseEntity<String> resp = get(urlPath);
+        try {
+            Object value = objectMapper.readValue(resp.getBody(), Object.class);
+            return toMapListOrEmpty(value, "groups");
+        } catch (Exception e) {
+            log.warn("[listChatGroups] 响应解析失败，agentId={}", agentId, e);
+        }
+        return new ArrayList<>();
+    }
+
+    /**
+     * 创建会话分组
+     *
+     * <p>对应 QwenPaw {@code POST /api/agents/{agentId}/chats/groups}，body 为 {@code {name}}。
+     */
+    public Map<String, Object> createChatGroup(String agentId, String name) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("name", name);
+        String urlPath = API_AGENTS + "/" + encode(agentId) + API_CHATS + "/groups";
+        return parseJsonObject(postJson(urlPath, toJson(body)));
+    }
+
+    /**
+     * 更新会话分组名称
+     *
+     * <p>对应 QwenPaw {@code PUT /api/agents/{agentId}/chats/groups/{groupId}}，body 为 {@code {name}}。
+     */
+    public Map<String, Object> updateChatGroup(String agentId, String groupId, String name) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("name", name);
+        String urlPath = API_AGENTS + "/" + encode(agentId) + API_CHATS + "/groups/" + encode(groupId);
+        return parseJsonObject(putJson(urlPath, toJson(body)));
+    }
+
+    /**
+     * 删除会话分组
+     *
+     * <p>对应 QwenPaw {@code DELETE /api/agents/{agentId}/chats/groups/{groupId}}。
+     */
+    public void deleteChatGroup(String agentId, String groupId) {
+        delete(API_AGENTS + "/" + encode(agentId) + API_CHATS + "/groups/" + encode(groupId));
+    }
+
+    /**
+     * 调整会话分组顺序
+     *
+     * <p>对应 QwenPaw {@code PUT /api/agents/{agentId}/chats/groups/order}。
+     * 前端将 groupIds 以 camelCase 传入，QwenPaw 期望 snake_case {@code group_ids}，此处完成字段名映射。
+     *
+     * @param groupIds 分组 ID 顺序列表（前端字段名 groupIds）
+     */
+    public void reorderChatGroups(String agentId, List<String> groupIds) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("group_ids", groupIds == null ? new ArrayList<>() : groupIds);
+        String urlPath = API_AGENTS + "/" + encode(agentId) + API_CHATS + "/groups/order";
+        putJson(urlPath, toJson(body));
+    }
+
     // ==================== 私有方法 ====================
+
+    /**
+     * 拼接查询字符串（跳过 null/空值，值按 URL 编码），无参数时返回空串。
+     */
+    private String buildQueryString(Map<String, Object> params) {
+        StringBuilder sb = new StringBuilder();
+        for (Map.Entry<String, Object> entry : params.entrySet()) {
+            Object value = entry.getValue();
+            if (value == null) {
+                continue;
+            }
+            String text = String.valueOf(value);
+            if (text.isEmpty()) {
+                continue;
+            }
+            sb.append(sb.length() == 0 ? "?" : "&")
+                    .append(entry.getKey()).append("=").append(encode(text));
+        }
+        return sb.toString();
+    }
+
+    /**
+     * 容错解析集合响应：接受原始 JSON 数组，或 {@code {key: [...]}} 包装（按给定 key 依次尝试）。
+     */
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> toMapListOrEmpty(Object value, String... keys) {
+        if (value instanceof List) {
+            return toMapList(value);
+        }
+        if (value instanceof Map) {
+            for (String key : keys) {
+                Object list = ((Map<?, ?>) value).get(key);
+                if (list instanceof List) {
+                    return toMapList(list);
+                }
+            }
+        }
+        return new ArrayList<>();
+    }
 
     private String postJson(String path, String json) {
         HttpHeaders headers = buildHeaders();
@@ -1504,11 +1961,27 @@ public class QwenPawClient {
         } catch (HttpStatusCodeException e) {
             log.warn("[exchange] QwenPaw 返回非 2xx，path={}, code={}, body={}",
                     path, e.getStatusCode().value(), e.getResponseBodyAsString());
-            throw new ServiceException(QWENPAW_CONNECT_FAILED);
+            // 透传 QwenPaw 原始错误信息（如 SKILL.md 格式审查失败的具体原因），便于前端定位
+            throw new ServiceException(QWENPAW_CONNECT_FAILED.getCode(), qwenPawErrorMessage(e));
         } catch (ResourceAccessException e) {
             log.warn("[exchange] QwenPaw 连接失败，path={}", path, e);
             throw new ServiceException(QWENPAW_CONNECT_FAILED);
         }
+    }
+
+    /** 从 QwenPaw 错误响应体（FastAPI JSON {"detail": "..."}）提取可读信息 */
+    private String qwenPawErrorMessage(HttpStatusCodeException e) {
+        try {
+            String body = e.getResponseBodyAsString();
+            if (body != null && !body.isBlank()) {
+                Object detail = parseJsonObject(body).get("detail");
+                if (detail instanceof String s && !s.isBlank()) {
+                    return s;
+                }
+            }
+        } catch (Exception ignore) {
+        }
+        return "QwenPaw 服务异常（" + e.getStatusCode().value() + "）";
     }
 
     private HttpHeaders buildHeaders() {

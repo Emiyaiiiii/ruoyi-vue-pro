@@ -676,6 +676,10 @@ public class LibraryServiceImpl implements LibraryService {
      * 按分类树决定是否项目成果库，不依赖前端是否勾选。
      */
     private void applyProjectFlag(LibrarySaveReqVO reqVO) {
+        // 稀疏更新（未传 category）时不改动项目库标记，保持 MyBatis-Plus null=不更新语义
+        if (reqVO.getId() != null && reqVO.getCategoryId() == null) {
+            return;
+        }
         boolean project = isProjectCategory(reqVO.getCategoryId());
         reqVO.setIsProject(project ? 1 : 0);
     }
