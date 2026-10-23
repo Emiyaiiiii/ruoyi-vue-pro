@@ -73,10 +73,6 @@ public interface ErrorCodeConstants {
     ErrorCode NEWS_SYNC_FAILED = new ErrorCode(42, "新闻数据同步失败");
     ErrorCode NEWS_PARSE_NOT_IMPLEMENTED = new ErrorCode(43, "新闻解析功能暂未实现，敬请期待");
 
-    // ========== 标签管理 1-010-008-000 ==========
-    ErrorCode TAG_NOT_EXISTS = new ErrorCode(44, "标签不存在");
-    ErrorCode TAG_NAME_DUPLICATE = new ErrorCode(45, "相同归属下已存在同名标签");
-    ErrorCode TAG_PERMISSION_DENIED = new ErrorCode(46, "无权限操作该标签");
     ErrorCode CHUNK_METHOD_NO_DEFAULT = new ErrorCode(47, "尚未设置默认切片方法，请先在「切片方法」中将一个启用方法设为默认");
 
     // ========== 切片编辑与修订 1-010-009-000 ==========

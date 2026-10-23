@@ -4,7 +4,6 @@
 -- 来源（合并自 sql/mysql，均为幂等，升级自动重跑）:
 --   * kb_frontend_menu.sql —— 前端 C 端导航菜单（顶级目录「知识库菜单管理」）
 --   * kb_screen.sql        —— 知识库大屏（顶级菜单，第 3 部分菜单数据）
---   * kb_tag.sql           —— 知识库 > 标签管理 菜单及按钮权限
 --
 -- 约定:
 --   * system_menu 同时被 yudao 管理后台加载为动态路由，Vue Router 要求
@@ -226,7 +225,7 @@ WHERE NOT EXISTS (
 );
 
 -- =====================================================
--- 四、管理端「知识库」子树（/kb）：顶级目录 + 12 子菜单（含标签管理）+ 按钮权限
+-- 四、管理端「知识库」子树（/kb）：顶级目录 + 11 子菜单 + 按钮权限
 --    实现方式与「三、智能体子树」一致，全部 NOT EXISTS 守卫幂等。
 -- =====================================================
 INSERT INTO `system_menu` (`name`,`permission`,`type`,`sort`,`parent_id`,`path`,`icon`,`component`,`component_name`,`status`,`visible`,`keep_alive`,`always_show`,`create_time`,`update_time`,`deleted`)
@@ -234,7 +233,7 @@ SELECT '知识库管理','',1,25,0,'/kb','carbon:data-set-encryption','','',0,1,
 FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM `system_menu` WHERE `path`='/kb' AND `parent_id`=0 AND `deleted`=b'0');
 SELECT id INTO @m_kb FROM `system_menu` WHERE `path`='/kb' AND `parent_id`=0 AND `deleted`=b'0' LIMIT 1;
 
--- /kb 下子菜单（parent_id 由 @m_kb 解析，含原先单独维护且非幂等的「标签管理」）
+-- /kb 下子菜单（parent_id 由 @m_kb 解析）
 INSERT INTO `system_menu` (`name`,`permission`,`type`,`sort`,`parent_id`,`path`,`icon`,`component`,`component_name`,`status`,`visible`,`keep_alive`,`always_show`,`create_time`,`update_time`,`deleted`)
 SELECT `v`.`name`,'',2,`v`.`sort`,@m_kb,`v`.`path`,`v`.`icon`,`v`.`component`,`v`.`component_name`,0,1,1,0,NOW(),NOW(),b'0'
 FROM (
@@ -249,7 +248,6 @@ FROM (
     UNION ALL SELECT 'RAG配置',7,'rag-config','','kb/ragconfig/index','KbRagConfig'
     UNION ALL SELECT '模型配置',8,'model-config','','kb/modelconfig/index','KbModelConfig'
     UNION ALL SELECT '新闻管理',8,'news','','kb/news/index','KbNews'
-    UNION ALL SELECT '标签管理',10,'tag','ep:price-tag','kb/tag/index','KbTag'
     UNION ALL SELECT '处理监控',11,'monitor','ep:monitor','kb/monitor/index','KbMonitor'
     UNION ALL SELECT '任务清单',12,'vector-task','ep:list','kb/vectortask/index','KbVectorTask'
 ) `v`
@@ -316,16 +314,23 @@ FROM (
     UNION ALL SELECT 'news','新闻记录查询','kb:news-record:query',5
     UNION ALL SELECT 'news','新闻记录批量操作','kb:news-record:batch',6
     UNION ALL SELECT 'news','新闻同步日志查询','kb:news-sync-log:query',7
-    UNION ALL SELECT 'tag','标签查询','kb:tag:query',1
-    UNION ALL SELECT 'tag','标签创建','kb:tag:create',2
-    UNION ALL SELECT 'tag','标签更新','kb:tag:update',3
-    UNION ALL SELECT 'tag','标签删除','kb:tag:delete',4
     UNION ALL SELECT 'monitor','处理监控查询','kb:monitor:query',1
 ) `v`
 JOIN `system_menu` `m` ON `m`.`path`=`v`.`child_path` AND `m`.`parent_id`=@m_kb AND `m`.`deleted`=b'0'
 WHERE NOT EXISTS (
     SELECT 1 FROM `system_menu` `sm` WHERE `sm`.`permission`=`v`.`permission` AND `sm`.`deleted`=b'0'
 );
+
+-- 清理已下线的「标签管理」菜单及其按钮权限（kb_tag 功能已移除，表保留为无害空表）
+DELETE `sm_role`
+FROM `system_role_menu` `sm_role`
+JOIN `system_menu` `sm` ON `sm_role`.`menu_id` = `sm`.`id`
+WHERE `sm`.`component` = 'kb/tag/index'
+   OR `sm`.`permission` LIKE 'kb:tag:%';
+
+DELETE FROM `system_menu`
+WHERE `component` = 'kb/tag/index'
+   OR `permission` LIKE 'kb:tag:%';
 
 -- =====================================================
 -- 五、C 端导航：从管理后台隐藏（visible=0），C 端仍可用
