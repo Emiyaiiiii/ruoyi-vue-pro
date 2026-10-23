@@ -12,6 +12,9 @@ import lombok.ToString;
 @ToString(callSuper = true)
 public class VectorTaskPageReqVO extends PageParam {
 
+    @Schema(description = "任务ID", example = "a1b2c3d4")
+    private String taskId;
+
     @Schema(description = "文档ID", example = "123")
     private Long docId;
 

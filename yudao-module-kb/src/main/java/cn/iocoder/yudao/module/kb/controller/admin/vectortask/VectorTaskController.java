@@ -28,10 +28,8 @@ import org.springframework.web.bind.annotation.*;
 import jakarta.annotation.Resource;
 import jakarta.validation.Valid;
 import java.time.LocalDateTime;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 
 import static cn.iocoder.yudao.framework.common.pojo.CommonResult.success;
 
@@ -106,44 +104,79 @@ public class VectorTaskController {
                 new UsernamePasswordAuthenticationToken(systemUser, null, Collections.emptyList());
         SecurityContextHolder.getContext().setAuthentication(authentication);
 
-        int timeoutMinutes = vectorTaskConfig.getTaskTimeoutMinutes();
-        LocalDateTime threshold = LocalDateTime.now().minusMinutes(timeoutMinutes);
+        // ===== 1. 执行超时：只判 PROCESSING，且必须心跳中断 =====
+        int execTimeoutMinutes = vectorTaskConfig.getExecTimeoutMinutes();
+        LocalDateTime execThreshold = LocalDateTime.now().minusMinutes(execTimeoutMinutes);
+        List<VectorTaskDO> processingTimeout = vectorTaskMapper.selectProcessingTimeoutTasks(execThreshold);
 
-        List<Integer> checkStatuses = Arrays.asList(
-                VectorTaskStatusEnum.PENDING.getStatus(),
-                VectorTaskStatusEnum.PROCESSING.getStatus()
-        );
-        List<VectorTaskDO> timeoutTasks = vectorTaskMapper.selectTimeoutTasks(checkStatuses, threshold);
-
-        for (VectorTaskDO task : timeoutTasks) {
-            // 双重确认：检查 Redis 中的最新状态
-            String redisKey = vectorTaskConfig.getRedisTaskKeyPrefix() + task.getTaskId();
-            Map<Object, Object> redisState = stringRedisTemplate.opsForHash().entries(redisKey);
-            String redisStatus = redisState.isEmpty() ? null : String.valueOf(redisState.get("status"));
-
-            // 如果 Redis 中也是未完成状态（或 Redis 无数据），则标记为超时
-            if (redisStatus == null || "PENDING".equals(redisStatus) || "PROCESSING".equals(redisStatus)) {
-                // 终态校验：再次确认 MySQL 中任务不在终态（防止并发修改）
-                VectorTaskDO freshTask = vectorTaskMapper.selectById(task.getId());
-                if (freshTask == null || VectorTaskStatusEnum.isTerminal(freshTask.getStatus())) {
-                    continue;
-                }
-
-                log.warn("[checkTimeoutTasks] 任务超时: taskId={}, status={}, lastUpdate={}",
-                        task.getTaskId(), task.getStatus(), task.getUpdateTime());
-                VectorTaskDO updateTimeout = new VectorTaskDO();
-                updateTimeout.setId(task.getId());
-                updateTimeout.setStatus(VectorTaskStatusEnum.TIMEOUT.getStatus());
-                updateTimeout.setErrorMsg("任务处理超时（" + timeoutMinutes + "分钟）");
-                vectorTaskMapper.updateById(updateTimeout);
-                // 同步更新文档状态
-                if (task.getDocId() != null && task.getDocId() > 0) {
-                    DocumentDO docUpdate = new DocumentDO();
-                    docUpdate.setId(task.getDocId());
-                    docUpdate.setVectorStatus(VectorTaskStatusEnum.TIMEOUT.getStatus());
-                    documentMapper.updateById(docUpdate);
-                }
+        for (VectorTaskDO task : processingTimeout) {
+            // Redis 心跳优先：Python 每次 update_state/touch 都会刷新 updated_at
+            if (hasFreshRedisHeartbeat(task.getTaskId(), execTimeoutMinutes)) {
+                touchHeartbeat(task.getId());
+                continue;
             }
+            // 终态校验：再次确认 MySQL 中任务不在终态（防止并发修改）
+            VectorTaskDO freshTask = vectorTaskMapper.selectById(task.getId());
+            if (freshTask == null || VectorTaskStatusEnum.isTerminal(freshTask.getStatus())) {
+                continue;
+            }
+            log.warn("[checkTimeoutTasks] 执行超时: taskId={}, status={}, heartbeatAt={}",
+                    task.getTaskId(), task.getStatus(), task.getHeartbeatAt());
+            markTimeout(freshTask, "任务执行超时（心跳中断超过 " + execTimeoutMinutes + " 分钟）");
+        }
+
+        // ===== 2. 排队超时：PENDING 只告警，不判超时（避免把“排队中”误判为失败） =====
+        int queueTimeoutMinutes = vectorTaskConfig.getQueueTimeoutMinutes();
+        LocalDateTime queueThreshold = LocalDateTime.now().minusMinutes(queueTimeoutMinutes);
+        List<VectorTaskDO> queuedTimeout = vectorTaskMapper.selectQueuedTimeoutTasks(queueThreshold);
+        if (!queuedTimeout.isEmpty()) {
+            log.warn("[checkTimeoutTasks] 发现 {} 个排队超过 {} 分钟的任务（保持 PENDING，不判超时）: taskIds={}",
+                    queuedTimeout.size(), queueTimeoutMinutes,
+                    queuedTimeout.stream().map(VectorTaskDO::getTaskId).limit(20).toList());
+        }
+    }
+
+    /** Redis updated_at 是否仍在执行超时窗口内（Python 侧心跳优先） */
+    private boolean hasFreshRedisHeartbeat(String taskId, int execTimeoutMinutes) {
+        String redisKey = vectorTaskConfig.getRedisTaskKeyPrefix() + taskId;
+        Object updatedAt = stringRedisTemplate.opsForHash().get(redisKey, "updated_at");
+        if (updatedAt == null) {
+            return false;
+        }
+        try {
+            long ts = Long.parseLong(String.valueOf(updatedAt));
+            return System.currentTimeMillis() / 1000 - ts < execTimeoutMinutes * 60L;
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+
+    /** 把 MySQL heartbeat_at 追平，避免下一轮重复扫到 */
+    private void touchHeartbeat(Long taskPkId) {
+        VectorTaskDO update = new VectorTaskDO();
+        update.setId(taskPkId);
+        update.setHeartbeatAt(LocalDateTime.now());
+        vectorTaskMapper.updateById(update);
+    }
+
+    /** 标记执行超时：MySQL + Redis + Document 三端同步 */
+    private void markTimeout(VectorTaskDO task, String errorMsg) {
+        VectorTaskDO update = new VectorTaskDO();
+        update.setId(task.getId());
+        update.setStatus(VectorTaskStatusEnum.TIMEOUT.getStatus());
+        update.setErrorMsg(errorMsg);
+        update.setHeartbeatAt(LocalDateTime.now());
+        vectorTaskMapper.updateById(update);
+
+        String redisKey = vectorTaskConfig.getRedisTaskKeyPrefix() + task.getTaskId();
+        stringRedisTemplate.opsForHash().put(redisKey, "status", "TIMEOUT");
+        stringRedisTemplate.opsForHash().put(redisKey, "error_msg", errorMsg);
+
+        if (task.getDocId() != null && task.getDocId() > 0) {
+            DocumentDO docUpdate = new DocumentDO();
+            docUpdate.setId(task.getDocId());
+            docUpdate.setVectorStatus(VectorTaskStatusEnum.TIMEOUT.getStatus());
+            documentMapper.updateById(docUpdate);
         }
     }
 }

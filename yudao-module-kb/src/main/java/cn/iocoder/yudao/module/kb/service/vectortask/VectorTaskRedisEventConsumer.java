@@ -22,6 +22,7 @@ import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import jakarta.annotation.Resource;
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -217,28 +218,48 @@ public class VectorTaskRedisEventConsumer {
             return;
         }
 
-        // 1. 状态机校验：终态不可被覆盖
-        if (VectorTaskStatusEnum.isTerminal(task.getStatus())) {
+        // 1. 状态机校验：终态不可被覆盖；但 TIMEOUT 后收到迟到事件（PROCESSING/COMPLETED/FAILED）允许收敛
+        Integer newStatus = mapStatus(status);
+        boolean lateRecovery = VectorTaskStatusEnum.TIMEOUT.getStatus().equals(task.getStatus())
+                && newStatus != null
+                && (newStatus.equals(VectorTaskStatusEnum.PROCESSING.getStatus())
+                    || newStatus.equals(VectorTaskStatusEnum.COMPLETED.getStatus())
+                    || newStatus.equals(VectorTaskStatusEnum.FAILED.getStatus()));
+        if (VectorTaskStatusEnum.isTerminal(task.getStatus()) && !lateRecovery) {
             log.debug("[VectorTaskRedisEventConsumer] 任务已处于终态，跳过事件: taskId={}, currentStatus={}, eventStatus={}",
                     taskId, task.getStatus(), status);
             return;
+        }
+        if (lateRecovery) {
+            log.info("[VectorTaskRedisEventConsumer] 超时任务收到迟到事件，允许收敛: taskId={}, currentStatus={}, eventStatus={}",
+                    taskId, task.getStatus(), status);
         }
 
         // 1.5 从 Redis Hash 读取处理阶段时间线（python 侧 state_bus 写入），随状态变更落库并推送
         String stagesJson = readStagesJson(taskId);
 
-        // 2. 更新 MySQL
-        Integer newStatus = mapStatus(status);
+        // 2. 更新 MySQL（同时刷新心跳/开始时间，供超时判定使用）
         VectorTaskDO updateDO = new VectorTaskDO();
         updateDO.setId(task.getId());
         updateDO.setStatus(newStatus);
         updateDO.setProgress(progress);
         updateDO.setCurrentStep(step);
         updateDO.setStages(stagesJson);
+        updateDO.setHeartbeatAt(LocalDateTime.now());
+        if (VectorTaskStatusEnum.PROCESSING.getStatus().equals(newStatus) && task.getStartedAt() == null) {
+            updateDO.setStartedAt(LocalDateTime.now());
+        }
         if (chunkCount != null) {
             updateDO.setChunkCount(chunkCount);
         }
-        if (errorMsg != null && !"null".equals(errorMsg) && !errorMsg.isEmpty()) {
+        if (lateRecovery) {
+            // 超时后恢复：成功则清掉“超时”文案；失败则保留 Python 返回的真实失败原因
+            if (VectorTaskStatusEnum.COMPLETED.getStatus().equals(newStatus)) {
+                updateDO.setErrorMsg("");
+            } else if (errorMsg != null && !"null".equals(errorMsg) && !errorMsg.isEmpty()) {
+                updateDO.setErrorMsg(errorMsg);
+            }
+        } else if (errorMsg != null && !"null".equals(errorMsg) && !errorMsg.isEmpty()) {
             updateDO.setErrorMsg(errorMsg);
         }
         vectorTaskMapper.updateById(updateDO);

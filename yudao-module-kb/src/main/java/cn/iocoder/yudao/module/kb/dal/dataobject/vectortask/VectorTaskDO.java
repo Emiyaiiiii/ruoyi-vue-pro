@@ -4,6 +4,8 @@ import lombok.*;
 import com.baomidou.mybatisplus.annotation.*;
 import cn.iocoder.yudao.framework.mybatis.core.dataobject.BaseDO;
 
+import java.time.LocalDateTime;
+
 /**
  * 向量处理任务 DO
  *
@@ -43,4 +45,14 @@ public class VectorTaskDO extends BaseDO {
     private String errorMsg;
     /** 处理参数（JSON 格式） */
     private String params;
+    /** 入队时间（PENDING 排队计时起点） */
+    private LocalDateTime queuedAt;
+    /** 开始执行时间（PROCESSING 计时起点） */
+    private LocalDateTime startedAt;
+    /** 最近心跳时间（判定执行超时/僵尸；Redis updated_at 优先） */
+    private LocalDateTime heartbeatAt;
+    /** 已尝试次数（为自动重试预留） */
+    private Integer attempt;
+    /** 最大尝试次数 */
+    private Integer maxAttempts;
 }

@@ -46,6 +46,10 @@ public interface LibraryMapper extends BaseMapperX<LibraryDO> {
         if (conditions != null && !conditions.isEmpty()) {
             String combined = String.join(" OR ", conditions);
             wrapper.apply("(" + combined + ")");
+        } else {
+            // 没有任何可见规则 → 非管理员不可见任何库（与 canSee/filterVisible 的
+            // “规则/配置缺失 → 不可见”保持一致），避免空条件退化成全表查询导致越权。
+            wrapper.apply("1 = 0");
         }
 
         return selectPage(reqVO, wrapper);

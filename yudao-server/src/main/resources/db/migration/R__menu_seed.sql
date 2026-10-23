@@ -250,6 +250,8 @@ FROM (
     UNION ALL SELECT '模型配置',8,'model-config','','kb/modelconfig/index','KbModelConfig'
     UNION ALL SELECT '新闻管理',8,'news','','kb/news/index','KbNews'
     UNION ALL SELECT '标签管理',10,'tag','ep:price-tag','kb/tag/index','KbTag'
+    UNION ALL SELECT '处理监控',11,'monitor','ep:monitor','kb/monitor/index','KbMonitor'
+    UNION ALL SELECT '任务清单',12,'vector-task','ep:list','kb/vectortask/index','KbVectorTask'
 ) `v`
 WHERE NOT EXISTS (
     SELECT 1 FROM `system_menu` `sm` WHERE `sm`.`name`=`v`.`name` AND `sm`.`parent_id`=@m_kb AND `sm`.`deleted`=b'0'
@@ -318,6 +320,7 @@ FROM (
     UNION ALL SELECT 'tag','标签创建','kb:tag:create',2
     UNION ALL SELECT 'tag','标签更新','kb:tag:update',3
     UNION ALL SELECT 'tag','标签删除','kb:tag:delete',4
+    UNION ALL SELECT 'monitor','处理监控查询','kb:monitor:query',1
 ) `v`
 JOIN `system_menu` `m` ON `m`.`path`=`v`.`child_path` AND `m`.`parent_id`=@m_kb AND `m`.`deleted`=b'0'
 WHERE NOT EXISTS (

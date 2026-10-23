@@ -272,7 +272,7 @@ public class FrontendKnowledgeController {
         }
         // 分类主键 → 复用知识库大屏的 getLibraryPage（含可见性规则）
         if (category.matches("\\d+")) {
-            return queryByCategoryId(Long.parseLong(category), pageParam, search, sortField, sortOrder, ordering);
+            return queryByCategoryId(Long.parseLong(category), pageParam, search, sortField, sortOrder, ordering, isPublic);
         }
         // 个人知识库 → 我名下的全部知识库（含私密）
         if (category.startsWith("personal")) {
@@ -292,12 +292,15 @@ public class FrontendKnowledgeController {
 
     /** 按分类主键查询知识库列表（复用知识库大屏逻辑，含可见性过滤与排序） */
     private PageResult<LibraryDO> queryByCategoryId(Long categoryId, PageParam pageParam, String search,
-                                                    String sortField, String sortOrder, String ordering) {
+                                                    String sortField, String sortOrder, String ordering, Boolean isPublic) {
         LibraryPageReqVO reqVO = new LibraryPageReqVO();
         reqVO.setPageNo(pageParam.getPageNo());
         reqVO.setPageSize(pageParam.getPageSize());
         reqVO.setCategoryId(categoryId);
         reqVO.setName(search);
+        if (isPublic != null) {
+            reqVO.setIsPublic(isPublic ? 1 : 0);
+        }
         applySort(reqVO, sortField, sortOrder, ordering);
         return libraryService.getLibraryPage(reqVO);
     }
@@ -317,6 +320,12 @@ public class FrontendKnowledgeController {
         reqVO.setStatus(0);
         reqVO.setName(search);
         applySort(reqVO, sortField, sortOrder, ordering);
+        // “非公开”筛选必须叠加 VisibilityRuleEngine 的可见性条件：
+        // 直接 selectPage 会把同租户下他人的私有库也查出来（越权）。
+        // “公开/缺省”保持广场语义：is_public=1 本身即全员可见，无需再按规则过滤。
+        if (Boolean.FALSE.equals(isPublic)) {
+            return libraryService.getLibraryPage(reqVO);
+        }
         return libraryMapper.selectPage(reqVO);
     }
 

@@ -42,8 +42,26 @@ public class VectorTaskRespVO {
     @Schema(description = "分块数量")
     private Integer chunkCount;
 
+    @Schema(description = "任务下发参数（JSON：切片/解析配置等）")
+    private String params;
+
     @Schema(description = "错误信息")
     private String errorMsg;
+
+    @Schema(description = "入队时间")
+    private LocalDateTime queuedAt;
+
+    @Schema(description = "开始执行时间")
+    private LocalDateTime startedAt;
+
+    @Schema(description = "最近心跳时间")
+    private LocalDateTime heartbeatAt;
+
+    @Schema(description = "已尝试次数")
+    private Integer attempt;
+
+    @Schema(description = "最大尝试次数")
+    private Integer maxAttempts;
 
     @Schema(description = "创建时间")
     private LocalDateTime createTime;

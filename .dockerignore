@@ -1,0 +1,28 @@
+# ============================================================
+# ruoyi-vue-pro 构建上下文裁剪（context = 本目录）
+# 仅排除无需进入镜像的构建产物 / 版本库 / IDE 元数据，
+# 保留所有源码、pom.xml、模块目录、resources（含 Flyway 迁移脚本）。
+# ============================================================
+
+# 版本库与忽略文件
+.git
+.gitignore
+
+# Maven 构建产物（Dockerfile 内会 clean install，无需带入）
+target
+**/target
+
+# IDE / 编辑器
+.idea
+*.iml
+*.ipr
+*.iws
+.vscode
+*.swp
+
+# 日志与临时文件
+*.log
+*.tmp
+*.tar
+*.tar.gz
+.DS_Store

@@ -24,9 +24,29 @@ public class VectorTaskConfig {
     private String pythonServiceUrl = "http://localhost:8100";
 
     /**
-     * 任务超时时间（分钟），超过该时间未完成则标记为超时
+     * 任务超时时间（分钟），超过该时间未完成则标记为超时（历史配置，保留兼容）
      */
     private Integer taskTimeoutMinutes = 30;
+
+    /**
+     * 执行超时（分钟）：PROCESSING 任务心跳中断超过该时间才判超时
+     */
+    private Integer execTimeoutMinutes = 15;
+
+    /**
+     * 排队超时（分钟）：PENDING 任务排队超过该时间仅告警，不判超时
+     */
+    private Integer queueTimeoutMinutes = 1440;
+
+    /**
+     * 心跳间隔（秒）：Python 长静默阶段也会按该间隔刷新 Redis updated_at
+     */
+    private Integer heartbeatIntervalSeconds = 15;
+
+    /**
+     * 任务最大尝试次数（为自动重试预留）
+     */
+    private Integer maxAttempts = 3;
 
     /**
      * Redis Stream 事件流 Key

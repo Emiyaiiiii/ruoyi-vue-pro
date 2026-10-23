@@ -27,6 +27,7 @@ import org.springframework.http.ResponseEntity;
 
 import jakarta.annotation.Resource;
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -80,6 +81,10 @@ public class VectorTaskServiceImpl implements VectorTaskService {
         task.setChunkCount(0);
         task.setErrorMsg("");
         task.setParams(params);
+        // 排队计时起点 + 重试计数（P0：超时判定区分排队/执行）
+        task.setQueuedAt(LocalDateTime.now());
+        task.setAttempt(0);
+        task.setMaxAttempts(vectorTaskConfig.getMaxAttempts());
         vectorTaskMapper.insert(task);
 
         // 3.5 同步更新文档的向量处理状态

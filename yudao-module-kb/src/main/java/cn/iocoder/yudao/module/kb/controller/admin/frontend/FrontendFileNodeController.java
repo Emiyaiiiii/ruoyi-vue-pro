@@ -620,8 +620,9 @@ public class FrontendFileNodeController {
                 return "completed";
             case 3:
             case 4:
-            case 5:
                 return "failed";
+            case 5:
+                return "timeout";
             default:
                 return "pending";
         }
@@ -635,8 +636,11 @@ public class FrontendFileNodeController {
                 return "成功";
             case "failed":
                 return "失败";
+            case "timeout":
+                return "超时";
             default:
-                return "待处理";
+                // PENDING 现在表示“已提交、排队等待处理”，不再显示为“待处理”
+                return "排队中";
         }
     }
 
