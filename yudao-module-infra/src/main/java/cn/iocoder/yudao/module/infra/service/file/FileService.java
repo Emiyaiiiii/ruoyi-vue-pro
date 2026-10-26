@@ -68,6 +68,23 @@ public interface FileService {
     String presignGetUrl(String url, Integer expirationSeconds);
 
     /**
+     * 将文件访问地址规范化为可长期保存的形式
+     *
+     * @param url 完整的文件访问地址
+     * @return 可长期保存的文件地址
+     */
+    String normalizeUrl(String url);
+
+    /**
+     * 将已保存的文件地址，转换为当前可访问的地址
+     *
+     * @param url 已保存的文件访问地址
+     * @param expirationSeconds 访问有效期，单位秒
+     * @return 可访问的文件地址
+     */
+    String resolveUrl(String url, Integer expirationSeconds);
+
+    /**
      * 创建文件
      *
      * @param createReqVO 创建信息

@@ -8,6 +8,7 @@ import cn.iocoder.yudao.framework.common.pojo.CommonResult;
 import cn.iocoder.yudao.framework.datapermission.core.annotation.DataPermission;
 import cn.iocoder.yudao.framework.security.config.SecurityProperties;
 import cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils;
+import cn.iocoder.yudao.module.infra.api.file.FileApi;
 import cn.iocoder.yudao.module.system.controller.admin.auth.vo.*;
 import cn.iocoder.yudao.module.system.convert.auth.AuthConvert;
 import cn.iocoder.yudao.module.system.dal.dataobject.permission.MenuDO;
@@ -62,6 +63,8 @@ public class AuthController {
 
     @Resource
     private SecurityProperties securityProperties;
+    @Resource
+    private FileApi fileApi;
 
     @PostMapping("/login")
     @PermitAll
@@ -103,7 +106,8 @@ public class AuthController {
         // 1.2 获得角色列表
         Set<Long> roleIds = permissionService.getUserRoleIdListByUserId(getLoginUserId());
         if (CollUtil.isEmpty(roleIds)) {
-            return success(AuthConvert.INSTANCE.convert(user, Collections.emptyList(), Collections.emptyList()));
+            return success(resolveAvatar(
+                    AuthConvert.INSTANCE.convert(user, Collections.emptyList(), Collections.emptyList())));
         }
         List<RoleDO> roles = roleService.getRoleList(roleIds);
         roles.removeIf(role -> !CommonStatusEnum.ENABLE.getStatus().equals(role.getStatus())); // 移除禁用的角色
@@ -114,7 +118,17 @@ public class AuthController {
         menuList = menuService.filterDisableMenus(menuList);
 
         // 2. 拼接结果返回
-        return success(AuthConvert.INSTANCE.convert(user, roles, menuList));
+        return success(resolveAvatar(AuthConvert.INSTANCE.convert(user, roles, menuList)));
+    }
+
+    /**
+     * 头像存的是相对路径，返回前刷新预签名 URL
+     */
+    private AuthPermissionInfoRespVO resolveAvatar(AuthPermissionInfoRespVO respVO) {
+        if (respVO != null && respVO.getUser() != null) {
+            respVO.getUser().setAvatar(fileApi.resolveUrl(respVO.getUser().getAvatar()));
+        }
+        return respVO;
     }
 
     @PostMapping("/register")

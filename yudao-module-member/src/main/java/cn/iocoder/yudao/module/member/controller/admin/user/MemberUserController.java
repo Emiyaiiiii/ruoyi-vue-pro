@@ -3,6 +3,7 @@ package cn.iocoder.yudao.module.member.controller.admin.user;
 import cn.hutool.core.collection.CollUtil;
 import cn.iocoder.yudao.framework.common.pojo.CommonResult;
 import cn.iocoder.yudao.framework.common.pojo.PageResult;
+import cn.iocoder.yudao.module.infra.api.file.FileApi;
 import cn.iocoder.yudao.module.member.controller.admin.user.vo.*;
 import cn.iocoder.yudao.module.member.convert.user.MemberUserConvert;
 import cn.iocoder.yudao.module.member.dal.dataobject.group.MemberGroupDO;
@@ -50,6 +51,8 @@ public class MemberUserController {
     private MemberGroupService memberGroupService;
     @Resource
     private MemberPointRecordService memberPointRecordService;
+    @Resource
+    private FileApi fileApi;
 
     @PutMapping("/update")
     @Operation(summary = "更新会员用户")
@@ -86,6 +89,8 @@ public class MemberUserController {
             return success(null);
         }
         MemberUserRespVO userVO = MemberUserConvert.INSTANCE.convert03(user);
+        // 头像存的是相对路径，返回前刷新预签名 URL
+        userVO.setAvatar(fileApi.resolveUrl(userVO.getAvatar()));
         if (user.getLevelId() != null) {
             MemberLevelDO level = memberLevelService.getLevel(userVO.getLevelId());
             if (level != null) {
@@ -117,7 +122,10 @@ public class MemberUserController {
         // 处理用户分组返显
         List<MemberGroupDO> groups = memberGroupService.getGroupList(
                 convertSet(pageResult.getList(), MemberUserDO::getGroupId));
-        return success(MemberUserConvert.INSTANCE.convertPage(pageResult, tags, levels, groups));
+        PageResult<MemberUserRespVO> result = MemberUserConvert.INSTANCE.convertPage(pageResult, tags, levels, groups);
+        // 头像存的是相对路径，返回前刷新预签名 URL
+        result.getList().forEach(user -> user.setAvatar(fileApi.resolveUrl(user.getAvatar())));
+        return success(result);
     }
 
 }

@@ -63,4 +63,27 @@ public interface FileClient {
         throw new UnsupportedOperationException("不支持的操作");
     }
 
+    /**
+     * 将文件的访问地址，规范化为可长期保存的形式
+     * 使用场景：私有桶上传返回的预签名 URL 存在有效期，业务入库前应转换为相对路径
+     *
+     * @param url 完整的文件访问地址
+     * @return 可长期保存的文件地址；无法识别时原样返回
+     */
+    default String normalizeUrl(String url) {
+        return url;
+    }
+
+    /**
+     * 将已保存的文件地址，转换为当前可访问的地址
+     * 使用场景：私有桶读取时，基于相对路径重新生成预签名 URL
+     *
+     * @param url 已保存的文件访问地址
+     * @param expirationSeconds 访问有效期，单位秒
+     * @return 可访问的文件地址；不支持签名时原样返回
+     */
+    default String resolveUrl(String url, Integer expirationSeconds) {
+        return url;
+    }
+
 }

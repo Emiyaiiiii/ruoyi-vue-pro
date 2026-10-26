@@ -13,6 +13,7 @@ import cn.iocoder.yudao.framework.common.util.object.BeanUtils;
 import cn.iocoder.yudao.framework.common.util.validation.ValidationUtils;
 import cn.iocoder.yudao.framework.datapermission.core.util.DataPermissionUtils;
 import cn.iocoder.yudao.module.infra.api.config.ConfigApi;
+import cn.iocoder.yudao.module.infra.api.file.FileApi;
 import cn.iocoder.yudao.module.system.controller.admin.auth.vo.AuthRegisterReqVO;
 import cn.iocoder.yudao.module.system.controller.admin.user.vo.profile.UserProfileUpdatePasswordReqVO;
 import cn.iocoder.yudao.module.system.controller.admin.user.vo.profile.UserProfileUpdateReqVO;
@@ -90,6 +91,9 @@ public class AdminUserServiceImpl implements AdminUserService {
     private ConfigApi configApi;
 
     @Resource
+    private FileApi fileApi;
+
+    @Resource
     private AdminUserProducer adminUserProducer;
 
     @Override
@@ -109,6 +113,8 @@ public class AdminUserServiceImpl implements AdminUserService {
                 createReqVO.getMobile(), createReqVO.getEmail(), createReqVO.getDeptId(), createReqVO.getPostIds());
         // 2.1 插入用户
         AdminUserDO user = BeanUtils.toBean(createReqVO, AdminUserDO.class);
+        // 头像入库前转为相对路径，避免保存私有桶的临时预签名 URL
+        user.setAvatar(fileApi.normalizeUrl(user.getAvatar()));
         user.setStatus(CommonStatusEnum.ENABLE.getStatus()); // 默认开启
         user.setPassword(encodePassword(createReqVO.getPassword())); // 加密密码
         userMapper.insert(user);
@@ -153,6 +159,8 @@ public class AdminUserServiceImpl implements AdminUserService {
             success = SYSTEM_USER_UPDATE_SUCCESS)
     public void updateUser(UserSaveReqVO updateReqVO) {
         updateReqVO.setPassword(null); // 特殊：此处不更新密码
+        // 头像入库前转为相对路径，避免保存私有桶的临时预签名 URL
+        updateReqVO.setAvatar(fileApi.normalizeUrl(updateReqVO.getAvatar()));
         // 1. 校验正确性
         AdminUserDO oldUser = validateUserForCreateOrUpdate(updateReqVO.getId(), updateReqVO.getUsername(),
                 updateReqVO.getMobile(), updateReqVO.getEmail(), updateReqVO.getDeptId(), updateReqVO.getPostIds());
@@ -198,6 +206,8 @@ public class AdminUserServiceImpl implements AdminUserService {
         AdminUserDO oldUser = validateUserExists(id);
         validateEmailUnique(id, reqVO.getEmail());
         validateMobileUnique(id, reqVO.getMobile());
+        // 头像入库前转为相对路径，避免保存私有桶的临时预签名 URL
+        reqVO.setAvatar(fileApi.normalizeUrl(reqVO.getAvatar()));
 
         // 2. 执行更新
         userMapper.updateById(BeanUtils.toBean(reqVO, AdminUserDO.class).setId(id));
@@ -211,7 +221,9 @@ public class AdminUserServiceImpl implements AdminUserService {
      */
     private void publishUserProfileUpdatedIfChanged(AdminUserDO oldUser, String newNickname, String newAvatar) {
         boolean nicknameChanged = newNickname != null && !ObjUtil.equal(oldUser.getNickname(), newNickname);
-        boolean avatarChanged = newAvatar != null && !ObjUtil.equal(oldUser.getAvatar(), newAvatar);
+        // 旧数据可能存的是预签名 URL，统一规范化后再比较，避免误判为头像变更
+        boolean avatarChanged = newAvatar != null
+                && !ObjUtil.equal(fileApi.normalizeUrl(oldUser.getAvatar()), newAvatar);
         if (!nicknameChanged && !avatarChanged) {
             return;
         }

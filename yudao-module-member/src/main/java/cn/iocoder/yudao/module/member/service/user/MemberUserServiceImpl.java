@@ -8,6 +8,7 @@ import cn.iocoder.yudao.framework.common.enums.CommonStatusEnum;
 import cn.iocoder.yudao.framework.common.enums.UserTypeEnum;
 import cn.iocoder.yudao.framework.common.pojo.PageResult;
 import cn.iocoder.yudao.framework.common.util.object.BeanUtils;
+import cn.iocoder.yudao.module.infra.api.file.FileApi;
 import cn.iocoder.yudao.module.member.controller.admin.user.vo.MemberUserPageReqVO;
 import cn.iocoder.yudao.module.member.controller.admin.user.vo.MemberUserUpdateReqVO;
 import cn.iocoder.yudao.module.member.controller.app.user.vo.*;
@@ -64,6 +65,9 @@ public class MemberUserServiceImpl implements MemberUserService {
     @Resource
     private MemberUserProducer memberUserProducer;
 
+    @Resource
+    private FileApi fileApi;
+
     @Override
     public MemberUserDO getUserByMobile(String mobile) {
         return memberUserMapper.selectByMobile(mobile);
@@ -102,7 +106,7 @@ public class MemberUserServiceImpl implements MemberUserService {
         user.setStatus(CommonStatusEnum.ENABLE.getStatus()); // 默认开启
         user.setPassword(encodePassword(password)); // 加密密码
         user.setRegisterIp(registerIp).setRegisterTerminal(terminal);
-        user.setNickname(nickname).setAvatar(avtar); // 基础信息
+        user.setNickname(nickname).setAvatar(fileApi.normalizeUrl(avtar)); // 基础信息
         if (StrUtil.isEmpty(nickname)) {
             // 昵称为空时，随机一个名字，避免一些依赖 nickname 的逻辑报错，或者有点丑。例如说，短信发送有昵称时~
             user.setNickname("用户" + RandomUtil.randomNumbers(6));
@@ -149,6 +153,7 @@ public class MemberUserServiceImpl implements MemberUserService {
 
         // 2. 更新用户
         MemberUserDO updateObj = BeanUtils.toBean(reqVO, MemberUserDO.class).setId(userId);
+        updateObj.setAvatar(fileApi.normalizeUrl(updateObj.getAvatar()));
         memberUserMapper.updateById(updateObj);
     }
 
@@ -249,6 +254,7 @@ public class MemberUserServiceImpl implements MemberUserService {
 
         // 更新
         MemberUserDO updateObj = MemberUserConvert.INSTANCE.convert(updateReqVO);
+        updateObj.setAvatar(fileApi.normalizeUrl(updateObj.getAvatar()));
         memberUserMapper.updateById(updateObj);
     }
 

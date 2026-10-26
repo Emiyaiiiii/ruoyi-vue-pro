@@ -42,6 +42,16 @@ public class FileApiImpl implements FileApi {
     }
 
     @Override
+    public String normalizeUrl(String url) {
+        return fileService.normalizeUrl(url);
+    }
+
+    @Override
+    public String resolveUrl(String url, Integer expirationSeconds) {
+        return fileService.resolveUrl(url, expirationSeconds);
+    }
+
+    @Override
     public void deleteFile(Long configId, String path) throws Exception {
         // 校验路径合法性，避免误删文件存储器中的其他文件
         FilePathUtils.validatePath(path);

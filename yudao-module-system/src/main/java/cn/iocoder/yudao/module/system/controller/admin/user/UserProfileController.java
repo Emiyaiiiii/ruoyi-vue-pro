@@ -3,6 +3,7 @@ package cn.iocoder.yudao.module.system.controller.admin.user;
 import cn.hutool.core.collection.CollUtil;
 import cn.iocoder.yudao.framework.common.pojo.CommonResult;
 import cn.iocoder.yudao.framework.datapermission.core.annotation.DataPermission;
+import cn.iocoder.yudao.module.infra.api.file.FileApi;
 import cn.iocoder.yudao.module.system.controller.admin.user.vo.profile.UserProfileRespVO;
 import cn.iocoder.yudao.module.system.controller.admin.user.vo.profile.UserProfileUpdatePasswordReqVO;
 import cn.iocoder.yudao.module.system.controller.admin.user.vo.profile.UserProfileUpdateReqVO;
@@ -46,6 +47,8 @@ public class UserProfileController {
     private PermissionService permissionService;
     @Resource
     private RoleService roleService;
+    @Resource
+    private FileApi fileApi;
 
     @GetMapping("/get")
     @Operation(summary = "获得登录用户信息")
@@ -59,7 +62,10 @@ public class UserProfileController {
         DeptDO dept = user.getDeptId() != null ? deptService.getDept(user.getDeptId()) : null;
         // 获得岗位信息
         List<PostDO> posts = CollUtil.isNotEmpty(user.getPostIds()) ? postService.getPostList(user.getPostIds()) : null;
-        return success(UserConvert.INSTANCE.convert(user, userRoles, dept, posts));
+        UserProfileRespVO profile = UserConvert.INSTANCE.convert(user, userRoles, dept, posts);
+        // 头像存的是相对路径，返回前刷新预签名 URL
+        profile.setAvatar(fileApi.resolveUrl(profile.getAvatar()));
+        return success(profile);
     }
 
     @PutMapping("/update")

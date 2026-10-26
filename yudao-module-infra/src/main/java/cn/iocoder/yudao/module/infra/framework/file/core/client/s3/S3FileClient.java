@@ -140,12 +140,13 @@ public class S3FileClient extends AbstractFileClient<S3FileClientConfig> {
     @Override
     public String presignGetUrl(String url, Integer expirationSeconds) {
         // 1. 将 url 转换为 path
-        // 完整 Domain URL 会解码还原为原始对象名；裸 path 约定已经是未编码的对象名
-        boolean domainUrl = StrUtil.startWith(url, config.getDomain() + "/");
-        String path = domainUrl ? StrUtil.removePrefix(url, config.getDomain() + "/") : url;
-        if (domainUrl) {
-            path = HttpUtils.removeUrlPathQueryAndFragment(path);
-            path = HttpUtils.decodeUrlPath(path);
+        // 支持：完整 Domain URL、path-style URL（/{bucket}/{key}）、裸 path；外部链接不处理
+        if (!isObjectUrl(url)) {
+            return url;
+        }
+        String path = parseObjectPath(url);
+        if (path == null) {
+            return url;
         }
 
         // 2.1 情况一：公开访问：无需签名
@@ -162,6 +163,136 @@ public class S3FileClient extends AbstractFileClient<S3FileClientConfig> {
                 .getObjectRequest(b -> b.bucket(config.getBucket()).key(finalPath)).build())
                 .url();
         return signedUrl.toString();
+    }
+
+    @Override
+    public String normalizeUrl(String url) {
+        // 仅处理本存储桶的文件地址；外链、静态资源相对路径保持原样
+        if (!isStoredObjectUrl(url)) {
+            return url;
+        }
+        String path = parseObjectPath(url);
+        return path != null ? path : url;
+    }
+
+    @Override
+    public String resolveUrl(String url, Integer expirationSeconds) {
+        if (!isStoredObjectUrl(url)) {
+            return url;
+        }
+        String path = parseObjectPath(url);
+        if (path == null) {
+            return url;
+        }
+        return presignGetUrl(path, expirationSeconds);
+    }
+
+    /**
+     * 判断 URL 是否为可长期保存 / 可重新签名的本桶文件地址
+     *
+     * 说明：业务库里可能存有静态资源相对路径（如 avatar.gif），不能当作对象名去签名，
+     * 因此相对路径仅识别文件服务生成的日期目录（以及约定的 avatar/ 目录）。
+     */
+    private boolean isStoredObjectUrl(String url) {
+        if (StrUtil.isBlank(url) || StrUtil.startWithAny(url, "data:", "blob:")) {
+            return false;
+        }
+        if (!StrUtil.startWithAny(url, "http://", "https://")) {
+            return isGeneratedPath(url);
+        }
+        return isObjectUrl(url);
+    }
+
+    private boolean isGeneratedPath(String path) {
+        // 文件服务默认按 yyyyMMdd 生成目录，详见 FileServiceImpl#generateUploadPath
+        return StrUtil.startWith(path, "avatar/")
+                || java.util.regex.Pattern.matches("^\\d{8}/.+", path);
+    }
+
+    /**
+     * 判断 URL 是否指向当前存储桶
+     *
+     * 兼容：本桶的 Domain URL、path-style URL（/{bucket}/{key}）、相对路径
+     */
+    private boolean isObjectUrl(String url) {
+        if (StrUtil.isBlank(url)) {
+            return false;
+        }
+        // 相对路径，约定为对象名
+        if (!StrUtil.startWithAny(url, "http://", "https://")) {
+            return true;
+        }
+        URI uri;
+        try {
+            uri = URI.create(url);
+        } catch (Exception e) {
+            return false;
+        }
+        String host = uri.getHost();
+        if (StrUtil.isEmpty(host)) {
+            return false;
+        }
+        String rawPath = StrUtil.nullToEmpty(uri.getPath());
+        // 1. 访问域名一致
+        URI domainUri = parseUri(config.getDomain());
+        if (domainUri != null && StrUtil.equalsIgnoreCase(host, domainUri.getHost())) {
+            String domainPath = StrUtil.removeSuffix(StrUtil.nullToEmpty(domainUri.getPath()), "/");
+            // domain 未带 bucket（如虚拟主机模式、MinIO 根地址），任意路径都属于本桶
+            if (StrUtil.isEmpty(domainPath)) {
+                return true;
+            }
+            return StrUtil.equals(rawPath, domainPath) || StrUtil.startWith(rawPath, domainPath + "/");
+        }
+        // 2. 节点地址一致时，path-style URL 需携带 /{bucket}/ 前缀
+        URI endpointUri = parseUri(buildEndpoint());
+        if (endpointUri != null && StrUtil.equalsIgnoreCase(host, endpointUri.getHost())) {
+            return StrUtil.startWith(rawPath, "/" + config.getBucket() + "/");
+        }
+        // 3. 兼容访问域名变更：路径以 /{bucket}/ 开头，仍视为本桶文件
+        return StrUtil.startWith(rawPath, "/" + config.getBucket() + "/");
+    }
+
+    /**
+     * 将 URL 解析为对象存储的相对路径（不含 bucket、查询参数、Fragment）
+     */
+    private String parseObjectPath(String url) {
+        String path = url;
+        String domainPrefix = StrUtil.removeSuffix(config.getDomain(), "/") + "/";
+        if (StrUtil.startWith(url, domainPrefix)) {
+            path = StrUtil.removePrefix(url, domainPrefix);
+        } else if (StrUtil.startWithAny(url, "http://", "https://")) {
+            URI uri;
+            try {
+                uri = URI.create(url);
+            } catch (Exception e) {
+                return null;
+            }
+            path = uri.getPath();
+            if (path == null) {
+                return null;
+            }
+            if (path.startsWith("/")) {
+                path = path.substring(1);
+            }
+        }
+        path = HttpUtils.removeUrlPathQueryAndFragment(path);
+        // path-style URL 会携带 bucket 前缀，需要剔除，否则会拼出 /{bucket}/{bucket}/{key}
+        String bucketPrefix = config.getBucket() + "/";
+        if (StrUtil.startWith(path, bucketPrefix)) {
+            path = StrUtil.removePrefix(path, bucketPrefix);
+        }
+        return HttpUtils.decodeUrlPath(path);
+    }
+
+    private URI parseUri(String url) {
+        if (StrUtil.isBlank(url)) {
+            return null;
+        }
+        try {
+            return URI.create(url);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /**

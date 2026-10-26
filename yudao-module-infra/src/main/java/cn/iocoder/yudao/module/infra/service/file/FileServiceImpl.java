@@ -205,6 +205,19 @@ public class FileServiceImpl implements FileService {
     }
 
     @Override
+    public String normalizeUrl(String url) {
+        FileClient fileClient = fileConfigService.getMasterFileClient();
+        // 未配置存储时，保持原值，避免影响用户信息等主流程
+        return fileClient != null ? fileClient.normalizeUrl(url) : url;
+    }
+
+    @Override
+    public String resolveUrl(String url, Integer expirationSeconds) {
+        FileClient fileClient = fileConfigService.getMasterFileClient();
+        return fileClient != null ? fileClient.resolveUrl(url, expirationSeconds) : url;
+    }
+
+    @Override
     public Long createFile(FileCreateReqVO createReqVO) {
         // 1.1 校验参数的合法性
         FilePathUtils.validatePath(createReqVO.getPath());

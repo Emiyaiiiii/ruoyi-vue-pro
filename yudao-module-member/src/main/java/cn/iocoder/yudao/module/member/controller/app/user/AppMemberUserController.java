@@ -1,6 +1,7 @@
 package cn.iocoder.yudao.module.member.controller.app.user;
 
 import cn.iocoder.yudao.framework.common.pojo.CommonResult;
+import cn.iocoder.yudao.module.infra.api.file.FileApi;
 import cn.iocoder.yudao.module.member.controller.app.user.vo.*;
 import cn.iocoder.yudao.module.member.convert.user.MemberUserConvert;
 import cn.iocoder.yudao.module.member.dal.dataobject.level.MemberLevelDO;
@@ -31,13 +32,18 @@ public class AppMemberUserController {
     private MemberUserService userService;
     @Resource
     private MemberLevelService levelService;
+    @Resource
+    private FileApi fileApi;
 
     @GetMapping("/get")
     @Operation(summary = "获得基本信息")
     public CommonResult<AppMemberUserInfoRespVO> getUserInfo() {
         MemberUserDO user = userService.getUser(getLoginUserId());
         MemberLevelDO level = levelService.getLevel(user.getLevelId());
-        return success(MemberUserConvert.INSTANCE.convert(user, level));
+        AppMemberUserInfoRespVO userInfo = MemberUserConvert.INSTANCE.convert(user, level);
+        // 头像存的是相对路径，返回前刷新预签名 URL
+        userInfo.setAvatar(fileApi.resolveUrl(userInfo.getAvatar()));
+        return success(userInfo);
     }
 
     @PutMapping("/update")

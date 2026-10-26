@@ -8,6 +8,7 @@ import cn.iocoder.yudao.framework.common.pojo.CommonResult;
 import cn.iocoder.yudao.framework.common.pojo.PageParam;
 import cn.iocoder.yudao.framework.common.pojo.PageResult;
 import cn.iocoder.yudao.framework.excel.core.util.ExcelUtils;
+import cn.iocoder.yudao.module.infra.api.file.FileApi;
 import cn.iocoder.yudao.module.system.controller.admin.user.vo.user.*;
 import cn.iocoder.yudao.module.system.convert.user.UserConvert;
 import cn.iocoder.yudao.module.system.dal.dataobject.dept.DeptDO;
@@ -49,6 +50,8 @@ public class UserController {
     private AdminUserService userService;
     @Resource
     private DeptService deptService;
+    @Resource
+    private FileApi fileApi;
 
     @PostMapping("/create")
     @Operation(summary = "新增用户")
@@ -112,8 +115,8 @@ public class UserController {
         // 拼接数据
         Map<Long, DeptDO> deptMap = deptService.getDeptMap(
                 convertList(pageResult.getList(), AdminUserDO::getDeptId));
-        return success(new PageResult<>(UserConvert.INSTANCE.convertList(pageResult.getList(), deptMap),
-                pageResult.getTotal()));
+        List<UserRespVO> list = UserConvert.INSTANCE.convertList(pageResult.getList(), deptMap);
+        return success(new PageResult<>(resolveAvatarList(list), pageResult.getTotal()));
     }
 
     @GetMapping("/list")
@@ -127,7 +130,7 @@ public class UserController {
         }
         // 拼接数据
         Map<Long, DeptDO> deptMap = deptService.getDeptMap(convertSet(list, AdminUserDO::getDeptId));
-        return success(UserConvert.INSTANCE.convertList(list, deptMap));
+        return success(resolveAvatarList(UserConvert.INSTANCE.convertList(list, deptMap)));
     }
 
     @GetMapping({"/list-all-simple", "/simple-list"})
@@ -153,7 +156,7 @@ public class UserController {
         // 拼接数据
         Map<Long, DeptDO> deptMap = deptService.getDeptMap(
                 convertList(list, AdminUserDO::getDeptId));
-        return success(UserConvert.INSTANCE.convertSimpleList(list, deptMap));
+        return success(resolveSimpleAvatarList(UserConvert.INSTANCE.convertSimpleList(list, deptMap)));
     }
 
     @GetMapping("/get")
@@ -167,7 +170,7 @@ public class UserController {
         }
         // 拼接数据
         DeptDO dept = deptService.getDept(user.getDeptId());
-        return success(UserConvert.INSTANCE.convert(user, dept));
+        return success(resolveAvatar(UserConvert.INSTANCE.convert(user, dept)));
     }
 
     @GetMapping("/export-excel")
@@ -225,8 +228,8 @@ public class UserController {
         // 拼接数据
         DeptDO dept = user.getDeptId() != null ? deptService.getDept(user.getDeptId()) : null;
         Map<Long, DeptDO> deptMap = dept != null ? Collections.singletonMap(dept.getId(), dept) : Collections.emptyMap();
-        return success(CollUtil.getFirst(UserConvert.INSTANCE.convertSimpleList(
-                Collections.singletonList(user), deptMap)));
+        return success(resolveSimpleAvatar(CollUtil.getFirst(UserConvert.INSTANCE.convertSimpleList(
+                Collections.singletonList(user), deptMap))));
     }
 
     @GetMapping("/list-by-nickname")
@@ -239,7 +242,35 @@ public class UserController {
         // 拼接数据
         List<AdminUserDO> list = userService.getUserListByNickname(nickname.trim());
         Map<Long, DeptDO> deptMap = deptService.getDeptMap(convertList(list, AdminUserDO::getDeptId));
-        return success(UserConvert.INSTANCE.convertSimpleList(list, deptMap));
+        return success(resolveSimpleAvatarList(UserConvert.INSTANCE.convertSimpleList(list, deptMap)));
+    }
+
+    private UserRespVO resolveAvatar(UserRespVO user) {
+        if (user != null) {
+            user.setAvatar(fileApi.resolveUrl(user.getAvatar()));
+        }
+        return user;
+    }
+
+    private List<UserRespVO> resolveAvatarList(List<UserRespVO> list) {
+        if (CollUtil.isNotEmpty(list)) {
+            list.forEach(this::resolveAvatar);
+        }
+        return list;
+    }
+
+    private UserSimpleRespVO resolveSimpleAvatar(UserSimpleRespVO user) {
+        if (user != null) {
+            user.setAvatar(fileApi.resolveUrl(user.getAvatar()));
+        }
+        return user;
+    }
+
+    private List<UserSimpleRespVO> resolveSimpleAvatarList(List<UserSimpleRespVO> list) {
+        if (CollUtil.isNotEmpty(list)) {
+            list.forEach(this::resolveSimpleAvatar);
+        }
+        return list;
     }
 
 }

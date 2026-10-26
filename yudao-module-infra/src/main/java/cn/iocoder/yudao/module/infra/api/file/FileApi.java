@@ -65,6 +65,35 @@ public interface FileApi {
                          Integer expirationSeconds);
 
     /**
+     * 将文件访问地址规范化为可长期保存的形式
+     * 使用场景：私有桶上传返回的预签名 URL 存在有效期，业务入库前应先转换
+     *
+     * @param url 完整的文件访问地址
+     * @return 可长期保存的文件地址
+     */
+    String normalizeUrl(String url);
+
+    /**
+     * 将已保存的文件地址，转换为当前可访问的地址
+     * 使用场景：业务读取头像等私有桶文件时，按需刷新预签名 URL
+     *
+     * @param url 已保存的文件访问地址
+     * @param expirationSeconds 访问有效期，单位秒
+     * @return 可访问的文件地址
+     */
+    String resolveUrl(String url, Integer expirationSeconds);
+
+    /**
+     * 将已保存的文件地址，转换为当前可访问的地址（默认有效期）
+     *
+     * @param url 已保存的文件访问地址
+     * @return 可访问的文件地址
+     */
+    default String resolveUrl(String url) {
+        return resolveUrl(url, null);
+    }
+
+    /**
      * 根据文件配置编号和存储路径，物理删除文件
      *
      * @param configId 文件配置编号（infra_file_config.id）
