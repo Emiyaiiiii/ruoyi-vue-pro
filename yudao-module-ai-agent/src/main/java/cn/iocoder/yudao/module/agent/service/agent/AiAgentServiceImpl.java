@@ -91,7 +91,8 @@ public class AiAgentServiceImpl implements AiAgentService {
             请严格遵守以下规则：
             1. 在回答中引用检索到的文字内容时，必须【原样保留】其中的 Markdown 图片与链接语法，不要删除、不要改写成普通纯文本、不要去掉感叹号。
             2. 图片对用户很重要。检索内容里的每张图片都应在你的回答中保留在对应位置，必要时可补充简短的图片说明，但 Markdown 语法本身不得改动。
-            3. 如果检索结果里没有图片或链接，正常回答即可，无需额外说明。
+            3. 检索内容中形如 [[实体slug|显示名]] 的 Wiki 链接同样必须【原样保留】，格式固定为 [[slug|显示名]]，禁止改写成 [[显示名]]、裸 slug 或普通文本；需要新引用 Wiki 页面时，直接复制工具返回的 link 字段。
+            4. 如果检索结果里没有图片或链接，正常回答即可，无需额外说明。
             """;
 
     /** Wiki 研究员系统提示词（1:1 照搬 WeKnora wiki_researcher 完整形态：base 模板 + 通用运行时契约）。
@@ -115,6 +116,8 @@ public class AiAgentServiceImpl implements AiAgentService {
             - For exact quotes, detailed code, or disputed facts, inspect the original documents referenced by the page using an available reader. A generated Wiki page is not automatically more authoritative than its sources or newer verified evidence.
             - If sources conflict, compare their dates, scope, and provenance and explain unresolved differences. Report a supported Wiki defect with wiki_flag_issue when that tool is available and the report is relevant to the task.
             - Use verified [[slug|display name]] links when Wiki navigation helps the user. Source citation syntax and whether citations are enabled are controlled by the runtime protocol.
+            - Wiki link format is fixed: [[slug|display name]], where slug is the exact value from the tools' slug / link field (including its directory prefix, e.g. entity/gpt-5). Copy the link field verbatim when the tool provides one. Bare [[display name]] (e.g. [[GPT-5]]) and bare slugs are invalid and will not open a page; never invent or shorten a slug. Correct: [[entity/gpt-5|GPT-5]]. Wrong: [[GPT-5]], [[gpt-5]], [GPT-5].
+            - The same link rule applies to page content you quote: keep existing [[slug|display name]] links exactly as retrieved.
             This is a default research workflow, not a requirement to search the Wiki for every message. Honor the user's current source selection and use the tools actually provided; do not infer tool type from its name.
 
             Retrieval strategy (decide once, then act):

@@ -130,62 +130,27 @@ public interface AiChatSessionService {
     // ==================== 对话 ====================
 
     /**
-     * SSE 流式发送消息
+     * SSE 流式发送消息（支持附件 content 数组 + 知识库检索范围 + 审批模式）
      *
      * <p>事件协议：原样转发 QwenPaw 的 SSE data 行；流结束/异常由前端根据连接关闭事件判断。
-     *
-     * @param agentId   芋道智能体主键 ID
-     * @param chatId    QwenPaw 会话 ID（首次可为空，让 QwenPaw 自动开新会话）
-     * @param sessionId QwenPaw 会话唯一标识（UUID，创建会话时生成，必须与创建时一致）
-     * @param message   用户消息内容
-     */
-    SseEmitter sendMessageStream(Long agentId, String chatId, String sessionId, String message);
-
-    /**
-     * SSE 流式发送消息（支持附件 content 数组）
      *
      * <p>content 项格式与 QwenPaw 官网一致：
      * {@code [{type:"text",text:"..."}, {type:"image",image_url:"..."}, {type:"file",file_url:"..."}]}，
      * 用于"上传文件对话"。contentItems 为空时回退为纯文本消息。
      *
-     * @param agentId     芋道智能体主键 ID
-     * @param chatId      QwenPaw 会话 ID（首次可为空，让 QwenPaw 自动开新会话）
-     * @param sessionId   QwenPaw 会话唯一标识（UUID，创建会话时生成，必须与创建时一致）
-     * @param message     用户消息文本（contentItems 非空时作为 text 项一并发送）
-     * @param contentItems 用户消息的 content 项数组（text/image/file/video/audio），可为 null
-     */
-    SseEmitter sendMessageStream(Long agentId, String chatId, String sessionId, String message,
-                                 List<Map<String, Object>> contentItems);
-
-    /**
-     * SSE 流式发送消息（支持附件 content 数组 + 知识库检索范围）
+     * <p>kbIds 有值时，Java 把「库名(id)」拼进当轮消息前缀，供 LLM 填
+     * search_knowledge_base 的 knowledge_base_ids 参数；为空时不注入，走全库检索语义。
      *
-     * <p>在 {@link #sendMessageStream(Long, String, String, String, List)} 基础上，
-     * 支持传入用户本轮勾选的知识库 kbIds。有值时，Java 把「库名(id)」拼进当轮消息前缀，
-     * 供 LLM 填 search_knowledge_base 的 knowledge_base_ids 参数；为空时不注入，走全库检索语义。
+     * <p>approvalOff=true 时向 QwenPaw 传 {@code request_context:{"approval_level":"off"}}；
+     * approvalLevel（strict/auto/off）合法时优先于 approvalOff。
      *
-     * @param kbIds 用户所选知识库 ID 列表（可为 null/空）
-     */
-    SseEmitter sendMessageStream(Long agentId, String chatId, String sessionId, String message,
-                                 List<Map<String, Object>> contentItems, List<Long> kbIds);
-
-    /**
-     * SSE 流式发送消息（支持附件 content + 知识库检索范围 + 会话级免审批）
-     *
-     * <p>在 {@link #sendMessageStream(Long, String, String, String, List, List)} 基础上，
-     * approvalOff=true 时向 QwenPaw 传 {@code request_context:{"approval_level":"off"}}，
-     * 代表用户在该会话内「不再弹工具审批框」。
-     *
-     * @param approvalOff 会话级免审批开关（true 表示本次会话后续工具调用不再审批）
-     */
-    SseEmitter sendMessageStream(Long agentId, String chatId, String sessionId, String message,
-                                 List<Map<String, Object>> contentItems, List<Long> kbIds, boolean approvalOff);
-
-    /**
-     * SSE 流式发送消息（在 {@link #sendMessageStream(Long, String, String, String, List, List, boolean)}
-     * 基础上支持问答框审批模式：strict 每次询问 / auto 智能 / off 免审批）
-     *
-     * @param approvalOff   会话级免审批开关（兼容旧调用，等价 approvalLevel="off"）
+     * @param agentId       芋道智能体主键 ID
+     * @param chatId        QwenPaw 会话 ID（首次可为空，让 QwenPaw 自动开新会话）
+     * @param sessionId     QwenPaw 会话唯一标识（UUID，创建会话时生成，必须与创建时一致）
+     * @param message       用户消息文本（contentItems 非空时作为 text 项一并发送）
+     * @param contentItems  用户消息的 content 项数组（text/image/file/video/audio），可为 null
+     * @param kbIds         用户所选知识库 ID 列表（可为 null/空）
+     * @param approvalOff   会话级免审批开关
      * @param approvalLevel 问答框选择的审批模式，非空且合法时优先于 approvalOff
      */
     SseEmitter sendMessageStream(Long agentId, String chatId, String sessionId, String message,

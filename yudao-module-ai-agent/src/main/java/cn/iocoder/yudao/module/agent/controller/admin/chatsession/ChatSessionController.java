@@ -36,8 +36,8 @@ import static cn.iocoder.yudao.framework.common.pojo.CommonResult.success;
  *   <li>先选智能体（agentId），调用 {@link #listChats(Long)} 拉会话列表</li>
  *   <li>点"新建对话"调用 {@link #createChat} 拿到 chatId</li>
  *   <li>打开历史会话调用 {@link #getChat(Long, String)} 拉 messages</li>
- *   <li>问答调用 {@link #sendMessageStream(Long, String, String)} 流式</li>
- *   <li>切回页面时调用 {@link #reconnectStream(Long, String)} 续推</li>
+ *   <li>问答调用 {@code /send-stream} 流式</li>
+ *   <li>切回页面时调用 {@code /stream/reconnect} 续推</li>
  * </ol>
  *
  * @author 吴皓

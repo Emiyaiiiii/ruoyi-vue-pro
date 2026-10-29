@@ -514,28 +514,6 @@ public class QwenPawClient {
     }
 
     /**
-     * 主动向渠道发送消息
-     *
-     * <p>对应 QwenPaw {@code POST /api/messages/send}，通过 X-Agent-Id 请求头指定 agent。
-     */
-    public Map<String, Object> sendMessage(String agentId, String channel, String targetUser,
-                                           String targetSession, String text) {
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("channel", channel);
-        body.put("target_user", targetUser);
-        body.put("target_session", targetSession);
-        body.put("text", text);
-
-        HttpHeaders headers = buildHeaders();
-        if (agentId != null && !agentId.isEmpty()) {
-            headers.set("X-Agent-Id", agentId);
-        }
-        HttpEntity<String> entity = new HttpEntity<>(toJson(body), headers);
-        String resp = exchange("/api/messages/send", HttpMethod.POST, entity);
-        return parseJsonObject(resp);
-    }
-
-    /**
      * 停止智能体正在运行的对话
      *
      * <p>对应 QwenPaw {@code POST /api/agents/{agentId}/console/chat/stop?chat_id=xxx}，
@@ -1365,55 +1343,6 @@ public class QwenPawClient {
     // QwenPaw 才能通过 get_or_create_chat 命中已有会话，避免重复创建。
 
     /**
-     * 同步对话（仅供调试，SSE 流式版本为主）
-     *
-     * @param chatId    QwenPaw chat id（UUID），首次可传 null/空 让 QwenPaw 自动开新会话
-     * @param userId    芋道用户 ID（字符串），必须与预创建时一致
-     * @param sessionId 会话唯一标识（UUID），必须与 {@link #createChat} 时一致
-     */
-    public String chat(String agentId, String chatId, String userId, String sessionId, String message) {
-        Map<String, Object> textContent = new LinkedHashMap<>();
-        textContent.put("type", "text");
-        textContent.put("text", message);
-
-        Map<String, Object> inputMessage = new LinkedHashMap<>();
-        inputMessage.put("role", "user");
-        inputMessage.put("content", java.util.Collections.singletonList(textContent));
-        inputMessage.put("type", "message");
-
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("input", java.util.Collections.singletonList(inputMessage));
-        body.put("session_id", sessionId);
-        body.put("user_id", userId);
-        body.put("channel", "console");
-        if (chatId != null && !chatId.isEmpty()) {
-            body.put("chat_id", chatId);
-        }
-        body.put("stream", false);
-        String resp = postJson(API_AGENTS + "/" + encode(agentId) + "/console/chat", toJson(body));
-        return extractAnswer(resp);
-    }
-
-    /**
-     * SSE 流式对话
-     *
-     * <p>向 /console/chat 发起流式请求，逐行读取 SSE 的 data 块，通过 {@code onChunk} 回调转发。
-     * 每收到一个 data 行回调一次，收到 {@code [DONE]} 结束。
-     *
-     * <p>三元组 <b>(session_id, user_id, channel)</b> 必须与 {@link #createChat} 时一致，
-     * QwenPaw 才能通过 <code>get_or_create_chat</code> 命中预创建的 chat，
-     * 再用 <code>chat.id</code> 作为 <code>task_tracker.run_key</code> 续接正在运行的流。
-     *
-     * @param chatId  QwenPaw chat id（UUID），首次可传 null/空 让 QwenPaw 自动开新会话
-     * @param userId  芋道用户 ID（字符串），必须与预创建时一致
-     * @param sessionId 会话唯一标识（UUID），必须与 {@link #createChat} 时一致
-     * @param onChunk data 增量回调（原始 data 行内容，未做 JSON 解析）
-     */
-    public void chatStream(String agentId, String chatId, String userId, String sessionId, String message, Consumer<String> onChunk) {
-        chatStream(agentId, chatId, userId, sessionId, message, null, onChunk);
-    }
-
-    /**
      * SSE 流式对话（纯文本，支持会话级 requestContext）
      *
      * @param requestContext 可选，透传给 QwenPaw；如 {@code {"approval_level":"off"}} 表示本次会话免审批
@@ -1426,20 +1355,6 @@ public class QwenPawClient {
         textContent.put("text", message);
         contentItems.add(textContent);
         chatStream(agentId, chatId, userId, sessionId, contentItems, requestContext, onChunk);
-    }
-
-    /**
-     * SSE 流式对话（支持附件 content 数组）
-     *
-     * <p>与 {@link #chatStream(String, String, String, String, String, Consumer)} 等价，
-     * 但允许自定义 content 项数组（如 {@code [{type:"text",text:"..."}, {type:"image",image_url:"..."}]}），
-     * 对应 QwenPaw 官网上传文件后发送的 content 结构，用于"上传文件对话"。
-     *
-     * @param contentItems 用户消息的 content 项数组（text/image/file/video/audio 等）
-     */
-    public void chatStream(String agentId, String chatId, String userId, String sessionId,
-                           List<Map<String, Object>> contentItems, Consumer<String> onChunk) {
-        chatStream(agentId, chatId, userId, sessionId, contentItems, null, onChunk);
     }
 
     /**
@@ -2025,96 +1940,6 @@ public class QwenPawClient {
         } catch (Exception ignored) {
         }
         return fallback;
-    }
-
-    private String extractAnswer(String resp) {
-        if (resp == null || resp.isEmpty()) {
-            return "";
-        }
-        try {
-            Object value = objectMapper.readValue(resp, Object.class);
-            if (value instanceof Map) {
-                Map<?, ?> map = (Map<?, ?>) value;
-                Object answer = map.get("answer");
-                if (answer == null) {
-                    answer = map.get("response");
-                }
-                if (answer == null) {
-                    answer = map.get("message");
-                }
-                if (answer instanceof Map) {
-                    Object content = ((Map<?, ?>) answer).get("content");
-                    if (content != null) {
-                        return String.valueOf(content);
-                    }
-                }
-                if (answer != null) {
-                    return String.valueOf(answer);
-                }
-            }
-        } catch (Exception ignored) {
-        }
-        return resp;
-    }
-
-    /**
-     * 从 SSE 增量块中提取可展示文本
-     *
-     * <p>QwenPaw SSE 事件格式（object 字段区分类型）：
-     * <ul>
-     *     <li>内容增量块：{@code {"object":"content","type":"text","text":"实际文本","delta":true,...}}</li>
-     *     <li>响应信封：{@code {"object":"response","status":"created|in_progress|completed",...}}</li>
-     *     <li>消息信封：{@code {"object":"message","type":"message","content":[...],...}}</li>
-     * </ul>
-     *
-     * @return 提取到的文本；非文本事件返回空串（跳过该块）
-     */
-    public String extractChunkText(String chunk) {
-        if (chunk == null || chunk.isEmpty()) {
-            return "";
-        }
-        try {
-            Object value = objectMapper.readValue(chunk, Object.class);
-            if (value instanceof Map) {
-                Map<?, ?> map = (Map<?, ?>) value;
-                String object = String.valueOf(map.get("object"));
-
-                // 1. 内容增量块：object=content, type=text, text=实际文本
-                if ("content".equals(object)) {
-                    String type = String.valueOf(map.get("type"));
-                    if ("text".equals(type)) {
-                        Object text = map.get("text");
-                        return text != null ? String.valueOf(text) : "";
-                    }
-                    return ""; // 非文本内容（image/audio/data 等）跳过
-                }
-
-                // 2. 消息信封：提取 content 数组中的文本
-                if ("message".equals(object)) {
-                    Object content = map.get("content");
-                    if (content instanceof List) {
-                        StringBuilder sb = new StringBuilder();
-                        for (Object item : (List<?>) content) {
-                            if (item instanceof Map) {
-                                Object text = ((Map<?, ?>) item).get("text");
-                                if (text != null) {
-                                    sb.append(text);
-                                }
-                            }
-                        }
-                        return sb.toString();
-                    }
-                    return "";
-                }
-
-                // 3. 响应信封 / turn_usage 等非文本事件 → 跳过
-                return "";
-            }
-            return "";
-        } catch (Exception e) {
-            // 非 JSON（如纯文本增量），原样返回
-            return chunk;
-        }
     }
 
     @SuppressWarnings("unchecked")

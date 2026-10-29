@@ -98,7 +98,13 @@ public class AiChatSessionServiceImpl implements AiChatSessionService {
     @Override
     public Map<String, Object> getChat(Long agentId, String chatId) {
         AiAgentDO agent = validateAgentReadable(agentId);
-        return qwenPawClient.getChat(agent.getQwenpawAgentId(), chatId);
+        Map<String, Object> chat = qwenPawClient.getChat(agent.getQwenpawAgentId(), chatId);
+        // ChatHistory 只有 messages/status，session_id 在 chat spec 里，此处一并返回，前端一次取全
+        String sessionId = findSessionIdByChatId(agent.getQwenpawAgentId(), chatId);
+        if (sessionId != null) {
+            chat.put("session_id", sessionId);
+        }
+        return chat;
     }
 
     @Override
@@ -199,29 +205,6 @@ public class AiChatSessionServiceImpl implements AiChatSessionService {
     // ==================== 对话 ====================
 
     @Override
-    public SseEmitter sendMessageStream(Long agentId, String chatId, String sessionId, String message) {
-        return sendMessageStream(agentId, chatId, sessionId, message, null, null);
-    }
-
-    @Override
-    public SseEmitter sendMessageStream(Long agentId, String chatId, String sessionId, String message,
-                                        List<Map<String, Object>> contentItems) {
-        return sendMessageStream(agentId, chatId, sessionId, message, contentItems, null);
-    }
-
-    @Override
-    public SseEmitter sendMessageStream(Long agentId, String chatId, String sessionId, String message,
-                                        List<Map<String, Object>> contentItems, List<Long> kbIds) {
-        return sendMessageStream(agentId, chatId, sessionId, message, contentItems, kbIds, false);
-    }
-
-    @Override
-    public SseEmitter sendMessageStream(Long agentId, String chatId, String sessionId, String message,
-                                        List<Map<String, Object>> contentItems, List<Long> kbIds, boolean approvalOff) {
-        return sendMessageStream(agentId, chatId, sessionId, message, contentItems, kbIds, approvalOff, null);
-    }
-
-    @Override
     public SseEmitter sendMessageStream(Long agentId, String chatId, String sessionId, String message,
                                         List<Map<String, Object>> contentItems, List<Long> kbIds,
                                         boolean approvalOff, String approvalLevel) {
@@ -257,20 +240,14 @@ public class AiChatSessionServiceImpl implements AiChatSessionService {
             }
         }
         final String sendText = StrUtil.isNotEmpty(scopePrefix) ? scopePrefix + message : message;
-        // sessionId 为空时兜底：
-        // - 若已携带 chatId，则复用该会话在 QwenPaw 侧的 session_id，确保三元组 (session_id,user_id,channel) 一致，
-        //   命中预创建会话，避免 QwenPaw get_or_create_chat 又新建一个空会话（C 端"新建对话后发送"场景）；
-        // - 否则（首次发问无 chatId 的管理端场景）生成新 session_id，由 QwenPaw 自动开新会话。
-        String effectiveSessionId;
-        if (sessionId != null && !sessionId.isEmpty()) {
-            effectiveSessionId = sessionId;
-        } else if (chatId != null && !chatId.isEmpty()) {
-            Map<String, Object> existingChat = qwenPawClient.getChat(qwenpawAgentId, chatId);
-            Object sid = existingChat != null ? existingChat.get("session_id") : null;
-            effectiveSessionId = sid != null ? String.valueOf(sid) : UUID.randomUUID().toString();
-        } else {
-            effectiveSessionId = UUID.randomUUID().toString();
+        // session_id 决定 QwenPaw 的会话归属：只有 (session_id, user_id, channel) 与创建时一致
+        // 才能命中已有会话，否则 get_or_create_chat 会新建会话、历史上下文断裂。
+        // 建会话接口返回 session_id，读历史时 getChat 也一并回填，前端每次发送必带。
+        if (StrUtil.isEmpty(sessionId)) {
+            log.error("[sendMessageStream] 缺少 session_id，agentId={}, chatId={}", qwenpawAgentId, chatId);
+            throw ServiceExceptionUtil.exception(CHAT_SESSION_NOT_EXISTS);
         }
+        String effectiveSessionId = sessionId;
         SseEmitter emitter = new SseEmitter(0L);
         Long tenantId = TenantContextHolder.getTenantId();
 
@@ -387,7 +364,12 @@ public class AiChatSessionServiceImpl implements AiChatSessionService {
         AiAgentDO agent = validateAgent(agentId);
         String qwenpawAgentId = agent.getQwenpawAgentId();
         String userId = currentUserId();
-        String effectiveSessionId = (sessionId != null && !sessionId.isEmpty()) ? sessionId : UUID.randomUUID().toString();
+        // 重连同样依赖 (session_id, user_id, channel) 命中会话；缺 session_id 无法定位，直接报错
+        if (StrUtil.isEmpty(sessionId)) {
+            log.error("[reconnectStream] 缺少 session_id，agentId={}, chatId={}", qwenpawAgentId, chatId);
+            throw ServiceExceptionUtil.exception(CHAT_SESSION_NOT_EXISTS);
+        }
+        String effectiveSessionId = sessionId;
         SseEmitter emitter = new SseEmitter(0L);
         Long tenantId = TenantContextHolder.getTenantId();
 
@@ -590,6 +572,22 @@ public class AiChatSessionServiceImpl implements AiChatSessionService {
             return "";
         }
         return "[本次检索范围：" + String.join("、", parts) + "]\n";
+    }
+
+    /**
+     * 按 chatId 反查 QwenPaw 会话的 session_id（存在于 chat spec，见 ChatSpec.session_id）。
+     *
+     * <p>chatId 存在即代表会话已存在，session_id 决定后续发问是否命中同一会话；
+     * 查不到时返回 null，由调用方决定是否阻断（发问必须阻断，读历史不必）。
+     */
+    private String findSessionIdByChatId(String qwenpawAgentId, String chatId) {
+        for (Map<String, Object> spec : qwenPawClient.listChatsForAgent(qwenpawAgentId)) {
+            if (chatId.equals(StrUtil.toStringOrNull(spec.get("id")))) {
+                String sid = StrUtil.toStringOrNull(spec.get("session_id"));
+                return StrUtil.isNotEmpty(sid) ? sid : null;
+            }
+        }
+        return null;
     }
 
 }
