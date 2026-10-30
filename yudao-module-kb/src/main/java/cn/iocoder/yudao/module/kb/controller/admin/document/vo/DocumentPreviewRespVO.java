@@ -64,4 +64,7 @@ public class DocumentPreviewRespVO {
     @Schema(description = "切片正文（截断至 2000 字，供前端在页内做全文定位高亮）")
     private String chunkContent;
 
+    @Schema(description = "解析后的文档全文（includeText=true 时返回，供 Office 类文档文本预览）")
+    private String textContent;
+
 }

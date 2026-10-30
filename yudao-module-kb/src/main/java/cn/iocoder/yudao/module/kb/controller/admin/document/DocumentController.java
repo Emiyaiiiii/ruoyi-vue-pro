@@ -35,6 +35,7 @@ import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.StrUtil;
 import org.springframework.http.HttpStatus;
 
+import cn.iocoder.yudao.module.kb.controller.admin.chunk.vo.ChunkItemVO;
 import cn.iocoder.yudao.module.kb.controller.admin.document.vo.*;
 import cn.iocoder.yudao.module.kb.dal.dataobject.document.DocumentDO;
 import cn.iocoder.yudao.module.kb.dal.dataobject.library.LibraryDO;
@@ -58,6 +59,9 @@ public class DocumentController {
 
     @Resource
     private KbChunkService kbChunkService;
+
+    /** 文本预览最大字符数（约 120KB，超出提示下载原文件） */
+    private static final int MAX_PREVIEW_TEXT_LENGTH = 120000;
 
     @PostMapping("/create")
     @Operation(summary = "创建知识库文件")
@@ -131,12 +135,14 @@ public class DocumentController {
 
     @GetMapping("/{id}/preview")
     @Operation(summary = "获得文档预览信息",
-            description = "返回短时效预签名地址与同源字节流参数；传 chunkIndex 时附带该切片的页码/bbox，供前端跳页定位")
+            description = "返回短时效预签名地址；传 chunkIndex 附带切片页码/bbox/正文，传 includeText 附带解析后的全文，"
+                    + "供前端跳页定位与 Office 类文档的文本预览")
     @Parameter(name = "id", description = "编号", required = true, example = "1024")
     public CommonResult<DocumentPreviewRespVO> previewDocument(
             @PathVariable("id") Long id,
             @RequestParam(value = "expiresIn", required = false, defaultValue = "1800") Integer expiresIn,
-            @RequestParam(value = "chunkIndex", required = false) Integer chunkIndex) {
+            @RequestParam(value = "chunkIndex", required = false) Integer chunkIndex,
+            @RequestParam(value = "includeText", required = false, defaultValue = "false") Boolean includeText) {
         DocumentDO document = documentService.getDocument(id);
         if (document == null) {
             throw exception(DOCUMENT_NOT_EXISTS);
@@ -147,30 +153,76 @@ public class DocumentController {
         validateProjectContentAccess(document.getKbId());
 
         DocumentPreviewRespVO preview = documentService.getDocumentPreview(document, expiresIn);
-        // 附带切片定位信息（失败只降级为「只打开不定位」，不影响预览）
-        if (chunkIndex != null && document.getKbId() != null) {
-            try {
-                kbChunkService.listChunks(id, document.getKbId()).stream()
-                        .filter(chunk -> chunkIndex.equals(chunk.getChunkIndex()))
-                        .findFirst()
-                        .ifPresent(chunk -> {
-                            preview.setPageStart(chunk.getPageStart());
-                            preview.setPageEnd(chunk.getPageEnd());
-                            preview.setBboxes(chunk.getBboxes());
-                            preview.setPageSource(chunk.getPageSource());
-                            // 正文供前端在页内做全文定位（bbox 只覆盖对齐到的块，正文更全）
-                            String content = chunk.getContent();
-                            if (StrUtil.isNotBlank(content)) {
-                                preview.setChunkContent(content.length() > 2000
-                                        ? content.substring(0, 2000) : content);
-                            }
-                        });
-            } catch (Exception e) {
-                log.warn("[previewDocument] 切片定位信息获取失败 docId={} chunkIndex={}: {}",
-                        id, chunkIndex, e.getMessage());
-            }
+        boolean needChunks = chunkIndex != null || Boolean.TRUE.equals(includeText);
+        if (!needChunks || document.getKbId() == null) {
+            return success(preview);
+        }
+        // 切片只查一次：既用于定位（页码/bbox/正文），也用于文本预览的全文拼装
+        List<ChunkItemVO> chunks;
+        try {
+            chunks = kbChunkService.listChunks(id, document.getKbId());
+        } catch (Exception e) {
+            log.warn("[previewDocument] 读取切片失败 docId={}: {}", id, e.getMessage());
+            return success(preview);
+        }
+        if (chunkIndex != null) {
+            chunks.stream()
+                    .filter(chunk -> chunkIndex.equals(chunk.getChunkIndex()))
+                    .findFirst()
+                    .ifPresent(chunk -> {
+                        preview.setPageStart(chunk.getPageStart());
+                        preview.setPageEnd(chunk.getPageEnd());
+                        preview.setBboxes(chunk.getBboxes());
+                        preview.setPageSource(chunk.getPageSource());
+                        // 正文供前端在页内做全文定位（bbox 只覆盖对齐到的块，正文更全）
+                        String content = chunk.getContent();
+                        if (StrUtil.isNotBlank(content)) {
+                            preview.setChunkContent(content.length() > 2000
+                                    ? content.substring(0, 2000) : content);
+                        }
+                    });
+        }
+        if (Boolean.TRUE.equals(includeText)) {
+            preview.setTextContent(assembleChunkText(chunks));
         }
         return success(preview);
+    }
+
+    /**
+     * 把切片按序号拼成纯文本，供无法内嵌渲染的文档（docx/xlsx/pptx 等）做文本预览。
+     * 跳过父块（父块是上下文副本，拼进去会重复）；超过上限截断，避免响应体过大。
+     */
+    private static String assembleChunkText(List<ChunkItemVO> chunks) {
+        if (chunks == null || chunks.isEmpty()) {
+            return null;
+        }
+        StringBuilder sb = new StringBuilder();
+        chunks.stream()
+                .filter(chunk -> !Boolean.TRUE.equals(chunk.getIsParent()))
+                .filter(chunk -> !Boolean.TRUE.equals(chunk.getIsImage()))
+                .sorted(Comparator.comparing(ChunkItemVO::getChunkIndex,
+                        Comparator.nullsLast(Comparator.naturalOrder())))
+                .forEach(chunk -> {
+                    if (sb.length() >= MAX_PREVIEW_TEXT_LENGTH) {
+                        return;
+                    }
+                    String content = chunk.getContextHeader() != null && sb.length() == 0
+                            ? chunk.getContextHeader() + "\n" + chunk.getContent()
+                            : chunk.getContent();
+                    if (StrUtil.isBlank(content)) {
+                        return;
+                    }
+                    if (sb.length() > 0) {
+                        sb.append("\n\n");
+                    }
+                    sb.append(content);
+                });
+        if (sb.length() == 0) {
+            return null;
+        }
+        return sb.length() > MAX_PREVIEW_TEXT_LENGTH
+                ? sb.substring(0, MAX_PREVIEW_TEXT_LENGTH) + "\n\n...(文本预览已截断，可下载原文件查看完整内容)"
+                : sb.toString();
     }
 
     @GetMapping("/{id}/content")
