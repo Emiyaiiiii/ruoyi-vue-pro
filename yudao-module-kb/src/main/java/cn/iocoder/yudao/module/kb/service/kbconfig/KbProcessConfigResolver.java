@@ -363,9 +363,16 @@ public class KbProcessConfigResolver {
             return;
         }
         for (Map.Entry<String, Object> e : map.entrySet()) {
-            if (e.getValue() != null && !target.containsKey(e.getKey()) && !"adapter".equals(e.getKey())) {
-                target.put(e.getKey(), e.getValue());
+            Object v = e.getValue();
+            // 空值不下发：空串/空白会被 python 侧当成"显式配置"而覆盖 env 兜底，
+            // 典型表现是界面清空某个字段后，任务侧报「api_key 缺失」而 env 明明配了 key。
+            if (v == null || (v instanceof CharSequence && StrUtil.isBlank((CharSequence) v))) {
+                continue;
             }
+            if (target.containsKey(e.getKey()) || "adapter".equals(e.getKey())) {
+                continue;
+            }
+            target.put(e.getKey(), v);
         }
     }
 

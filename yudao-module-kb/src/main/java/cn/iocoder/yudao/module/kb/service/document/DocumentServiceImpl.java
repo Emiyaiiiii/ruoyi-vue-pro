@@ -44,6 +44,11 @@ import static cn.iocoder.yudao.module.kb.enums.ErrorCodeConstants.*;
 @Slf4j
 public class DocumentServiceImpl implements DocumentService {
 
+    /** 预览预签名地址默认有效期（秒） */
+    private static final int PREVIEW_EXPIRES_DEFAULT = 1800;
+    private static final int PREVIEW_EXPIRES_MIN = 60;
+    private static final int PREVIEW_EXPIRES_MAX = 86400;
+
     @Resource
     private DocumentMapper documentMapper;
 
@@ -233,6 +238,85 @@ public class DocumentServiceImpl implements DocumentService {
     @Override
     public DocumentDO getDocument(Long id) {
         return documentMapper.selectById(id);
+    }
+
+    @Override
+    public byte[] getDocumentContent(DocumentDO document) {
+        // 1) 优先按 fileConfigId + filePath 直读存储（不经过 HTTP，最稳）
+        if (document.getFileConfigId() != null && StrUtil.isNotBlank(document.getFilePath())) {
+            try {
+                byte[] content = fileApi.getFileContent(document.getFileConfigId(), document.getFilePath());
+                if (content != null && content.length > 0) {
+                    return content;
+                }
+            } catch (Exception e) {
+                log.warn("[getDocumentContent] 按存储路径读取失败 docId={} configId={} path={}: {}",
+                        document.getId(), document.getFileConfigId(), document.getFilePath(), e.getMessage());
+            }
+        }
+        // 2) 兜底：历史数据可能只有 fileUrl（共享/预签名地址）→ 直接 HTTP 拉取
+        String url = StrUtil.isNotBlank(document.getFileUrl()) ? document.getFileUrl() : presignQuietly(document);
+        if (StrUtil.isBlank(url)) {
+            return null;
+        }
+        try {
+            byte[] content = cn.hutool.http.HttpRequest.get(url).timeout(30000).execute().bodyBytes();
+            return (content != null && content.length > 0) ? content : null;
+        } catch (Exception e) {
+            log.warn("[getDocumentContent] 回退按 URL 拉取失败 docId={}: {}", document.getId(), e.getMessage());
+            return null;
+        }
+    }
+
+    /** 生成预签名地址（失败返回 null，不抛异常） */
+    private String presignQuietly(DocumentDO document) {
+        if (StrUtil.isBlank(document.getFilePath())) {
+            return null;
+        }
+        try {
+            return fileApi.presignGetUrl(document.getFilePath(), PREVIEW_EXPIRES_DEFAULT);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    @Override
+    public DocumentPreviewRespVO getDocumentPreview(DocumentDO document, Integer expiresIn) {
+        // 有效期收敛：默认 30 分钟（够一次阅读，且不会长期泄露）
+        int ttl = expiresIn == null || expiresIn <= 0 ? PREVIEW_EXPIRES_DEFAULT : expiresIn;
+        ttl = Math.max(PREVIEW_EXPIRES_MIN, Math.min(PREVIEW_EXPIRES_MAX, ttl));
+
+        String fileName = document.getFileName();
+        String fileType = StrUtil.isNotBlank(document.getFileType())
+                ? document.getFileType() : FileUtil.extName(fileName);
+        fileType = StrUtil.blankToDefault(fileType, "").toLowerCase(Locale.ROOT);
+
+        // 预签名按对象路径生成；历史数据可能只有共享 URL（fileUrl）兜底
+        String path = StrUtil.isNotBlank(document.getFilePath())
+                ? document.getFilePath() : document.getFileUrl();
+        String url = null;
+        if (StrUtil.isNotBlank(path)) {
+            try {
+                url = fileApi.presignGetUrl(path, ttl);
+            } catch (Exception e) {
+                log.warn("[getDocumentPreview] 预签名失败 docId={}: {}", document.getId(), e.getMessage());
+            }
+        }
+        if (StrUtil.isBlank(url)) {
+            url = document.getFileUrl();
+        }
+
+        return DocumentPreviewRespVO.builder()
+                .id(document.getId())
+                .fileName(fileName)
+                .fileType(fileType)
+                .url(url)
+                .fileConfigId(document.getFileConfigId())
+                .filePath(document.getFilePath())
+                .expiresIn(ttl)
+                // 页级定位（跳页 + bbox 高亮）目前仅 PDF 具备页码/坐标
+                .pageLocatable("pdf".equals(fileType))
+                .build();
     }
 
     @Override

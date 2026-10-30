@@ -94,6 +94,18 @@ public interface FileApi {
     }
 
     /**
+     * 根据文件配置编号和存储路径，读取文件内容
+     *
+     * <p>用于业务模块做「同源字节流」输出（如知识库 PDF 预览），避免前端直接访问对象存储的跨域限制。</p>
+     *
+     * @param configId 文件配置编号（infra_file_config.id）
+     * @param path 文件存储路径
+     * @return 文件字节；文件不存在时返回 null
+     * @throws Exception 读取存储对象失败时抛出
+     */
+    byte[] getFileContent(Long configId, String path) throws Exception;
+
+    /**
      * 根据文件配置编号和存储路径，物理删除文件
      *
      * @param configId 文件配置编号（infra_file_config.id）

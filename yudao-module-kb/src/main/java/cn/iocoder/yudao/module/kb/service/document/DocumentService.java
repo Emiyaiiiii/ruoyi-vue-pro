@@ -62,6 +62,25 @@ public interface DocumentService {
     DocumentDO getDocument(Long id);
 
     /**
+     * 获得文档预览信息（短时效预签名地址 + 同源字节流参数）
+     *
+     * @param document  文档（调用方需已做内容访问校验）
+     * @param expiresIn 预签名有效期（秒）
+     * @return 预览信息
+     */
+    DocumentPreviewRespVO getDocumentPreview(DocumentDO document, Integer expiresIn);
+
+    /**
+     * 读取文档原始字节（同源字节流，供前端 PDF 渲染/预览）
+     *
+     * <p>优先按 fileConfigId + filePath 直读存储；历史数据仅有 fileUrl 时回退 HTTP 拉取。</p>
+     *
+     * @param document 文档（调用方需已做内容访问校验）
+     * @return 文件字节；不可读时返回 null
+     */
+    byte[] getDocumentContent(DocumentDO document);
+
+    /**
      * 获得知识库文件分页
      *
      * @param pageReqVO 分页查询
@@ -105,4 +124,4 @@ public interface DocumentService {
      */
     Long uploadAndCreate(MultipartFile file, Long kbId, Long folderId, String relPath, String description, String tags);
 
-}
+}

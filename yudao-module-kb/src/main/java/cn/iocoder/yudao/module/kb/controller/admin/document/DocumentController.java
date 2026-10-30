@@ -12,6 +12,8 @@ import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.constraints.*;
 import jakarta.validation.*;
 import jakarta.servlet.http.*;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.io.IOException;
 
@@ -29,16 +31,23 @@ import cn.iocoder.yudao.framework.excel.core.util.ExcelUtils;
 import cn.iocoder.yudao.framework.apilog.core.annotation.ApiAccessLog;
 import static cn.iocoder.yudao.framework.apilog.core.enums.OperateTypeEnum.*;
 
+import cn.hutool.core.io.FileUtil;
+import cn.hutool.core.util.StrUtil;
+import org.springframework.http.HttpStatus;
+
 import cn.iocoder.yudao.module.kb.controller.admin.document.vo.*;
 import cn.iocoder.yudao.module.kb.dal.dataobject.document.DocumentDO;
 import cn.iocoder.yudao.module.kb.dal.dataobject.library.LibraryDO;
+import cn.iocoder.yudao.module.kb.service.chunk.KbChunkService;
 import cn.iocoder.yudao.module.kb.service.document.DocumentService;
 import cn.iocoder.yudao.module.kb.service.library.LibraryService;
+import lombok.extern.slf4j.Slf4j;
 
 @Tag(name = "管理后台 - 知识库文件")
 @RestController
 @RequestMapping("/kb/document")
 @Validated
+@Slf4j
 public class DocumentController {
 
     @Resource
@@ -46,6 +55,9 @@ public class DocumentController {
 
     @Resource
     private LibraryService libraryService;
+
+    @Resource
+    private KbChunkService kbChunkService;
 
     @PostMapping("/create")
     @Operation(summary = "创建知识库文件")
@@ -115,6 +127,98 @@ public class DocumentController {
         // 项目成果库内容访问校验：仅项目成员可查看文档详情
         validateProjectContentAccess(document.getKbId());
         return success(BeanUtils.toBean(document, DocumentRespVO.class));
+    }
+
+    @GetMapping("/{id}/preview")
+    @Operation(summary = "获得文档预览信息",
+            description = "返回短时效预签名地址与同源字节流参数；传 chunkIndex 时附带该切片的页码/bbox，供前端跳页定位")
+    @Parameter(name = "id", description = "编号", required = true, example = "1024")
+    public CommonResult<DocumentPreviewRespVO> previewDocument(
+            @PathVariable("id") Long id,
+            @RequestParam(value = "expiresIn", required = false, defaultValue = "1800") Integer expiresIn,
+            @RequestParam(value = "chunkIndex", required = false) Integer chunkIndex) {
+        DocumentDO document = documentService.getDocument(id);
+        if (document == null) {
+            throw exception(DOCUMENT_NOT_EXISTS);
+        }
+        // 项目成果库内容访问校验：仅项目成员可查看文档内容
+        // 注意：此处不加 @PreAuthorize —— 问答页为前台普通用户使用，无 kb:document:* 管理权限；
+        // 访问边界由「登录态 + 项目成果库成员校验」承担（与 FrontendFileNodeController 一致）
+        validateProjectContentAccess(document.getKbId());
+
+        DocumentPreviewRespVO preview = documentService.getDocumentPreview(document, expiresIn);
+        // 附带切片定位信息（失败只降级为「只打开不定位」，不影响预览）
+        if (chunkIndex != null && document.getKbId() != null) {
+            try {
+                kbChunkService.listChunks(id, document.getKbId()).stream()
+                        .filter(chunk -> chunkIndex.equals(chunk.getChunkIndex()))
+                        .findFirst()
+                        .ifPresent(chunk -> {
+                            preview.setPageStart(chunk.getPageStart());
+                            preview.setPageEnd(chunk.getPageEnd());
+                            preview.setBboxes(chunk.getBboxes());
+                            preview.setPageSource(chunk.getPageSource());
+                            // 正文供前端在页内做全文定位（bbox 只覆盖对齐到的块，正文更全）
+                            String content = chunk.getContent();
+                            if (StrUtil.isNotBlank(content)) {
+                                preview.setChunkContent(content.length() > 2000
+                                        ? content.substring(0, 2000) : content);
+                            }
+                        });
+            } catch (Exception e) {
+                log.warn("[previewDocument] 切片定位信息获取失败 docId={} chunkIndex={}: {}",
+                        id, chunkIndex, e.getMessage());
+            }
+        }
+        return success(preview);
+    }
+
+    @GetMapping("/{id}/content")
+    @Operation(summary = "获取文档原始字节",
+            description = "同源输出文件字节，供前端 PDF 渲染（规避对象存储跨域限制）")
+    @Parameter(name = "id", description = "编号", required = true, example = "1024")
+    public void previewContent(@PathVariable("id") Long id, HttpServletResponse response) throws IOException {
+        DocumentDO document = documentService.getDocument(id);
+        if (document == null) {
+            response.setStatus(HttpStatus.NOT_FOUND.value());
+            return;
+        }
+        // 与 preview 一致：登录态 + 项目成果库成员校验（前台用户无 kb:document:* 管理权限）
+        validateProjectContentAccess(document.getKbId());
+        byte[] content = documentService.getDocumentContent(document);
+        if (content == null || content.length == 0) {
+            log.warn("[previewContent] 文档内容为空 docId={} fileName={}", id, document.getFileName());
+            response.setStatus(HttpStatus.NOT_FOUND.value());
+            return;
+        }
+        String ext = StrUtil.blankToDefault(document.getFileType(),
+                FileUtil.extName(document.getFileName()));
+        ext = StrUtil.blankToDefault(ext, "").toLowerCase(Locale.ROOT);
+        String fileName = StrUtil.blankToDefault(document.getFileName(), "document." + ext);
+        response.setContentType(contentTypeOf(ext));
+        response.setContentLength(content.length);
+        response.setHeader("Content-Disposition",
+                "inline; filename=\"" + URLEncoder.encode(fileName, StandardCharsets.UTF_8.name()) + "\"");
+        response.setHeader("Cache-Control", "private, max-age=300");
+        response.getOutputStream().write(content);
+    }
+
+    /** 按扩展名给出内联预览用的 Content-Type */
+    private static String contentTypeOf(String ext) {
+        switch (ext) {
+            case "pdf":
+                return "application/pdf";
+            case "png":
+                return "image/png";
+            case "jpg":
+            case "jpeg":
+                return "image/jpeg";
+            case "txt":
+            case "md":
+                return "text/plain;charset=UTF-8";
+            default:
+                return "application/octet-stream";
+        }
     }
 
     @GetMapping("/page")

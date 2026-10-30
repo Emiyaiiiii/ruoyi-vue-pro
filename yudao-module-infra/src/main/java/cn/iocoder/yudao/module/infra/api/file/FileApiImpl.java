@@ -42,6 +42,11 @@ public class FileApiImpl implements FileApi {
     }
 
     @Override
+    public byte[] getFileContent(Long configId, String path) throws Exception {
+        return fileService.getFileContent(configId, path);
+    }
+
+    @Override
     public String normalizeUrl(String url) {
         return fileService.normalizeUrl(url);
     }

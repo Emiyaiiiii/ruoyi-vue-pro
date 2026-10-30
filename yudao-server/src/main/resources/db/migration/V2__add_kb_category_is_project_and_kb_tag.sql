@@ -8,26 +8,46 @@
 --   * V4__add_agent_approval_level.sql      —— ai_agent 增加 approval_level
 --
 -- 说明:
---   * 本文件为一次性增量，在全新库上于 V1（基线）之后执行。
---     此时所列字段/表肯定尚不存在，直接 DDL 即可。
---   * kb_screen.sql 中的 kb_category.column_config 与 kb_library_ext 表
---     已在 V1 基线并入，故此处不重复。
+--   * V1 基线里的 kb_library 已经包含 is_project / image_strategy 两列，
+--     早期版本此处用裸 ALTER ADD COLUMN，会在全新库上以
+--     Duplicate column name 'image_strategy' 失败并留下 success=0 的
+--     flyway_schema_history 记录，导致后续每次启动都 FlywayValidateException。
+--   * 因此本迁移改为**幂等**写法：先查 information_schema.COLUMNS，
+--     不存在才 ALTER ADD；建表用 CREATE TABLE IF NOT EXISTS。
+--     （MySQL 不支持 ADD COLUMN IF NOT EXISTS，那是 MariaDB 语法）
+--     与 V18__patch_ai_agent_columns.sql 使用同一套 ckb_add_column 存储过程。
 --   * 对应菜单种子见 R__menu_seed.sql（行业数据走 R__，升级自动重跑）。
 -- =====================================================
+
+DROP PROCEDURE IF EXISTS `ckb_add_column`;
+DELIMITER $$
+CREATE PROCEDURE `ckb_add_column`(IN p_table VARCHAR(64), IN p_column VARCHAR(64), IN p_ddl TEXT)
+BEGIN
+  IF (SELECT COUNT(*) FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = p_table
+        AND COLUMN_NAME = p_column) = 0 THEN
+    SET @ddl = CONCAT('ALTER TABLE `', p_table, '` ADD COLUMN ', p_ddl);
+    PREPARE stmt FROM @ddl;
+    EXECUTE stmt;
+    DEALLOCATE PREPARE stmt;
+  END IF;
+END$$
+DELIMITER ;
 
 -- =====================================================
 -- 1. kb_category 增加 is_project
 --    院级/公司下的「项目成果库」分类可配置为项目库分类，
 --    该分类下创建的知识库自动纳入项目成员管理。
 -- =====================================================
-ALTER TABLE `kb_category`
-    ADD COLUMN `is_project` TINYINT NOT NULL DEFAULT 0 COMMENT '是否项目成果库分类: 0=否, 1=是。该分类下创建的知识库自动纳入项目成员管理' AFTER `column_config`;
+CALL ckb_add_column('kb_category', 'is_project',
+    "`is_project` TINYINT NOT NULL DEFAULT 0 COMMENT '是否项目成果库分类: 0=否, 1=是。该分类下创建的知识库自动纳入项目成员管理' AFTER `column_config`");
 
 -- =====================================================
 -- 2. 知识库标签表 kb_tag
 --    可见性: owner_id 为空 = 全局标签(所有人可见)，非空 = 个人标签(仅本人可见)
 -- =====================================================
-CREATE TABLE `kb_tag` (
+CREATE TABLE IF NOT EXISTS `kb_tag` (
     `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
     `name` varchar(100) NOT NULL COMMENT '标签名称',
     `color` varchar(32) NOT NULL DEFAULT '#007bff' COMMENT '标签颜色',
@@ -50,8 +70,10 @@ CREATE TABLE `kb_tag` (
 --    原 V3__add_library_image_strategy.sql。
 --    库级优先，未设置时空字符串回退全局缺省/存量推断。
 --    取值: ''=按激活模型推断; none=纯文本; ocr=OCR文字; vl_summary=VL总结; vision=视觉召回
+--    注意: V1 基线已含该列，此处仅对旧库补齐，幂等跳过。
 -- =====================================================
-ALTER TABLE `kb_library` ADD COLUMN `image_strategy` varchar(20) NOT NULL DEFAULT '' COMMENT '图片处理方案' AFTER `is_project`;
+CALL ckb_add_column('kb_library', 'image_strategy',
+    "`image_strategy` varchar(20) NOT NULL DEFAULT '' COMMENT '图片处理方案' AFTER `is_project`");
 
 -- =====================================================
 -- 4. ai_agent 增加 approval_level（工具审批级别）
@@ -59,5 +81,7 @@ ALTER TABLE `kb_library` ADD COLUMN `image_strategy` varchar(20) NOT NULL DEFAUL
 --    控制智能体调用工具的审批机制。
 --    取值: strict=所有工具需审批, auto=智能, off=免审批
 -- =====================================================
-ALTER TABLE `ai_agent`
-    ADD COLUMN `approval_level` varchar(16) NOT NULL DEFAULT 'auto' COMMENT '工具审批级别: strict=所有工具需审批, auto=智能, off=免审批';
+CALL ckb_add_column('ai_agent', 'approval_level',
+    "`approval_level` varchar(16) NOT NULL DEFAULT 'auto' COMMENT '工具审批级别: strict=所有工具需审批, auto=智能, off=免审批'");
+
+DROP PROCEDURE IF EXISTS `ckb_add_column`;

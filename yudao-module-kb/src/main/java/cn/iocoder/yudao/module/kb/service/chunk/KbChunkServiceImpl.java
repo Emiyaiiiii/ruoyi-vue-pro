@@ -16,6 +16,7 @@ import cn.iocoder.yudao.module.kb.framework.config.VectorTaskConfig;
 import cn.iocoder.yudao.module.kb.service.library.LibraryService;
 import cn.iocoder.yudao.module.system.api.user.AdminUserApi;
 import cn.iocoder.yudao.module.system.api.user.dto.AdminUserRespDTO;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import lombok.extern.slf4j.Slf4j;
@@ -54,7 +55,10 @@ public class KbChunkServiceImpl implements KbChunkService {
      * 注意不能用共享 JsonUtils（默认 camelCase），否则 chunk_index→chunkIndex 等映射全部为 null。
      */
     private static final ObjectMapper SNAKE_MAPPER = new ObjectMapper()
-            .setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE);
+            .setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE)
+            // python-vector 会持续新增字段（如原文定位 page_start/bboxes）；
+            // 忽略未知键，避免新增字段直接把切片列表接口打成 500
+            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
     @Resource
     private KbChunkRevisionMapper kbChunkRevisionMapper;

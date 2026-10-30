@@ -264,12 +264,10 @@ public class FrontendFileNodeController {
         if (denied != null) {
             return denied;
         }
+        // docCount 的扣减由 DocumentService 内部完成（避免重复扣减）
         int removedDocs = deleteNode(kbId, id);
         if (removedDocs < 0) {
             return FrontendResult.error("节点不存在");
-        }
-        if (removedDocs > 0) {
-            libraryMapper.updateDocCount(kbId, -removedDocs);
         }
         return FrontendResult.ok(true);
     }
@@ -288,15 +286,9 @@ public class FrontendFileNodeController {
         if (req.getNodeIds() == null || req.getNodeIds().isEmpty()) {
             return FrontendResult.ok(true);
         }
-        int removedDocs = 0;
         for (Long id : req.getNodeIds()) {
-            int n = deleteNode(kbId, id);
-            if (n > 0) {
-                removedDocs += n;
-            }
-        }
-        if (removedDocs > 0) {
-            libraryMapper.updateDocCount(kbId, -removedDocs);
+            // docCount 的扣减由 DocumentService 内部完成（避免重复扣减）
+            deleteNode(kbId, id);
         }
         return FrontendResult.ok(true);
     }
@@ -406,13 +398,16 @@ public class FrontendFileNodeController {
         }
         DocumentDO doc = documentMapper.selectById(id);
         if (doc != null && Objects.equals(doc.getKbId(), kbId)) {
-            documentMapper.deleteById(id);
+            // 必须走 DocumentService：内部会联动清理向量分片（Milvus/ES）、图片对象、源文件、
+            // 向量任务记录、切片修订历史与 wiki 解链，并自行维护 docCount。
+            // 直接 documentMapper.deleteById 只会删 MySQL 记录，向量会残留（可被继续检索到）。
+            documentService.deleteDocument(doc.getId());
             return 1;
         }
         return -1;
     }
 
-    /** 级联删除文件夹（含子树与其中的文档），返回删除的文档数量 */
+    /** 级联删除文件夹（含子树与其中的文档），返回删除的文档数量（docCount 由 service 维护） */
     private int deleteFolderCascade(Long kbId, Long folderId) {
         List<FolderDO> all = folderMapper.selectByKbId(kbId);
         Map<Long, List<Long>> childrenByParent = new HashMap<>();
@@ -426,9 +421,10 @@ public class FrontendFileNodeController {
         int removedDocs = 0;
         for (Long fid : ordered) {
             List<DocumentDO> docs = documentMapper.selectList(DocumentDO::getFolderId, fid);
-            if (!docs.isEmpty()) {
-                documentMapper.deleteByIds(docs.stream().map(DocumentDO::getId).collect(Collectors.toList()));
-                removedDocs += docs.size();
+            for (DocumentDO doc : docs) {
+                // 同单个删除：逐个走 service，保证向量/文件/任务等关联资源一并清理
+                documentService.deleteDocument(doc.getId());
+                removedDocs++;
             }
             folderMapper.deleteById(fid);
         }
