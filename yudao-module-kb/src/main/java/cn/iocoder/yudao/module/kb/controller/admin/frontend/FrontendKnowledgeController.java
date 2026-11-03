@@ -23,6 +23,7 @@ import cn.iocoder.yudao.module.kb.dal.mysql.follow.FollowMapper;
 import cn.iocoder.yudao.module.kb.dal.mysql.levelconfig.LevelConfigMapper;
 import cn.iocoder.yudao.module.kb.dal.mysql.library.LibraryMapper;
 import cn.iocoder.yudao.module.kb.service.follow.FollowService;
+import cn.iocoder.yudao.module.kb.service.library.KbDeleteService;
 import cn.iocoder.yudao.module.kb.service.library.LibraryService;
 import cn.iocoder.yudao.module.kb.service.libraryext.LibraryExtService;
 import cn.iocoder.yudao.module.system.api.dept.DeptApi;
@@ -89,6 +90,9 @@ public class FrontendKnowledgeController {
 
     @Resource
     private LibraryService libraryService;
+
+    @Resource
+    private KbDeleteService kbDeleteService;
 
     @Resource
     private LibraryExtService libraryExtService;
@@ -205,6 +209,25 @@ public class FrontendKnowledgeController {
     public FrontendResult<Boolean> delete(@PathVariable("id") Long id) {
         libraryService.deleteLibrary(id);
         return FrontendResult.ok(true);
+    }
+
+    /**
+     * 删除知识库（异步，带进度）：立即返回 taskId，前端轮询 delete-task。
+     */
+    @DeleteMapping({"/knowledge/bases/{id}/destroy-with-data-async",
+            "/knowledge/bases/{id}/destroy-with-data-async/"})
+    @Operation(summary = "前端删除知识库（异步带进度）")
+    public FrontendResult<Map<String, Object>> deleteAsync(@PathVariable("id") Long id) {
+        return FrontendResult.ok(kbDeleteService.deleteLibraryAsync(id));
+    }
+
+    /**
+     * 删除任务进度查询。
+     */
+    @GetMapping({"/knowledge/bases/delete-task/{taskId}", "/knowledge/bases/delete-task/{taskId}/"})
+    @Operation(summary = "前端查询知识库删除进度")
+    public FrontendResult<Map<String, Object>> deleteTask(@PathVariable("taskId") String taskId) {
+        return FrontendResult.ok(kbDeleteService.getTaskProgress(taskId));
     }
 
     /**

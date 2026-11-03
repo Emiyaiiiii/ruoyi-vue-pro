@@ -37,6 +37,7 @@ import static cn.iocoder.yudao.framework.apilog.core.enums.OperateTypeEnum.*;
 
 import cn.iocoder.yudao.module.kb.controller.admin.library.vo.*;
 import cn.iocoder.yudao.module.kb.dal.dataobject.library.LibraryDO;
+import cn.iocoder.yudao.module.kb.service.library.KbDeleteService;
 import cn.iocoder.yudao.module.kb.service.library.LibraryService;
 import cn.iocoder.yudao.module.kb.service.libraryext.LibraryExtService;
 import cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils;
@@ -52,6 +53,9 @@ public class LibraryController {
 
     @Resource
     private LibraryExtService libraryExtService;
+
+    @Resource
+    private KbDeleteService kbDeleteService;
 
     /**
      * Neo4j 基础设施启用开关（N1，默认关闭=先注释不启用）。
@@ -91,6 +95,34 @@ public class LibraryController {
     public CommonResult<Boolean> deleteLibraryList(@RequestParam("ids") List<Long> ids) {
         libraryService.deleteLibraryListByIds(ids);
         return success(true);
+    }
+
+    // ==================== 异步删除（带进度） ====================
+
+    @DeleteMapping("/delete-async")
+    @Operation(summary = "异步删除知识库（立即返回 taskId，进度用 delete-task 查询）")
+    @Parameter(name = "id", description = "编号", required = true)
+    @PreAuthorize("@ss.hasPermission('kb:library:delete')")
+    @ApiAccessLog(operateType = DELETE)
+    public CommonResult<Map<String, Object>> deleteLibraryAsync(@RequestParam("id") Long id) {
+        return success(kbDeleteService.deleteLibraryAsync(id));
+    }
+
+    @DeleteMapping("/delete-list-async")
+    @Operation(summary = "异步批量删除知识库（进度按库计数）")
+    @Parameter(name = "ids", description = "编号", required = true)
+    @PreAuthorize("@ss.hasPermission('kb:library:delete')")
+    @ApiAccessLog(operateType = DELETE)
+    public CommonResult<Map<String, Object>> deleteLibraryListAsync(@RequestParam("ids") List<Long> ids) {
+        return success(kbDeleteService.deleteLibraryListAsync(ids));
+    }
+
+    @GetMapping("/delete-task/{taskId}")
+    @Operation(summary = "查询知识库删除任务进度")
+    @Parameter(name = "taskId", description = "删除任务 ID", required = true)
+    @PreAuthorize("@ss.hasPermission('kb:library:delete')")
+    public CommonResult<Map<String, Object>> getDeleteTask(@PathVariable("taskId") String taskId) {
+        return success(kbDeleteService.getTaskProgress(taskId));
     }
 
     @GetMapping("/get")

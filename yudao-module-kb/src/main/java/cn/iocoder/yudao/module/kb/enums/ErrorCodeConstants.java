@@ -96,4 +96,7 @@ public interface ErrorCodeConstants {
     ErrorCode KB_IMPORT_PACKAGE_INVALID = new ErrorCode(59, "导入包格式不正确或已损坏（缺少 manifest.json/library.json）");
     ErrorCode KB_IMPORT_MODEL_MISMATCH = new ErrorCode(60, "导入包向量维度与当前 embedding 模型不一致，无法导入");
     ErrorCode KB_IMPORT_FAILED = new ErrorCode(61, "知识库数据导入失败");
+
+    // ========== 知识库异步删除 1-010-013-000 ==========
+    ErrorCode KB_DELETE_FAILED = new ErrorCode(62, "知识库删除失败");
 }
