@@ -88,4 +88,12 @@ public interface ErrorCodeConstants {
     ErrorCode WIKI_REVISION_NOT_EXISTS = new ErrorCode(55, "目标版本快照不存在");
     ErrorCode WIKI_PERMISSION_DENIED = new ErrorCode(56, "无权限操作该知识库的 Wiki");
     ErrorCode WIKI_ISSUE_STATUS_INVALID = new ErrorCode(57, "无效的问题状态（仅支持 pending/ignored/resolved）");
+
+    // ========== 知识库完整导出 1-010-011-000 ==========
+    ErrorCode KB_EXPORT_FAILED = new ErrorCode(58, "知识库数据导出失败，请检查 python-vector 服务状态");
+
+    // ========== 知识库完整导入 1-010-012-000 ==========
+    ErrorCode KB_IMPORT_PACKAGE_INVALID = new ErrorCode(59, "导入包格式不正确或已损坏（缺少 manifest.json/library.json）");
+    ErrorCode KB_IMPORT_MODEL_MISMATCH = new ErrorCode(60, "导入包向量维度与当前 embedding 模型不一致，无法导入");
+    ErrorCode KB_IMPORT_FAILED = new ErrorCode(61, "知识库数据导入失败");
 }

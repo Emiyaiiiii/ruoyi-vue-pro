@@ -127,6 +127,43 @@ public class VectorTaskConfig {
         return new RestTemplate(factory);
     }
 
+    // ========== 知识库完整导出（流式下载，读超时默认不限） ==========
+
+    /**
+     * 导出时调用 python 流式接口的读取超时（毫秒）；0 = 不限（大库导出可能持续数分钟）
+     */
+    private Integer exportReadTimeoutMs = 0;
+
+    /**
+     * 知识库导出专用 RestTemplate：读取 NDJSON 流时不能按默认 10s 超时打断。
+     */
+    @Bean(name = "kbExportRestTemplate")
+    public RestTemplate kbExportRestTemplate() {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(connectTimeoutMs);
+        factory.setReadTimeout(exportReadTimeoutMs == null ? 0 : exportReadTimeoutMs);
+        // 流式读取：不缓冲请求体，边收边写 ZIP
+        factory.setBufferRequestBody(false);
+        return new RestTemplate(factory);
+    }
+
+    // ========== 知识库导入（分片上传 / 重跑向量） ==========
+
+    /**
+     * 导入包分片大小（MB）：前端按此切片上传，规避 multipart 单文件/网关体积限制
+     */
+    private Integer importChunkSizeMb = 64;
+
+    /**
+     * 分片上传会话过期时间（小时）：超时目录由定时任务清理
+     */
+    private Integer importUploadTtlHours = 24;
+
+    /**
+     * 重跑向量等待超时（毫秒）：超时后返回 taskId，后台任务在 python 侧继续执行
+     */
+    private Integer importReembedTimeoutMs = 1800000;
+
     // ========== 重试配置 ==========
 
     /**

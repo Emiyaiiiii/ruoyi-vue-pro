@@ -7,6 +7,7 @@ import cn.iocoder.yudao.framework.common.pojo.PageResult;
 import cn.iocoder.yudao.framework.mybatis.core.query.LambdaQueryWrapperX;
 import cn.iocoder.yudao.framework.mybatis.core.mapper.BaseMapperX;
 import cn.iocoder.yudao.module.kb.dal.dataobject.document.DocumentDO;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Select;
 import cn.iocoder.yudao.module.kb.controller.admin.document.vo.*;
@@ -72,6 +73,24 @@ public interface DocumentMapper extends BaseMapperX<DocumentDO> {
                 .filter(d -> d.getFileSize() != null)
                 .collect(Collectors.groupingBy(DocumentDO::getKbId,
                         Collectors.summingLong(DocumentDO::getFileSize)));
+    }
+
+    /**
+     * 按知识库批量更新文档向量状态（导入后重跑向量失败时置为 3=失败）。
+     *
+     * <p>走 Wrapper 更新，多租户条件由租户插件自动追加。</p>
+     *
+     * @param kbId         知识库ID
+     * @param vectorStatus 向量状态：0-未处理 1-处理中 2-已完成 3-失败 4-提交失败 5-超时
+     * @return 更新条数
+     */
+    default int updateVectorStatusByKbId(Long kbId, Integer vectorStatus) {
+        if (kbId == null || vectorStatus == null) {
+            return 0;
+        }
+        return update(null, new LambdaUpdateWrapper<DocumentDO>()
+                .eq(DocumentDO::getKbId, kbId)
+                .set(DocumentDO::getVectorStatus, vectorStatus));
     }
 
     /**
